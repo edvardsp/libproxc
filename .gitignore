@@ -1,11 +1,19 @@
 # Prerequisites
 *.d
+deps/
 
 # Object files
 *.o
+obj/
 
 # Executables
 *.out
+bin/
+
+# Log files
+*.log
 
 # YCM vim configurable file
 .ycm_extra_conf.py
+.ycm_extra_conf.pyc
+
