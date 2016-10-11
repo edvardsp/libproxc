@@ -11,16 +11,7 @@ int main(int argc, char **argv)
     log_init("proxc", "slog.cfg", 2, 3, 1);
     log(0, SLOG_DEBUG, "Main start");
         
-    static volatile int inInit = 1;
-    ucontext_t main_ctx;
-    if (getcontext(&main_ctx) == -1) {
-        log(0, SLOG_ERROR, "setcontext failed");
-        exit(1);
-    }
-    if (inInit) {
-        inInit = 0;
-        ktm_init(main_ctx);
-    }
+    ktm_init(pthread_self());
 
     sleep(2);
 

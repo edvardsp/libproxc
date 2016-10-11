@@ -2,6 +2,7 @@
 /*************************************
  * Includes
  ************************************/
+
 #include <stddef.h>
 #include <pthread.h>
 #include <unistd.h>
@@ -15,6 +16,7 @@
 /*************************************
  * Typedefs
  ************************************/
+
 typedef struct {
     ucontext_t ctx;    
 } ProcessContext;
@@ -40,23 +42,12 @@ typedef struct {
 /*************************************
  * Global variables
  ************************************/
+
 static ThreadManager thread_manager;
 
 /*************************************
  * Static functions
  ************************************/
-static int setThreadtoCore(long core_id)
-{
-    if (core_id < 0 || core_id >= thread_manager.num_cores) {
-        return -1;
-    }
-
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-    CPU_SET(core_id, &cpuset);
-
-    return pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
-}
 
 static void* workerThread(void* arg)
 {
@@ -68,10 +59,6 @@ static void* workerThread(void* arg)
     Thread *thread = (Thread *)arg;
     log(1, SLOG_DEBUG, "workerThread %ld started", thread->thread_id);
 
-    if (!thread->curr_core) {
-        setThreadtoCore(thread->curr_core->core_id);
-    }
-
     /* context switch goes here */
     for (;;) {}
 
@@ -81,9 +68,10 @@ static void* workerThread(void* arg)
 /*************************************
  * Extern functions
  ************************************/
-void ktm_init(ucontext_t main_ctx)
+
+void ktm_init(pthread_t main_thread)
 {
-    (void)main_ctx;
+    (void)main_thread;
     log(1, SLOG_DEBUG, "KT Manager start");
 
     memset(&thread_manager, 0, sizeof(ThreadManager));
@@ -106,12 +94,15 @@ void ktm_init(ucontext_t main_ctx)
         cores[i].core_id = i;
     }
 
-    // Alloc kernel threads 
+    // Alloc kernel threads up to NUM_CORES
     Thread *threads = malloc(sizeof(Thread) * (unsigned long)num_cores);
     if (!threads) {
         log(1, SLOG_ERROR, "malloc failed");
         exit(1);
     }
+    // And copy over main thread to first thread
+    threads[0].kernel_thread = main_thread;
+
     // Configure threads
     for (long i = 0; i < num_cores; i++) {
         threads[i].thread_id = i;
@@ -125,9 +116,29 @@ void ktm_init(ucontext_t main_ctx)
     thread_manager.thread_pool = threads;
     
     // Start each WorkerThread for each core
+    int ret;
     for (long i = 0; i < num_cores; i++) {
         Thread *thread = &threads[i];
-        pthread_create(&thread->kernel_thread, NULL, workerThread, thread);
+        pthread_t kernel_thread = thread->kernel_thread;
+
+        // index 0 is main thread, so no need to create pthread
+        if (i != 0) {
+            ret = pthread_create(&kernel_thread, NULL, workerThread, thread);
+            if (ret != 0) {
+                log(1, SLOG_ERROR, "pthread_create failed");
+                exit(1);
+            }
+        }
+
+        // Set thread to core
+        cpu_set_t cpuset;
+        CPU_ZERO(&cpuset);
+        CPU_SET(i, &cpuset);
+        ret = pthread_setaffinity_np(kernel_thread, sizeof(cpuset), &cpuset);
+        if (ret != 0) {
+            log(1, SLOG_ERROR, "pthread_setaffinity_np failed");
+            exit(1);
+        }
     }
     
 }
