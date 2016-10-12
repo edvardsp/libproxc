@@ -71,7 +71,6 @@ static void* workerThread(void* arg)
 
 void ktm_init(pthread_t main_thread)
 {
-    (void)main_thread;
     log(1, SLOG_DEBUG, "KT Manager start");
 
     memset(&thread_manager, 0, sizeof(ThreadManager));
