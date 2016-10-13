@@ -4,7 +4,7 @@ BIN_NAME = proxc.out
 SRC_DIR = src
 BIN_DIR = bin
 OBJ_DIR = obj
-DEPS_DIR = deps
+DEP_DIR = deps
 
 TARGET = $(BIN_DIR)/$(BIN_NAME) 
 
@@ -15,8 +15,8 @@ WARN = -Wall -Wextra -Werror
 DEFINES = -D_GNU_SOURCE -DDEBUG
 INCLUDES = -I$(SRC_DIR)
 
-CFLAGS = -std=gnu99 -g $(OPT) $(WARN) $(DEFINES) $(INCLUDES) 
-LDFLAGS = -pthread -lslog
+CFLAGS = -std=gnu99 -g $(OPT) $(WARN) $(DEFINES) $(INCLUDES)
+LDFLAGS = -pthread
 
 C_FILES = $(shell find $(SRC_DIR) -name "*.c")
 O_FILES = $(C_FILES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
@@ -31,19 +31,22 @@ RM_F	= rm -f
 all: $(TARGET)
 
 # Link
-$(TARGET): $(O_FILES)
+$(TARGET): $(O_FILES) 
 	@$(MKDIR_P) $(BIN_DIR)
 	$(CC) -o $@ $^ $(LDFLAGS)
 
 # Dependency files
-DEPS = $(O_FILES:$(OBJ_DIR)/%.o=$(DEPS_DIR)/%.d)
+DEPS = $(C_FILES:$(SRC_DIR)/%.c=$(DEP_DIR)/%.d)
 -include $(DEPS)
 
 # compile and generate dependency info
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
-	@$(MKDIR_P) $(OBJ_DIR) $(DEPS_DIR)
-	$(CC) $(CFLAGS) -o $@ -c $< 
-	@$(CC) -MM ${CFLAGS} $< > $(DEPS_DIR)/$*.d
+	#@$(CC) -c $(CFLAGS) -MT $@ -MMD -MP -MF $(patsubst $(OBJ_DIR)/%.o, $(DEP_DIR)/%.d, $@) $<
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(DEP_DIR)/%.d
+	@$(MKDIR_P) $(OBJ_DIR) $(DEP_DIR)
+	@$(CC) $(CFLAGS) -MT $@ -MM -MP -MF $(DEP_DIR)/$*.d $<
+	$(CC) $(CFLAGS) -o $@ -c $<
+
+$(DEP_DIR)/%.d: ;
 
 # remove compilation products
 clean:
