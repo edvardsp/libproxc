@@ -43,7 +43,7 @@ DEPS = $(O_FILES:$(OBJ_DIR)/%.o=$(DEPS_DIR)/%.d)
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 	@$(MKDIR_P) $(OBJ_DIR) $(DEPS_DIR)
 	$(CC) $(CFLAGS) -o $@ -c $< 
-	$(CC) -MM ${CFLAGS} $< > $(DEPS_DIR)/$*.d
+	@$(CC) -MM ${CFLAGS} $< > $(DEPS_DIR)/$*.d
 
 # remove compilation products
 clean:
