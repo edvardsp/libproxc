@@ -1,15 +1,15 @@
 
-#include <stdio.h>
 #include <stdlib.h>
-#include <assert.h>
 #include <errno.h>
 #include <sched.h>
 #include <unistd.h>
 #include <ucontext.h>
 #include <pthread.h>
 
+#include "debug.h"
 #include "queue.h"
-#include "coroutine_internal.h"
+#include "internal.h"
+#include "thread.h"
 #include "context.h"
 
 // Holds corresponding scheduler for each pthread
@@ -25,14 +25,18 @@ static
 void _scheduler_key_destroy(void *data)
 {
     Scheduler *scheduler = (Scheduler *)data;
+    /* FIXME proper cleanup of scheduler */
     free(scheduler);
-    printf("key_destroy called\n");
+    PDEBUG("key_destroy called\n");
 }
 
 static
 void _scheduler_key_create(void)
 {
-    assert(pthread_key_create(&g_scheduler_key, _scheduler_key_destroy) == 0);
+    ASSERT_0(
+        pthread_key_create(&g_scheduler_key, _scheduler_key_destroy)
+    );
+
 }
 
 static
@@ -44,10 +48,15 @@ int _scheduler_create(unsigned long core_id)
     scheduler->stack_size = MAX_STACK_SIZE;
     scheduler->current_context = NULL;
 
+    /* FIXME */
     // Save scheduler for this pthread
-    assert(pthread_setspecific(g_scheduler_key, scheduler) == 0);
+    ASSERT_0(
+        pthread_setspecific(g_scheduler_key, scheduler)
+    );
     // and context
-    assert(getcontext(&scheduler->ctx) == 0);
+    ASSERT_0(
+        getcontext(&scheduler->ctx)
+    );
 
     TAILQ_INIT(&scheduler->readyQ);
 
@@ -65,7 +74,7 @@ void* _scheduler_mainloop(void *arg)
     unsigned long core_id = (unsigned long)arg;
 
     if (_scheduler_create(core_id)) {
-        perror("_scheduler_initalize failed\n");
+        PERROR("_scheduler_initalize failed\n");
         return NULL;
     }
 
@@ -84,7 +93,9 @@ void* _scheduler_mainloop(void *arg)
         if (new_context == NULL) continue;
         scheduler->current_context = new_context;
         printf("This is from scheduler!\n");
-        assert(scheduler_switch(&scheduler->ctx, &new_context->ctx) == 0);
+        ASSERT_0(
+            scheduler_switch(&scheduler->ctx, &new_context->ctx)
+        );
     }
 
     return NULL;
@@ -94,10 +105,10 @@ int _scheduler_detect_cores(void)
 {
     long nprocessors_onln = sysconf(_SC_NPROCESSORS_ONLN);
     if (nprocessors_onln == -1) {
-        perror("sysconf failed\n");
+        PERROR("sysconf failed\n");
         return errno;
     }
-    assert(nprocessors_onln > 0);
+    ASSERT_1(nprocessors_onln > 0);
     g_num_cores = (unsigned long)nprocessors_onln;
     printf("%lu cores detected!\n", g_num_cores);
     return 0;
@@ -106,12 +117,12 @@ int _scheduler_detect_cores(void)
 int _scheduler_start_multicore(void)
 {
     if ((g_kernel_threads = malloc(sizeof(pthread_t) * g_num_cores)) == NULL) {
-        perror("malloc failed for g_kernel_threads\n");
+        PERROR("malloc failed for g_kernel_threads\n");
         return errno;
     }
 
     if ((g_schedulers = malloc(sizeof(Scheduler) * g_num_cores)) == NULL) {
-        perror("malloc failed for g_schedulers\n");
+        PERROR("malloc failed for g_schedulers\n");
         return errno;
     }
     
@@ -121,7 +132,9 @@ int _scheduler_start_multicore(void)
     // create rest of the pthreads
     for (unsigned long i = 1; i < g_num_cores; i++) {
         pthread_t *pt = &g_kernel_threads[i];
-        assert(pthread_create(pt, NULL, _scheduler_mainloop, (void *)i) == 0);
+        ASSERT_0(
+            pthread_create(pt, NULL, _scheduler_mainloop, (void *)i)
+        );
     }
 
     // specify core affinity for each pthread
@@ -130,7 +143,9 @@ int _scheduler_start_multicore(void)
         pthread_t pt = g_kernel_threads[i];
         CPU_ZERO(&cpuset);
         CPU_SET(i, &cpuset);
-        assert(pthread_setaffinity_np(pt, sizeof(cpuset), &cpuset) == 0);
+        ASSERT_0(
+            pthread_setaffinity_np(pt, sizeof(cpuset), &cpuset)
+        );
     }
 
     return 0;
@@ -139,12 +154,12 @@ int _scheduler_start_multicore(void)
 int _scheduler_start_singlecore(void)
 {
     if ((g_kernel_threads = malloc(sizeof(pthread_t))) == NULL) {
-        perror("malloc failed for g_kernel_threads\n");
+        PERROR("malloc failed for g_kernel_threads\n");
         return errno;
     }
 
     if ((g_schedulers = malloc(sizeof(Scheduler))) == NULL) {
-        perror("malloc failed for g_schedulers\n");
+        PERROR("malloc failed for g_schedulers\n");
         return errno;
     }
 

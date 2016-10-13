@@ -5,14 +5,15 @@
 #include <assert.h>
 #include <ucontext.h>
 
-#include "coroutine_internal.h"
+#include "debug.h"
+#include "internal.h"
 #include "context.h"
 
 int context_create(Context **new_context, ucontext_t *ctx)
 {
     Context *context;
     if ((context = malloc(sizeof(Context))) == 0) {
-        perror("malloc failed for Context\n");
+        PERROR("malloc failed for Context\n");
         return errno;
     }
 
@@ -20,7 +21,7 @@ int context_create(Context **new_context, ucontext_t *ctx)
     assert(scheduler != NULL);
 
     if ((context->stack = malloc(scheduler->stack_size)) == 0) {
-        perror("malloc failed for Context stack\n");
+        PERROR("malloc failed for Context stack\n");
         return errno;
     }
 

@@ -7,6 +7,7 @@
 #include <pthread.h>
 
 #include "queue.h"
+#include "thread.h"
 
 #define MAX_STACK_SIZE  (128 * 1024)
 

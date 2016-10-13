@@ -4,7 +4,7 @@
 
 #include <ucontext.h>
 
-#include "coroutine_internal.h"
+#include "internal.h"
 
 int context_create(Context **new_context, ucontext_t *ctx);
 

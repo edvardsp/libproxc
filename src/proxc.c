@@ -2,12 +2,15 @@
 #include <assert.h>
 #include <ucontext.h>
 
-#include "coroutine_internal.h"
+#include "internal.h"
+#include "debug.h"
 
-void scheduler_start(void)
+void proxc_start(void)
 {
     static volatile int in_ctx = 0;
-    assert(getcontext(&main_ctx) == 0);
+    ASSERT_0(
+        getcontext(&main_ctx)
+    );
     if (in_ctx) goto main_fxn;
     in_ctx = 1;
 
@@ -15,14 +18,14 @@ void scheduler_start(void)
     _scheduler_start();
 
     // start scheduler for this pthread, no return
-    ucontext_t ctx;
+    
     _scheduler_mainloop((void *)0);
 
 main_fxn:
     return;
 }
 
-void scheduler_end(void)
+void proxc_end(void)
 {
     return;
 }

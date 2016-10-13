@@ -2,8 +2,8 @@
 #ifndef COROUTINE_H__
 #define COROUTINE_H__
 
-void scheduler_start(void);
-void scheduler_end(void);
+void proxc_start(void);
+void proxc_end(void);
 
 void scheduler_yield(void);
 
