@@ -2,7 +2,9 @@
 #ifndef COROUTINE_H__
 #define COROUTINE_H__
 
-void proxc_start(void);
+typedef void (*ProcFxn)(void);
+
+void proxc_start(ProcFxn fxn);
 void proxc_end(void);
 
 void scheduler_yield(void);

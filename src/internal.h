@@ -7,25 +7,24 @@
 #include <pthread.h>
 
 #include "queue.h"
-#include "thread.h"
 
 #define MAX_STACK_SIZE  (128 * 1024)
 
 struct Context;
 struct Scheduler;
 
-typedef void (*ctx_func)();
+typedef void (*CtxFxn)(void);
 
 TAILQ_HEAD(ContextQ, Context);
 
 struct Context {
     uint64_t    id;
     ucontext_t  ctx;
-    ctx_func    func;
+    CtxFxn      fxn;
     size_t      stack_size;
     void        *stack;
 
-    struct Scheduler  *scheduler;
+    struct Scheduler  *sched;
 
     TAILQ_ENTRY(Context) readyQ_next;
 };
@@ -34,7 +33,7 @@ struct Scheduler {
     uint64_t        id;
     ucontext_t      ctx;
     size_t          stack_size;
-    struct Context  *current_context;
+    struct Context  *curr_ctx;
 
     struct ContextQ  readyQ;
 };
@@ -42,17 +41,18 @@ struct Scheduler {
 typedef struct Context Context;
 typedef struct Scheduler Scheduler;
 
-extern pthread_key_t g_scheduler_key;
-extern ucontext_t main_ctx;
+extern pthread_key_t g_key_sched;
 
-int _scheduler_detect_cores(void);
-int _scheduler_start(void);
-void* _scheduler_mainloop(void *arg);
+int context_create(Context **new_ctx, CtxFxn fxn);
+
+int scheduler_create(Scheduler **new_sched);
+int scheduler_addctx(Context *ctx);
+int scheduler_run(void);
 
 static inline
-Scheduler* scheduler_self(void) 
+Scheduler* scheduler_self(void)
 {
-    return pthread_getspecific(g_scheduler_key);
+    return pthread_getspecific(g_key_sched);
 }
 
 static inline

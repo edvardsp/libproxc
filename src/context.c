@@ -1,39 +1,47 @@
 
-#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <errno.h>
-#include <assert.h>
+#include <unistd.h>
 #include <ucontext.h>
 
 #include "debug.h"
 #include "internal.h"
-#include "context.h"
 
-int context_create(Context **new_context, ucontext_t *ctx)
+int context_create(Context **new_ctx, CtxFxn fxn)
 {
-    Context *context;
-    if ((context = malloc(sizeof(Context))) == 0) {
+    ASSERT_NOTNULL(new_ctx);
+
+    Context *ctx;
+    if ((ctx = malloc(sizeof(Context))) == NULL) {
         PERROR("malloc failed for Context\n");
         return errno;
     }
+    memset(ctx, 0, sizeof(Context));
 
-    Scheduler *scheduler = scheduler_self();
-    assert(scheduler != NULL);
-
-    if ((context->stack = malloc(scheduler->stack_size)) == 0) {
+    Scheduler *sched = scheduler_self();
+    if ((ctx->stack = malloc(sched->stack_size)) == NULL) {
+        free(ctx);
         PERROR("malloc failed for Context stack\n");
         return errno;
     }
+    /* if (posix_memalign(&ctx->stack, (size_t)getpagesize(), sched->stack_size)) { */
+    /*     PERROR("posix_memalign failed\n"); */
+    /*     return errno; */
+    /* } */
 
-    context->id = 0;
-    context->ctx = *ctx;
-    context->func = NULL;
-    context->stack_size = scheduler->stack_size;
-    context->scheduler = scheduler;
+    ctx->fxn = fxn;
+    ctx->stack_size = sched->stack_size;
+    ctx->sched = sched;
 
-    *new_context = context;
+    /* configure context */
+    ASSERT_0(getcontext(&ctx->ctx));
+    ctx->ctx.uc_link          = &sched->ctx;
+    ctx->ctx.uc_stack.ss_sp   = ctx->stack;
+    ctx->ctx.uc_stack.ss_size = ctx->stack_size;
+    makecontext(&ctx->ctx, fxn, 0);
 
-    TAILQ_INSERT_TAIL(&scheduler->readyQ, context, readyQ_next);
+    *new_ctx = ctx;
 
     return 0;
 }
