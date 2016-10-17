@@ -1,6 +1,6 @@
 
-#ifndef COROUTINE_INTERNAL_H__
-#define COROUTINE_INTERNAL_H__
+#ifndef INTERNAL_H__
+#define INTERNAL_H__
 
 #include <stdint.h>
 #include <ucontext.h>
@@ -61,5 +61,5 @@ int scheduler_switch(ucontext_t *from, ucontext_t *to)
     return swapcontext(from, to);
 }
 
-#endif /* COROUTINE_INTERNAL_H__ */
+#endif /* INTERNAL_H__ */
 
