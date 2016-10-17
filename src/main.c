@@ -7,11 +7,12 @@
 
 void foofunc(void)
 {
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 4; i++) {
         PDEBUG("This is from foofunc!\n");
         sleep(1);
         /* scheduler_yield(); */
     }
+    PDEBUG("foofunc done\n");
 }
 
 int main(int argc, char **argv)
