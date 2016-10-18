@@ -53,12 +53,12 @@ int scheduler_create(Scheduler **new_sched)
     return 0;
 }
 
-int scheduler_addctx(Context *ctx)
+int scheduler_addproc(Proc *proc)
 {
-    ASSERT_NOTNULL(ctx);
+    ASSERT_NOTNULL(proc);
 
     Scheduler *sched = scheduler_self();
-    TAILQ_INSERT_TAIL(&sched->readyQ, ctx, readyQ_next);
+    TAILQ_INSERT_TAIL(&sched->readyQ, proc, readyQ_next);
     return 0;
 }
 
@@ -67,17 +67,26 @@ int scheduler_run(void)
     Scheduler *sched = scheduler_self();
 
     int running = 1;
-    Context *curr_ctx;
+    Proc *curr_proc;
     while (running) {
-        curr_ctx = TAILQ_LAST(&sched->readyQ, ContextQ);
-        if (curr_ctx == NULL) break;
+        curr_proc = TAILQ_LAST(&sched->readyQ, ProcQ);
+        if (curr_proc == NULL) break;
 
-        sched->curr_ctx = curr_ctx;
         PDEBUG("This is from scheduler!\n");
-        PDEBUG("ptr %p\n", (void *)curr_ctx->ctx.uc_link);
-        ASSERT_0(scheduler_switch(&sched->ctx, &curr_ctx->ctx));
+
+        sched->curr_proc = curr_proc;
+        ASSERT_0(scheduler_switch(&sched->ctx, &curr_proc->ctx));
+        sched->curr_proc = NULL;
     }
 
     return 0;
+}
+
+ void scheduler_yield(void)
+{
+    Scheduler *sched = scheduler_self();
+
+    PDEBUG("yielding\n");
+    ASSERT_0(scheduler_switch(&sched->curr_proc->ctx, &sched->ctx));
 }
 

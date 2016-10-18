@@ -1,11 +1,11 @@
 
+#include <stddef.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sched.h>
 #include <pthread.h>
 
 #include "debug.h"
-#include "proxc.h"
 #include "internal.h"
 
 static 
@@ -61,9 +61,9 @@ void proxc_start(ProcFxn fxn)
     ASSERT_0(_proxc_setaffinity(0));
     Scheduler *sched;
     scheduler_create(&sched);
-    Context *ctx;
-    context_create(&ctx, fxn);
-    scheduler_addctx(ctx);
+    Proc *proc;
+    proc_create(&proc, fxn);
+    scheduler_addproc(proc);
     scheduler_run();
 
     /* when returned from _proxc_pthreadfxn, assume program to be finished */
