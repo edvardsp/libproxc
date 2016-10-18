@@ -18,12 +18,21 @@ typedef void (*ProcFxn)(void);
 
 TAILQ_HEAD(ProcQ, Proc);
 
+enum ProcState {
+    PROC_FREED = 0,
+    PROC_READY,
+    PROC_RUNNING,
+    PROC_ENDED
+};
+
 struct Proc {
     uint64_t    id;
     ucontext_t  ctx;
-    ProcFxn      fxn;
+    ProcFxn     fxn;
     size_t      stack_size;
     void        *stack;
+    
+    enum ProcState  state;
 
     struct Scheduler  *sched;
 
@@ -45,9 +54,11 @@ typedef struct Scheduler Scheduler;
 extern pthread_key_t g_key_sched;
 
 int proc_create(Proc **new_proc, ProcFxn fxn);
+void proc_free(Proc *proc);
 
 int scheduler_create(Scheduler **new_sched);
-int scheduler_addproc(Proc *proc);
+void scheduler_free(Scheduler *sched);
+void scheduler_addproc(Proc *proc);
 int scheduler_run(void);
 void scheduler_yield(void);
 

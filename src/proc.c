@@ -21,7 +21,11 @@ void _proc_mainfxn(Proc *proc)
         /* return control to scheduler */
 
     proc->fxn();
+
+    proc->state = PROC_ENDED;
+
     PDEBUG("_proc_mainfxn done\n");
+
 }
 
 int proc_create(Proc **new_proc, ProcFxn fxn)
@@ -49,6 +53,7 @@ int proc_create(Proc **new_proc, ProcFxn fxn)
 
     proc->fxn = fxn;
     proc->stack_size = sched->stack_size;
+    proc->state = PROC_READY;
     proc->sched = sched;
 
     /* configure context */
@@ -61,4 +66,13 @@ int proc_create(Proc **new_proc, ProcFxn fxn)
     *new_proc = proc;
 
     return 0;
+}
+
+void proc_free(Proc *proc)
+{
+    if (proc == NULL) return;
+
+    free(proc->stack);
+    memset(proc, 0, sizeof(Proc));
+    free(proc);
 }

@@ -53,31 +53,69 @@ int scheduler_create(Scheduler **new_sched)
     return 0;
 }
 
-int scheduler_addproc(Proc *proc)
+void scheduler_free(Scheduler *sched)
+{
+    if (sched == NULL) return;
+
+    /* FIXME cleanup Proc's in Qs */
+    memset(sched, 0, sizeof(Scheduler));
+    free(sched);
+}
+
+void scheduler_addproc(Proc *proc)
 {
     ASSERT_NOTNULL(proc);
 
     Scheduler *sched = scheduler_self();
     TAILQ_INSERT_TAIL(&sched->readyQ, proc, readyQ_next);
-    return 0;
+}
+
+static
+Proc* _scheduler_nextproc(void)
+{
+    Scheduler *sched = scheduler_self();
+    Proc *proc = NULL;
+
+    /* check ready Q */
+    if (!TAILQ_EMPTY(&sched->readyQ)) {
+        proc = TAILQ_FIRST(&sched->readyQ);
+        TAILQ_REMOVE(&sched->readyQ, proc, readyQ_next);
+    }
+
+    return proc;
+}
+
+static 
+void _scheduler_reschedule(Proc *proc)
+{
+    Scheduler *sched = scheduler_self();
+
+    proc->state = PROC_RUNNING;
+
+    sched->curr_proc = proc;
+    ASSERT_0(scheduler_switch(&sched->ctx, &proc->ctx));
+    sched->curr_proc = NULL;
+
+    if (proc->state == PROC_READY) {
+        scheduler_addproc(proc);
+    }
 }
 
 int scheduler_run(void)
 {
-    Scheduler *sched = scheduler_self();
-
     int running = 1;
     Proc *curr_proc;
     while (running) {
-        curr_proc = TAILQ_LAST(&sched->readyQ, ProcQ);
-        if (curr_proc == NULL) break;
-
         PDEBUG("This is from scheduler!\n");
+        usleep(500 * 1000);
 
-        sched->curr_proc = curr_proc;
-        ASSERT_0(scheduler_switch(&sched->ctx, &curr_proc->ctx));
-        sched->curr_proc = NULL;
+        curr_proc = _scheduler_nextproc();
+        if (curr_proc == NULL) break;
+        
+        _scheduler_reschedule(curr_proc);
     }
+
+    PDEBUG("scheduler_run done\n");
 
     return 0;
 }
@@ -85,6 +123,8 @@ int scheduler_run(void)
  void scheduler_yield(void)
 {
     Scheduler *sched = scheduler_self();
+
+    sched->curr_proc->state = PROC_READY;
 
     PDEBUG("yielding\n");
     ASSERT_0(scheduler_switch(&sched->curr_proc->ctx, &sched->ctx));
