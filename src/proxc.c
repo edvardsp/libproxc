@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <sched.h>
 #include <pthread.h>
+#include <features.h>
 
 #include "debug.h"
 #include "internal.h"
@@ -59,10 +60,12 @@ void proxc_start(ProcFxn fxn)
     
     /* call pthreadfxn as if this pthread just spawned */
     ASSERT_0(_proxc_setaffinity(0));
+
+    /* create scheduler for this pthread */
     Scheduler *sched;
     scheduler_create(&sched);
     Proc *proc;
-    proc_create(&proc, fxn);
+    proc_create(&proc, &(FxnArg){ fxn, NULL });
     scheduler_addproc(proc);
     scheduler_run();
 

@@ -5,13 +5,23 @@
 #include "debug.h"
 #include "proxc.h"
 
-void foofunc(void)
+void fxn(void *arg) { (void)arg; PDEBUG("fxn()\n"); }
+void fxn2(void *arg) { (void)arg; PDEBUG("fxn2()\n"); }
+
+void foofunc(void *arg)
 {
+    (void)arg;
     for (int i = 0; i < 4; i++) {
         printf("%d\n", i);
         PDEBUG("This is from foofunc!\n");
-        scheduler_yield();
+        proc_yield();
     }
+
+    proxc_PAR(
+        proxc_PROC(fxn, NULL),
+        proxc_PROC(fxn2, NULL)
+    );
+
     PDEBUG("foofunc done\n");
 }
 
@@ -21,8 +31,6 @@ int main(int argc, char **argv)
     PDEBUG("main start\n");
 
     proxc_start(foofunc);
-
-    sleep(1);
     
     return 0;
 }

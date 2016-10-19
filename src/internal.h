@@ -14,7 +14,12 @@
 struct Proc;
 struct Scheduler;
 
-typedef void (*ProcFxn)(void);
+typedef void (*ProcFxn)(void *);
+
+struct FxnArg {
+    ProcFxn  fxn;
+    void     *arg;
+};
 
 TAILQ_HEAD(ProcQ, Proc);
 
@@ -29,14 +34,18 @@ struct Proc {
     uint64_t    id;
     ucontext_t  ctx;
     ProcFxn     fxn;
+    void        *arg;
     size_t      stack_size;
     void        *stack;
-    
+
     enum ProcState  state;
-
+    
+    /* scheduler related */
     struct Scheduler  *sched;
-
     TAILQ_ENTRY(Proc) readyQ_next;
+
+    /* CSP structure related */
+    TAILQ_ENTRY(Proc) parQ_next;
 };
 
 struct Scheduler {
@@ -48,19 +57,20 @@ struct Scheduler {
     struct ProcQ  readyQ;
 };
 
+typedef struct FxnArg FxnArg;
 typedef struct Proc Proc;
 typedef struct Scheduler Scheduler;
 
 extern pthread_key_t g_key_sched;
 
-int proc_create(Proc **new_proc, ProcFxn fxn);
+int proc_create(Proc **new_proc, FxnArg *fxn_arg);
 void proc_free(Proc *proc);
+void proc_yield(void);
 
 int scheduler_create(Scheduler **new_sched);
 void scheduler_free(Scheduler *sched);
 void scheduler_addproc(Proc *proc);
 int scheduler_run(void);
-void scheduler_yield(void);
 
 static inline
 Scheduler* scheduler_self(void)

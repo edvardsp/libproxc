@@ -20,15 +20,14 @@ void _proc_mainfxn(Proc *proc)
         /* remove context from scheduler */
         /* return control to scheduler */
 
-    proc->fxn();
+    proc->fxn(proc->arg);
 
     proc->state = PROC_ENDED;
 
     PDEBUG("_proc_mainfxn done\n");
-
 }
 
-int proc_create(Proc **new_proc, ProcFxn fxn)
+int proc_create(Proc **new_proc, FxnArg *fxn_arg)
 {
     ASSERT_NOTNULL(new_proc);
 
@@ -45,13 +44,16 @@ int proc_create(Proc **new_proc, ProcFxn fxn)
         PERROR("malloc failed for Proc stack\n");
         return errno;
     }
+    memset(proc->stack, 0, sched->stack_size);
 
-    /* if (posix_memalign(&ctx->stack, (size_t)getpagesize(), sched->stack_size)) { */
+    /* if (posix_memalign(&proc->stack, (size_t)getpagesize(), sched->stack_size)) { */
+    /*     free(proc); */
     /*     PERROR("posix_memalign failed\n"); */
     /*     return errno; */
     /* } */
 
-    proc->fxn = fxn;
+    proc->fxn = fxn_arg->fxn;
+    proc->arg = fxn_arg->arg;
     proc->stack_size = sched->stack_size;
     proc->state = PROC_READY;
     proc->sched = sched;
@@ -76,3 +78,14 @@ void proc_free(Proc *proc)
     memset(proc, 0, sizeof(Proc));
     free(proc);
 }
+
+void proc_yield(void)
+{
+    Scheduler *sched = scheduler_self();
+
+    sched->curr_proc->state = PROC_READY;
+
+    PDEBUG("yielding\n");
+    ASSERT_0(scheduler_switch(&sched->curr_proc->ctx, &sched->ctx));
+}
+
