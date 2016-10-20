@@ -99,7 +99,8 @@ void* proxc_proc(ProcFxn fxn, ...)
 
 /*
  * Variadic args are zero terminated list
- * of pointers to allready allocated PROCS
+ * of pointers to allready allocated PROCS.
+ * args_start is only for va_start() call.
  */
 int proxc_par(int args_start, ...) 
 {

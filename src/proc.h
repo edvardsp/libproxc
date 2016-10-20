@@ -13,23 +13,26 @@ enum ProcState {
 };
 
 struct Proc {
-    uint64_t    id;
-    ucontext_t  ctx;
-    ProcFxn     fxn;
-    size_t      num_args;
-    void        **args;
-    size_t      stack_size;
-    void        *stack;
-
+    uint64_t        id;
+    ucontext_t      ctx;
     enum ProcState  state;
+
+    /* fxn and args */
+    ProcFxn  fxn;
+    size_t   num_args;
+    void     **args;
+
+    /* stack and size */
+    size_t  stack_size;
+    void    *stack;
     
     /* scheduler related */
-    struct Scheduler  *sched;
-    TAILQ_ENTRY(Proc) readyQ_next;
+    struct Scheduler   *sched;
+    TAILQ_ENTRY(Proc)  readyQ_next;
 
-    /* CSP structure related */
-    struct Par        *par_struct;
-    TAILQ_ENTRY(Proc) parQ_next;
+    /* PAR related */
+    struct Par         *par_struct;
+    TAILQ_ENTRY(Proc)  parQ_next;
 };
 
 #endif /* PROC_H__ */

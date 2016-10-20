@@ -4,14 +4,13 @@
 
 #include "internal.h"
 
-TAILQ_HEAD(ProcQ, Proc);
-
 struct Scheduler {
     uint64_t     id;
     ucontext_t   ctx;
     size_t       stack_size;
     struct Proc  *curr_proc;
 
+    /* different PROC queues */
     struct ProcQ  readyQ;
 };
 

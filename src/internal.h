@@ -30,6 +30,9 @@ typedef struct Scheduler Scheduler;
 typedef struct Par Par;
 typedef struct Chan Chan;
 
+/* queue declarations */
+TAILQ_HEAD(ProcQ, Proc);
+
 /* function declarations */
 int  proc_create(Proc **new_proc, ProcFxn fxn);
 void proc_free(Proc *proc);
