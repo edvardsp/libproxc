@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#include "debug.h"
 #include "proxc.h"
 
 void fxn1(void) 
@@ -58,14 +57,12 @@ void foofunc(void)
     );
 
     printf("foofunc: PAR ended\n");
-
-    PDEBUG("foofunc done\n");
 }
 
 int main(int argc, char **argv)
 {
     (void)argc; (void)argv;
-    PDEBUG("main start\n");
+    printf("main start\n");
 
     proxc_start(foofunc);
     
