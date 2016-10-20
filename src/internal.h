@@ -11,60 +11,36 @@
 
 #define MAX_STACK_SIZE  (128 * 1024)
 
+/* function prototype for PROC */
+typedef void (*ProcFxn)(void *);
+
+/* runtime relevant structs */
 struct Proc;
 struct Scheduler;
 
-typedef void (*ProcFxn)(void *);
+/* CSP paradigm relevant structs */
+struct Par;
+struct Chan; /* FIXME */
 
-TAILQ_HEAD(ProcQ, Proc);
-
-enum ProcState {
-    PROC_FREED = 0,
-    PROC_READY,
-    PROC_RUNNING,
-    PROC_ENDED
-};
-
-struct Proc {
-    uint64_t    id;
-    ucontext_t  ctx;
-    ProcFxn     fxn;
-    void        *arg;
-    size_t      stack_size;
-    void        *stack;
-
-    enum ProcState  state;
-    
-    /* scheduler related */
-    struct Scheduler  *sched;
-    TAILQ_ENTRY(Proc) readyQ_next;
-
-    /* CSP structure related */
-    TAILQ_ENTRY(Proc) parQ_next;
-};
-
-struct Scheduler {
-    uint64_t     id;
-    ucontext_t   ctx;
-    size_t       stack_size;
-    struct Proc  *curr_proc;
-
-    struct ProcQ  readyQ;
-};
-
+/* typedefs for internal use */
 typedef struct Proc Proc;
 typedef struct Scheduler Scheduler;
 
-extern pthread_key_t g_key_sched;
+typedef struct Par Par;
+typedef struct Chan Chan;
 
-int proc_create(Proc **new_proc, ProcFxn fxn, void *arg);
+/* function declarations */
+int  proc_create(Proc **new_proc, ProcFxn fxn, void *arg);
 void proc_free(Proc *proc);
 void proc_yield(void);
 
-int scheduler_create(Scheduler **new_sched);
+int  scheduler_create(Scheduler **new_sched);
 void scheduler_free(Scheduler *sched);
 void scheduler_addproc(Proc *proc);
-int scheduler_run(void);
+int  scheduler_run(void);
+
+/* extern and static inline functions */
+extern pthread_key_t g_key_sched;
 
 static inline
 Scheduler* scheduler_self(void)
@@ -77,8 +53,16 @@ Scheduler* scheduler_self(void)
 static inline
 int scheduler_switch(ucontext_t *from, ucontext_t *to)
 {
-    return swapcontext(from, to);
+    int ret = swapcontext(from, to);
+    ASSERT_0(ret);
+    return ret;
 }
+
+/* implementation of corresponding types and structs */
+/* must be after the declaration of the types */
+#include "proc.h"
+#include "scheduler.h"
+#include "par.h"
 
 #endif /* INTERNAL_H_ */
 

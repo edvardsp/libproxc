@@ -3,19 +3,12 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <string.h>
 #include <errno.h>
 
 #include "debug.h"
 #include "internal.h"
 #include "proxc.h"
-
-struct Par {
-    uint64_t  id;
-    
-    struct ProcQ  joinQ;
-};
-
-typedef struct Par Par;
 
 static
 int par_create(Par **new_par)
@@ -27,7 +20,12 @@ int par_create(Par **new_par)
         PERROR("malloc failed for Par\n");
         return errno;
     }
+    memset(par, 0, sizeof(Par));
 
+    Scheduler *sched = scheduler_self();
+    par->par_proc = sched->curr_proc;
+
+    par->num_procs = 0;
     TAILQ_INIT(&par->joinQ);
 
     *new_par = par;
@@ -45,13 +43,25 @@ void par_add(Par *par, ProcFxn fxn, void *arg)
     /* add it */
     Proc *proc;
     proc_create(&proc, fxn, arg);
+    proc->par_struct = par;
     TAILQ_INSERT_TAIL(&par->joinQ, proc, parQ_next);
+    par->num_procs++;
 }
 
 static
 void par_runjoin(Par *par)
 {
     ASSERT_NOTNULL(par);
+    
+    Proc *proc;
+    TAILQ_FOREACH(proc, &par->joinQ, parQ_next) {
+        PDEBUG("PAR adding proc\n");
+        scheduler_addproc(proc);
+    }
+
+    par->par_proc->state = PROC_PARJOIN;
+    proc_yield();
+    PDEBUG("par_runjoin JOINS\n");
 }
 
 static
@@ -59,12 +69,10 @@ void par_free(Par *par)
 {
     ASSERT_NOTNULL(par);
 
-    Proc *proc;
-    while (!TAILQ_EMPTY(&par->joinQ)) {
-        proc = TAILQ_FIRST(&par->joinQ);
-        TAILQ_REMOVE(&par->joinQ, proc, parQ_next);
-        proc_free(proc);
-    }
+    /* do NOT free procs, as the scheduler takes care of that */
+
+    memset(par, 0, sizeof(Par));
+    free(par);
 }
 
 int proxc_par(int args_start, ...) 
@@ -80,7 +88,7 @@ int proxc_par(int args_start, ...)
     FxnArg *fxn_arg = va_arg(args, FxnArg *);
     while (fxn_arg != NULL) {
         num_procs++;
-        par_add(par, fxn_arg->fxn, fxn_arg->arg);
+        par_add(par, fxn_arg->fxn, fxn_arg->arg1);
         fxn_arg = va_arg(args, FxnArg *);
     }
     va_end(args);

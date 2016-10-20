@@ -22,6 +22,7 @@ void _proc_mainfxn(Proc *proc)
 
     proc->fxn(proc->arg);
 
+    /* FIXME handle PAR cases */
     proc->state = PROC_ENDED;
 
     PDEBUG("_proc_mainfxn done\n");
@@ -45,7 +46,6 @@ int proc_create(Proc **new_proc, ProcFxn fxn, void *arg)
         PERROR("malloc failed for Proc stack\n");
         return errno;
     }
-    //memset(proc->stack, 0, sched->stack_size);
 
     /* if (posix_memalign(&proc->stack, (size_t)getpagesize(), sched->stack_size)) { */
     /*     free(proc); */
@@ -53,11 +53,13 @@ int proc_create(Proc **new_proc, ProcFxn fxn, void *arg)
     /*     return errno; */
     /* } */
 
+    /* configure members */
     proc->fxn = fxn;
     proc->arg = arg;
     proc->stack_size = sched->stack_size;
     proc->state = PROC_READY;
     proc->sched = sched;
+    proc->par_struct = NULL;
 
     /* configure context */
     ASSERT_0(getcontext(&proc->ctx));
@@ -83,8 +85,6 @@ void proc_free(Proc *proc)
 void proc_yield(void)
 {
     Scheduler *sched = scheduler_self();
-
-    sched->curr_proc->state = PROC_READY;
 
     PDEBUG("yielding\n");
     ASSERT_0(scheduler_switch(&sched->curr_proc->ctx, &sched->ctx));

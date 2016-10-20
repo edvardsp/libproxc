@@ -68,7 +68,10 @@ void scheduler_free(Scheduler *sched)
 void scheduler_addproc(Proc *proc)
 {
     ASSERT_NOTNULL(proc);
+    ASSERT_IS(proc->state, PROC_READY);
 
+    PDEBUG("scheduler_addproc called\n");
+       
     Scheduler *sched = scheduler_self();
     TAILQ_INSERT_TAIL(&sched->readyQ, proc, readyQ_next);
 }
@@ -92,20 +95,39 @@ int scheduler_run(void)
 
         /* no proc found, break */
         break;
+
+        /* from here, a PROC is found to resume */
 procFound:
+        ASSERT_NOTNULL(curr_proc);
         
-        curr_proc->state = PROC_RUNNING;
-
         sched->curr_proc = curr_proc;
-        ASSERT_0(scheduler_switch(&sched->ctx, &curr_proc->ctx));
-        sched->curr_proc = NULL;
+        sched->curr_proc->state = PROC_RUNNING;
 
-        if (curr_proc->state == PROC_READY) {
-            scheduler_addproc(curr_proc);
+        scheduler_switch(&sched->ctx, &sched->curr_proc->ctx);
+
+        switch (sched->curr_proc->state) {
+        case PROC_RUNNING:
+        case PROC_READY:
+            sched->curr_proc->state = PROC_READY;
+            scheduler_addproc(sched->curr_proc);
+            break;
+        case PROC_ENDED: {
+            /*  check if curr_proc is in a PAR */
+            Par *par = sched->curr_proc->par_struct;
+            if (sched->curr_proc->par_struct != NULL) {
+                /* FIXME atomic */
+                if (--par->num_procs == 0) {
+                    par->par_proc->state = PROC_READY;
+                    scheduler_addproc(par->par_proc);
+                }
+            }
+            proc_free(sched->curr_proc);
+            break;
         }
-        if (curr_proc->state == PROC_ENDED) {
-            proc_free(curr_proc);
+        default: {}
         }
+
+        sched->curr_proc = NULL;
     }
 
     PDEBUG("scheduler_run done\n");
