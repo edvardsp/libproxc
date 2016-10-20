@@ -10,16 +10,16 @@ TARGET = $(BIN_DIR)/$(BIN_NAME)
 
 CC = clang
 
-OPT = -O0
+OPT = 
 WARN = -Wall -Wextra -Werror
 ifeq ($(CC),clang)
 WARN += -Weverything -Wno-reserved-id-macro -Wno-gnu-zero-variadic-macro-arguments \
 	   -Wno-missing-prototypes -Wno-padded -Wno-switch-enum
 endif
-DEFINES = -D_GNU_SOURCE -DDEBUG
+DEFINES = -D_GNU_SOURCE
 INCLUDES = -I$(SRC_DIR)
 
-CFLAGS = -std=gnu99 -g $(OPT) $(WARN) $(DEFINES) $(INCLUDES)
+CFLAGS = -std=gnu99 $(OPT) $(WARN) $(DEFINES) $(INCLUDES)
 LDFLAGS = -pthread
 
 C_FILES = $(shell find $(SRC_DIR) -name "*.c")
@@ -29,10 +29,21 @@ MKDIR_P = mkdir -p
 RMDIR_P = rmdir -p
 RM_F	= rm -f
 
-.PHONY: all clean 
+.PHONY: all debug release clean 
 
 # Default target
-all: $(TARGET)
+all: debug
+
+# Debug build
+debug: OPT += -O0
+debug: DEFINES += -DDEBUG
+debug: CFLAGS += -g
+debug: $(TARGET)
+
+# Release build
+release: OPT += -O2
+release: DEFINES += -DNDEBUG
+release: $(TARGET)
 
 # Link
 $(TARGET): $(O_FILES) 
