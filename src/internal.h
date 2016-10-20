@@ -16,11 +16,6 @@ struct Scheduler;
 
 typedef void (*ProcFxn)(void *);
 
-struct FxnArg {
-    ProcFxn  fxn;
-    void     *arg;
-};
-
 TAILQ_HEAD(ProcQ, Proc);
 
 enum ProcState {
@@ -57,13 +52,12 @@ struct Scheduler {
     struct ProcQ  readyQ;
 };
 
-typedef struct FxnArg FxnArg;
 typedef struct Proc Proc;
 typedef struct Scheduler Scheduler;
 
 extern pthread_key_t g_key_sched;
 
-int proc_create(Proc **new_proc, FxnArg *fxn_arg);
+int proc_create(Proc **new_proc, ProcFxn fxn, void *arg);
 void proc_free(Proc *proc);
 void proc_yield(void);
 

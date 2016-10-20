@@ -65,7 +65,7 @@ void proxc_start(ProcFxn fxn)
     Scheduler *sched;
     scheduler_create(&sched);
     Proc *proc;
-    proc_create(&proc, &(FxnArg){ fxn, NULL });
+    proc_create(&proc, fxn, NULL);
     scheduler_addproc(proc);
     scheduler_run();
 

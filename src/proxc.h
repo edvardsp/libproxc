@@ -5,17 +5,16 @@
 /* FIXME redefined typedef from internal.h */
 #ifndef INTERNAL_H__
 typedef void (*ProcFxn)(void *);
+#endif 
 
 typedef struct {
     ProcFxn  fxn;
     void     *arg;
 } FxnArg;
-#endif 
 
 void proxc_start(ProcFxn fxn);
 void proxc_end(void);
 
-FxnArg proxc_proc(ProcFxn fxn, void *arg);
 int proxc_par(int, ...);
 
 #define proxc_PROC(fxn, arg)  &(FxnArg){ fxn, arg }

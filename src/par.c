@@ -36,15 +36,15 @@ int par_create(Par **new_par)
 }
 
 static
-void par_add(Par *par, FxnArg *fxn_arg)
+void par_add(Par *par, ProcFxn fxn, void *arg)
 {
     ASSERT_NOTNULL(par);
-    ASSERT_NOTNULL(fxn_arg);
+    ASSERT_NOTNULL(fxn);
 
     /* create proc */
     /* add it */
     Proc *proc;
-    proc_create(&proc, fxn_arg);
+    proc_create(&proc, fxn, arg);
     TAILQ_INSERT_TAIL(&par->joinQ, proc, parQ_next);
 }
 
@@ -67,12 +67,7 @@ void par_free(Par *par)
     }
 }
 
-FxnArg proxc_proc(ProcFxn fxn, void *arg)
-{
-    return (FxnArg){ fxn, arg };
-}
-
-int proxc_par(int dummy, ...) 
+int proxc_par(int args_start, ...) 
 {
     /* allocate PAR struct */
     Par *par;
@@ -80,16 +75,21 @@ int proxc_par(int dummy, ...)
 
     /* parse args and create PAR procs */
     va_list args;
-    va_start(args, dummy);
+    va_start(args, args_start);
+    size_t num_procs = 0;
     FxnArg *fxn_arg = va_arg(args, FxnArg *);
     while (fxn_arg != NULL) {
-        par_add(par, fxn_arg);
+        num_procs++;
+        par_add(par, fxn_arg->fxn, fxn_arg->arg);
         fxn_arg = va_arg(args, FxnArg *);
     }
     va_end(args);
 
-    /* run and join, then cleanup */
-    par_runjoin(par);
+    /* if procs, run and join PAR */
+    if (num_procs > 0) {
+        par_runjoin(par);
+    }
+    /* cleanup */
     par_free(par);
 
     return 0;

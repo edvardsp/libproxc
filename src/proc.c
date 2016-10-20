@@ -27,9 +27,10 @@ void _proc_mainfxn(Proc *proc)
     PDEBUG("_proc_mainfxn done\n");
 }
 
-int proc_create(Proc **new_proc, FxnArg *fxn_arg)
+int proc_create(Proc **new_proc, ProcFxn fxn, void *arg)
 {
     ASSERT_NOTNULL(new_proc);
+    ASSERT_NOTNULL(fxn);
 
     Proc *proc;
     if ((proc = malloc(sizeof(Proc))) == NULL) {
@@ -44,7 +45,7 @@ int proc_create(Proc **new_proc, FxnArg *fxn_arg)
         PERROR("malloc failed for Proc stack\n");
         return errno;
     }
-    memset(proc->stack, 0, sched->stack_size);
+    //memset(proc->stack, 0, sched->stack_size);
 
     /* if (posix_memalign(&proc->stack, (size_t)getpagesize(), sched->stack_size)) { */
     /*     free(proc); */
@@ -52,8 +53,8 @@ int proc_create(Proc **new_proc, FxnArg *fxn_arg)
     /*     return errno; */
     /* } */
 
-    proc->fxn = fxn_arg->fxn;
-    proc->arg = fxn_arg->arg;
+    proc->fxn = fxn;
+    proc->arg = arg;
     proc->stack_size = sched->stack_size;
     proc->state = PROC_READY;
     proc->sched = sched;
