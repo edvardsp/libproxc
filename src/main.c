@@ -16,12 +16,14 @@ void fxn1(void *arg)
 }
 void fxn2(void *arg) 
 { 
+    int times = 1;
     if (arg) {
-        printf("fxn2: got arg %d\n", *(int *)arg);
+        times = *(int *)arg;
+        printf("fxn2: got arg %d\n", times);
     }
     printf("fxn2: Hello from the other side!\n");
     for (int i = 2; i < 7; i++) {
-        printf("fxn2: %d\n", i);
+        printf("fxn2: %d\n", i * times);
         proc_yield();
     }
 }
@@ -33,16 +35,24 @@ void fxn3(void *arg)
     for (int i = 0; i < 10; i++) {
         printf("fxn3: %d\n", i);
     }
+
+    printf("fxn3: PAR start\n");
+    int value = 22;
+    proxc_PAR(
+        proxc_PROC(fxn2),
+        proxc_PROC(fxn1),
+        proxc_PROC(fxn2, &value)
+    );
+    printf("fxn3: PAR ended\n");
 }
 
 void foofunc(void *arg)
 {
     (void)arg;
 
-    printf("foofunc now calls PAR\n");
+    printf("foofunc: PAR start\n");
 
     int value = 42;
-
     proxc_PAR(
         proxc_PROC(fxn1),
         proxc_PROC(fxn2, &value),
@@ -50,7 +60,7 @@ void foofunc(void *arg)
         proxc_PROC(fxn3)
     );
 
-    printf("foofunc PAR has ended\n");
+    printf("foofunc: PAR ended\n");
 
     PDEBUG("foofunc done\n");
 }
