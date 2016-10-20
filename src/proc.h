@@ -9,7 +9,6 @@ enum ProcState {
     PROC_READY,
     PROC_RUNNING,
     PROC_ENDED,
-    PROC_PARWAIT,
     PROC_PARJOIN
 };
 
