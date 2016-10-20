@@ -10,7 +10,7 @@ void proxc_start(ProcFxn fxn);
 void proxc_end(void);
 
 void* proxc_proc(ProcFxn, ...);
-int proxc_par(int, ...);
+int   proxc_par(int, ...);
 void* proxc_argn(size_t n);
 
 void proc_yield(void);
