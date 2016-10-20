@@ -14,7 +14,7 @@ OPT = -O0
 WARN = -Wall -Wextra -Werror
 ifeq ($(CC),clang)
 WARN += -Weverything -Wno-reserved-id-macro -Wno-gnu-zero-variadic-macro-arguments \
-	   -Wno-missing-prototypes -Wno-padded
+	   -Wno-missing-prototypes -Wno-padded -Wno-switch-enum
 endif
 DEFINES = -D_GNU_SOURCE -DDEBUG
 INCLUDES = -I$(SRC_DIR)
@@ -44,7 +44,6 @@ DEPS = $(C_FILES:$(SRC_DIR)/%.c=$(DEP_DIR)/%.d)
 -include $(DEPS)
 
 # compile and generate dependency info
-	#@$(CC) -c $(CFLAGS) -MT $@ -MMD -MP -MF $(patsubst $(OBJ_DIR)/%.o, $(DEP_DIR)/%.d, $@) $<
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(DEP_DIR)/%.d
 	@$(MKDIR_P) $(OBJ_DIR) $(DEP_DIR)
 	@$(CC) $(CFLAGS) -MT $@ -MM -MP -MF $(DEP_DIR)/$*.d $<
