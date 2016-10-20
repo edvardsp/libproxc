@@ -15,7 +15,7 @@ void fxn1(void)
 }
 void fxn2(void) 
 { 
-    int *arg = proxc_argn(0);
+    int *arg = ARGN(0);
     int times = 1;
     if (arg) {
         times = *arg;

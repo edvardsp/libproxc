@@ -17,8 +17,9 @@ void proc_yield(void);
 
 #ifndef PROXC_NO_MACRO
 
-#   define PROC(...)  proxc_proc(__VA_ARGS__, NULL)
-#   define PAR(...)   proxc_par(0, __VA_ARGS__, NULL)
+#   define PROC(...)    proxc_proc(__VA_ARGS__, NULL)
+#   define PAR(...)     proxc_par(0, __VA_ARGS__, NULL)
+#   define ARGN(index)  proxc_argn(index)
 
 #endif /* PROXC_NO_MACRO */
 
