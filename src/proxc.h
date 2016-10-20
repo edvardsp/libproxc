@@ -7,7 +7,6 @@
 typedef void (*ProcFxn)(void);
 
 void proxc_start(ProcFxn fxn);
-void proxc_end(void);
 
 void* proxc_proc(ProcFxn, ...);
 int   proxc_par(int, ...);
