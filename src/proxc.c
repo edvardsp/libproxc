@@ -65,7 +65,7 @@ void proxc_start(ProcFxn fxn)
     Scheduler *sched;
     scheduler_create(&sched);
     Proc *proc;
-    proc_create(&proc, fxn, NULL);
+    proc_create(&proc, fxn);
     scheduler_addproc(proc);
     scheduler_run();
 
@@ -79,3 +79,54 @@ void proxc_start(ProcFxn fxn)
 
 }
 
+/*
+ * Variadic args is a zero terminated list
+ * of void * arguments to fxn. In fxn context,
+ * args are accessed through proxc_argn() method.
+ */
+void* proxc_proc(ProcFxn fxn, ...)
+{
+    Proc *proc;
+    ASSERT_0(proc_create(&proc, fxn));
+
+    va_list args;
+    va_start(args, fxn);
+    ASSERT_0(proc_setargs(proc, args));
+    va_end(args);
+
+    return proc;
+} 
+
+/*
+ * Variadic args are zero terminated list
+ * of pointers to allready allocated PROCS
+ */
+int proxc_par(int args_start, ...) 
+{
+    /* allocate PAR struct */
+    Par *par;
+    ASSERT_0(par_create(&par));
+
+    /* parse args and add PROCS to joinQ */
+    va_list args;
+    va_start(args, args_start);
+    Proc *proc = va_arg(args, Proc *);
+    while (proc != NULL) {
+        par->num_procs++;
+        proc->par_struct = par;
+        TAILQ_INSERT_TAIL(&par->joinQ, proc, parQ_next);
+
+        proc = va_arg(args, Proc *);
+    }
+    va_end(args);
+
+    /* if procs, run and join PAR */
+    if (par->num_procs > 0) {
+        PDEBUG("PAR starting with %zu PROCS\n", par->num_procs);
+        par_runjoin(par);
+    }
+    /* cleanup */
+    par_free(par);
+
+    return 0;
+}

@@ -1,5 +1,6 @@
 
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
@@ -21,15 +22,14 @@ void _proc_mainfxn(Proc *proc)
         /* remove context from scheduler */
         /* return control to scheduler */
 
-    proc->fxn(proc->arg);
+    proc->fxn();
 
-    /* FIXME handle PAR cases */
     proc->state = PROC_ENDED;
 
     PDEBUG("_proc_mainfxn done\n");
 }
 
-int proc_create(Proc **new_proc, ProcFxn fxn, void *arg)
+int proc_create(Proc **new_proc, ProcFxn fxn)
 {
     ASSERT_NOTNULL(new_proc);
     ASSERT_NOTNULL(fxn);
@@ -55,9 +55,12 @@ int proc_create(Proc **new_proc, ProcFxn fxn, void *arg)
     /*     return errno; */
     /* } */
 
-    /* configure members */
+    /* set fxn and args */
     proc->fxn = fxn;
-    proc->arg = arg;
+    proc->num_args = 0;
+    proc->args = NULL;
+
+    /* configure members */
     proc->stack_size = sched->stack_size;
     proc->state = PROC_READY;
     proc->sched = sched;
@@ -79,9 +82,33 @@ void proc_free(Proc *proc)
 {
     if (proc == NULL) return;
 
+    free(proc->args);
     free(proc->stack);
-    memset(proc, 0, sizeof(Proc));
     free(proc);
+}
+
+int proc_setargs(Proc *proc, va_list args)
+{
+    /* FIXME for over 16 args */
+    #define SMALL_SIZE_OPT 16
+    void *tmp_args[SMALL_SIZE_OPT]; 
+    void *xarg = va_arg(args, void *);
+    while (xarg != NULL) {
+        ASSERT_TRUE(proc->num_args < SMALL_SIZE_OPT);
+        tmp_args[proc->num_args++] = xarg;
+        xarg = va_arg(args, void *);
+    } 
+
+    /* allocate args array for proc */
+    if ((proc->args = malloc(sizeof(void *) * proc->num_args)) == NULL) {
+        PERROR("malloc failed for Proc Args\n");
+        return errno;
+    }
+
+    /* copy over args */
+    memcpy(proc->args, tmp_args, sizeof(void *) * proc->num_args);
+
+    return 0;
 }
 
 void proc_yield(void)

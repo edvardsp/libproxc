@@ -5,17 +5,17 @@
 #include "debug.h"
 #include "proxc.h"
 
-void fxn1(void *arg) 
+void fxn1(void) 
 { 
-    (void)arg; 
     printf("fxn1: Hello from this side!\n");
     for (int i = 0; i < 4; i++) {
         printf("fxn1: %d\n", i);
         proc_yield();
     }
 }
-void fxn2(void *arg) 
+void fxn2(void) 
 { 
+    void *arg = NULL; /* FIXME */
     int times = 1;
     if (arg) {
         times = *(int *)arg;
@@ -28,9 +28,8 @@ void fxn2(void *arg)
     }
 }
 
-void fxn3(void *arg)
+void fxn3(void)
 {
-    (void)arg;
     printf("fxn3: Now it is my turn!\n");
     for (int i = 0; i < 10; i++) {
         printf("fxn3: %d\n", i);
@@ -38,26 +37,24 @@ void fxn3(void *arg)
 
     printf("fxn3: PAR start\n");
     int value = 22;
-    proxc_PAR(
-        proxc_PROC(fxn2),
-        proxc_PROC(fxn1),
-        proxc_PROC(fxn2, &value)
+    PAR(
+        PROC(fxn2),
+        PROC(fxn1),
+        PROC(fxn2, &value)
     );
     printf("fxn3: PAR ended\n");
 }
 
-void foofunc(void *arg)
+void foofunc(void)
 {
-    (void)arg;
-
     printf("foofunc: PAR start\n");
 
     int value = 42;
-    proxc_PAR(
-        proxc_PROC(fxn1),
-        proxc_PROC(fxn2, &value),
-        proxc_PROC(fxn2),
-        proxc_PROC(fxn3)
+    PAR(
+        PROC(fxn1),
+        PROC(fxn2, &value),
+        PROC(fxn3),
+        PROC(fxn2)
     );
 
     printf("foofunc: PAR ended\n");

@@ -16,7 +16,8 @@ struct Proc {
     uint64_t    id;
     ucontext_t  ctx;
     ProcFxn     fxn;
-    void        *arg;
+    size_t      num_args;
+    void        **args;
     size_t      stack_size;
     void        *stack;
 
