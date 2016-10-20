@@ -122,6 +122,8 @@ procFound:
                     scheduler_addproc(par->par_proc);
                 }
             }
+
+            /* cleanup */
             proc_free(sched->curr_proc);
         }
             break;

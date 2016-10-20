@@ -8,7 +8,6 @@
 
 #include "debug.h"
 #include "internal.h"
-#include "proxc.h"
 
 int par_create(Par **new_par)
 {

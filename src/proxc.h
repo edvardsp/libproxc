@@ -2,10 +2,7 @@
 #ifndef PROXC_H__
 #define PROXC_H__
 
-/* FIXME redefined typedef from internal.h */
-#ifndef INTERNAL_H__
 typedef void (*ProcFxn)(void);
-#endif 
 
 void proxc_start(ProcFxn fxn);
 void proxc_end(void);
