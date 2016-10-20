@@ -38,13 +38,14 @@ void par_add(Par *par, ProcFxn fxn, void *arg)
 {
     ASSERT_NOTNULL(par);
     ASSERT_NOTNULL(fxn);
+    /* arg can be NULL */
 
-    /* create proc */
-    /* add it */
     Proc *proc;
     proc_create(&proc, fxn, arg);
+    /* this signals scheduler that this PROC is in a PAR */
     proc->par_struct = par;
     TAILQ_INSERT_TAIL(&par->joinQ, proc, parQ_next);
+    /* does not need to be atomic, as only this PROC is running */
     par->num_procs++;
 }
 

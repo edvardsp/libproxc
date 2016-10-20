@@ -114,7 +114,8 @@ procFound:
         case PROC_ENDED: {
             /*  check if curr_proc is in a PAR */
             Par *par = sched->curr_proc->par_struct;
-            if (sched->curr_proc->par_struct != NULL) {
+            if (par != NULL) {
+                /* if last one, resume PAR joining PROC */
                 /* FIXME atomic */
                 if (--par->num_procs == 0) {
                     par->par_proc->state = PROC_READY;
@@ -122,9 +123,13 @@ procFound:
                 }
             }
             proc_free(sched->curr_proc);
-            break;
         }
-        default: {}
+            break;
+        case PROC_PARJOIN:
+            /* do nothing, as this proc will be revived  */
+            break;
+        default:
+            break;
         }
 
         sched->curr_proc = NULL;

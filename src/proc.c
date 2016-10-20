@@ -13,6 +13,7 @@ void _proc_mainfxn(Proc *proc)
 {
     ASSERT_NOTNULL(proc);
     ASSERT_NOTNULL(proc->fxn);
+
     /* do scheduler stuff */
     /* call ctx->fxn() */
     /* when fxn returns, do */
@@ -32,6 +33,7 @@ int proc_create(Proc **new_proc, ProcFxn fxn, void *arg)
 {
     ASSERT_NOTNULL(new_proc);
     ASSERT_NOTNULL(fxn);
+    /* arg can be NULL */
 
     Proc *proc;
     if ((proc = malloc(sizeof(Proc))) == NULL) {
@@ -87,6 +89,6 @@ void proc_yield(void)
     Scheduler *sched = scheduler_self();
 
     PDEBUG("yielding\n");
-    ASSERT_0(scheduler_switch(&sched->curr_proc->ctx, &sched->ctx));
+    scheduler_switch(&sched->curr_proc->ctx, &sched->ctx);
 }
 
