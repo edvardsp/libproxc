@@ -130,3 +130,13 @@ int proxc_par(int args_start, ...)
 
     return 0;
 }
+
+void* proxc_argn(size_t n)
+{
+    Proc *proc = scheduler_self()->curr_proc;
+    /* if n is index out of range, return NULL */
+    if (n >= proc->num_args) return NULL;
+    
+    return proc->args[n];
+}
+

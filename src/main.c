@@ -15,10 +15,10 @@ void fxn1(void)
 }
 void fxn2(void) 
 { 
-    void *arg = NULL; /* FIXME */
+    int *arg = proxc_argn(0);
     int times = 1;
     if (arg) {
-        times = *(int *)arg;
+        times = *arg;
         printf("fxn2: got arg %d\n", times);
     }
     printf("fxn2: Hello from the other side!\n");
