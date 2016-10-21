@@ -2,7 +2,6 @@
 #ifndef INTERNAL_H__
 #define INTERNAL_H__
 
-#include <stdint.h>
 #include <stdarg.h>
 #include <ucontext.h>
 #include <pthread.h>
@@ -21,7 +20,7 @@ struct Scheduler;
 
 /* CSP paradigm relevant structs */
 struct Par;
-struct Chan; /* FIXME */
+struct Chan;
 
 /* typedefs for internal use */
 typedef struct Proc Proc;
@@ -48,6 +47,11 @@ int  par_create(Par **new_par);
 void par_free(Par *par);
 void par_runjoin(Par *par);
 
+int  chan_create(Chan **new_chan);
+void chan_free(Chan *chan);
+int  chan_write(Chan *chan, void *value, size_t size);
+int  chan_read(Chan *chan, void *value, size_t *size);
+
 /* extern and static inline functions */
 extern pthread_key_t g_key_sched;
 
@@ -72,6 +76,7 @@ int scheduler_switch(ucontext_t *from, ucontext_t *to)
 #include "proc.h"
 #include "scheduler.h"
 #include "par.h"
+#include "chan.h"
 
 #endif /* INTERNAL_H_ */
 
