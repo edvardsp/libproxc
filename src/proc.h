@@ -2,6 +2,11 @@
 #ifndef PROC_H__
 #define PROC_H__
 
+#include <stddef.h>
+#include <stdint.h>
+#include <ucontext.h>
+
+#include "queue.h"
 #include "internal.h"
 
 enum ProcState {
@@ -33,6 +38,9 @@ struct Proc {
     /* PAR related */
     struct Par         *par_struct;
     TAILQ_ENTRY(Proc)  parQ_next;
+
+    /* CHAN related */
+    TAILQ_ENTRY(Proc)  chanQ_next;
 };
 
 #endif /* PROC_H__ */

@@ -2,6 +2,10 @@
 #ifndef SCHEDULER_H__
 #define SCHEDULER_H__
 
+#include <stddef.h>
+#include <stdint.h>
+#include <ucontext.h>
+
 #include "internal.h"
 
 struct Scheduler {
