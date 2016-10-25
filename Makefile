@@ -20,6 +20,7 @@ DEFINES = -D_GNU_SOURCE
 INCLUDES = -I$(SRC_DIR)
 
 CFLAGS = -std=gnu99 $(OPT) $(WARN) $(DEFINES) $(INCLUDES)
+LFLAGS = 
 LDFLAGS = -pthread
 
 C_FILES = $(shell find $(SRC_DIR) -name "*.c")
@@ -29,7 +30,7 @@ MKDIR_P = mkdir -p
 RMDIR_P = rmdir -p
 RM_F	= rm -f
 
-.PHONY: all debug release clean 
+.PHONY: all debug release profiling clean 
 
 # Default target
 all: debug
@@ -45,10 +46,16 @@ release: OPT += -O2
 release: DEFINES += -DNDEBUG
 release: $(TARGET)
 
+# profiling
+profiling: CFLAGS += -g -fno-omit-frame-pointer -fno-inline-functions \
+	 -fno-optimize-sibling-calls
+profiling: LFLAGS += -g
+profiling: release
+
 # Link
 $(TARGET): $(O_FILES) 
 	@$(MKDIR_P) $(BIN_DIR)
-	$(CC) -o $@ $^ $(LDFLAGS)
+	$(CC) $(LFLAGS) -o $@ $^ $(LDFLAGS)
 
 # Dependency files
 DEPS = $(C_FILES:$(SRC_DIR)/%.c=$(DEP_DIR)/%.d)
