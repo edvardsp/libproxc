@@ -7,18 +7,26 @@
 
 #include "internal.h"
 
+enum ChanType {
+    CHAN_WRITE_T = 0,
+    CHAN_READ_T,
+    CHAN_ALTREAD_T
+};
+
 enum ChanState {
-    CHAN_NOPROCS = 0,  /* no PROCs using the CHAN */
-    CHAN_WPROCS,       /* some PROCs are trying to write on CHAN */
-    CHAN_RPROCS        /* some PROCs are trying to read from CHAN */
+    CHAN_WAIT = 0,  /* no PROC using the CHAN */
+    CHAN_WREADY,    /* a PROC is trying to write on CHAN */
+    CHAN_RREADY     /* a PROC is trying to read from CHAN */
 };
 
 struct Chan {
-    uint64_t        id; 
+    enum ChanType   type;
     enum ChanState  state;
 
-    size_t        num_procs;
-    struct ProcQ  chanQ;  /* serves as both writer and reader Q */
+    void    *data;
+    size_t  data_size;
+
+    Proc  *proc_wait;
 };
 
 #endif /* CHAN_H__ */

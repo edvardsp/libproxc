@@ -10,11 +10,12 @@
 #include "internal.h"
 
 enum ProcState {
-    PROC_FREED = 0,
+    PROC_ERROR = 0,
     PROC_READY,
     PROC_RUNNING,
     PROC_ENDED,
-    PROC_PARJOIN
+    PROC_PARJOIN,
+    PROC_CHANWAIT
 };
 
 struct Proc {

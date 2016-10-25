@@ -6,6 +6,14 @@
 
 typedef void (*ProcFxn)(void);
 
+struct Chan;
+typedef struct Chan Chan;
+
+int  chan_create(Chan **new_chan);
+void chan_free(Chan *chan);
+void chan_write(Chan *chan, void *data, size_t size);
+void chan_read(Chan *chan, void *data, size_t size);
+
 void proxc_start(ProcFxn fxn);
 
 void* proxc_proc(ProcFxn, ...);

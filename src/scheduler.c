@@ -130,6 +130,9 @@ procFound:
         case PROC_PARJOIN:
             /* do nothing, as this proc will be revived  */
             break;
+        case PROC_CHANWAIT:
+            /* do nothing, the other end of CHAN will re-add it */
+            break;
         default:
             break;
         }
