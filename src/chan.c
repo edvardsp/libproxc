@@ -43,6 +43,7 @@ void chan_write(Chan *chan, void *data, size_t size)
     /* FIXME atomic */
     switch (chan->state) {
     case CHAN_WAIT: 
+        PDEBUG("CHAN write, wait on read\n");
         chan->state = CHAN_WREADY;
 
         chan->data = data;
@@ -50,10 +51,13 @@ void chan_write(Chan *chan, void *data, size_t size)
         
         chan->proc_wait = sched->curr_proc;
 
+        /* only yield when chan is not ready */
         sched->curr_proc->state = PROC_CHANWAIT;
+        proc_yield();
         break;
 
     case CHAN_RREADY: {
+        PDEBUG("CHAN write, read ready\n");
         chan->state = CHAN_WAIT;
 
         size_t min_size = (size > chan->data_size) 
@@ -76,11 +80,10 @@ void chan_write(Chan *chan, void *data, size_t size)
     case CHAN_WREADY:
         PERROR("Multiple PROCs trying to write to one CHAN, block indefinitely\n");
         sched->curr_proc->state = PROC_ERROR;
+        proc_yield();
         break;
     }
 
-    /* a chan operation always calls a yield */
-    proc_yield();
 }
 
 void chan_read(Chan *chan, void *data, size_t size)
@@ -91,6 +94,7 @@ void chan_read(Chan *chan, void *data, size_t size)
     /* FIXME atomic */
     switch (chan->state) {
     case CHAN_WAIT:
+        PDEBUG("CHAN read, wait on write\n");
         chan->state = CHAN_RREADY;
 
         chan->data = data;
@@ -98,10 +102,13 @@ void chan_read(Chan *chan, void *data, size_t size)
 
         chan->proc_wait = sched->curr_proc;
 
+        /* only yield when chan is not ready */
         sched->curr_proc->state = PROC_CHANWAIT;
+        proc_yield();
         break;
 
     case CHAN_WREADY: {
+        PDEBUG("CHAN read, write ready\n");
         chan->state = CHAN_WAIT;
 
         size_t min_size = (size > chan->data_size) 
@@ -123,11 +130,10 @@ void chan_read(Chan *chan, void *data, size_t size)
     case CHAN_RREADY:
         PERROR("Multiple PROCs trying to read from one CHAN, block indefinitely\n");
         sched->curr_proc->state = PROC_ERROR;
+        proc_yield();
         break;
     }
 
-    /* a chan operation always calls a yield */
-    proc_yield();
 }
 
 
