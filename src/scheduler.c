@@ -72,7 +72,7 @@ void scheduler_addproc(Proc *proc)
 
     PDEBUG("scheduler_addproc called\n");
        
-    Scheduler *sched = scheduler_self();
+    Scheduler *sched = proc->sched;
     TAILQ_INSERT_TAIL(&sched->readyQ, proc, readyQ_next);
 }
 
