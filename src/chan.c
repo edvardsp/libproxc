@@ -40,6 +40,7 @@ void chan_write(Chan *chan, void *data, size_t size)
     ASSERT_NOTNULL(chan);
 
     Scheduler *sched = scheduler_self();
+    /* FIXME atomic */
     switch (chan->state) {
     case CHAN_WAIT: 
         chan->state = CHAN_WREADY;
@@ -87,6 +88,7 @@ void chan_read(Chan *chan, void *data, size_t size)
     ASSERT_NOTNULL(chan);
 
     Scheduler *sched = scheduler_self();
+    /* FIXME atomic */
     switch (chan->state) {
     case CHAN_WAIT:
         chan->state = CHAN_RREADY;
