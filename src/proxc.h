@@ -6,7 +6,6 @@
 
 typedef void (*ProcFxn)(void);
 
-struct Chan;
 typedef struct Chan Chan;
 
 int  chan_create(Chan **new_chan);
