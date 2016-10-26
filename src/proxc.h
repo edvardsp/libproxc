@@ -12,8 +12,8 @@ typedef struct ChanEnd ChanEnd;
 Chan* chan_create(void);
 void chan_free(Chan *chan);
 ChanEnd* chan_getend(Chan *chan);
-int chan_write(ChanEnd *chan_end, void *data, size_t size);
-int chan_read(ChanEnd *chan_end, void *data, size_t size);
+void chan_write(ChanEnd *chan_end, void *data, size_t size);
+void chan_read(ChanEnd *chan_end, void *data, size_t size);
 
 void proxc_start(ProcFxn fxn);
 
@@ -31,6 +31,8 @@ int   proxc_ch_close(int, ...);
 #   define CH_OPEN(...)  proxc_ch_open(0, __VA_ARGS__, NULL)
 #   define CH_CLOSE(...) proxc_ch_close(0, __VA_ARGS__, NULL)
 #   define CH_END(ch)    chan_getend(ch)
+#   define CH_WRITE(ch_end, data, type) chan_write(ch_end, data, sizeof(type)) 
+#   define CH_READ(ch_end, data, type)  chan_read(ch_end, data, sizeof(type)) 
 
 #endif /* PROXC_NO_MACRO */
 
