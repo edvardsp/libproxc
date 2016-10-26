@@ -58,6 +58,7 @@ ChanEnd* chan_getend(Chan *chan)
         chan_end->chan = chan;
         return chan_end;
     }
+    errno = EPERM;
     PERROR("Two ChanEnds has already been aquired, NULL returned\n");
     return NULL;
 }
@@ -72,20 +73,21 @@ int _chan_checkbind(ChanEnd *chan_end)
     #define THIS_PROC chan_end->proc
     #define CURR_PROC chan_end->proc->sched->curr_proc
     if (THIS_PROC == NULL || THIS_PROC != CURR_PROC) {
-        PERROR("CHANEND is not bound to a PROC, return errno\n");
-        errno = -EPERM;
+        errno = EPERM;
         return errno;
     }
     return 0;
 }
 
-int chan_write(ChanEnd *chan_end, void *data, size_t size)
+void chan_write(ChanEnd *chan_end, void *data, size_t size)
 {
     ASSERT_NOTNULL(chan_end);
 
     /* check binding of CHANEND, return errno if illegal */
     if (_chan_checkbind(chan_end) != 0) {
-        return errno;
+        errno = EPERM;
+        PERROR("CHANEND is not bound to a PROC, do nothing\n");
+        return;
     }
 
     Proc *proc = chan_end->proc;
@@ -133,21 +135,21 @@ int chan_write(ChanEnd *chan_end, void *data, size_t size)
         break;
     }
     case CHAN_WREADY:
-        PERROR("Multiple PROCs trying to write to one CHAN, return errno\n");
-        errno = -EPERM;
-        return errno;
+        errno = EPERM;
+        PERROR("Multiple PROCs trying to write to one CHAN, do nothing\n");
+        return;
     }
-
-    return 0;
 }
 
-int chan_read(ChanEnd *chan_end, void *data, size_t size)
+void chan_read(ChanEnd *chan_end, void *data, size_t size)
 {
     ASSERT_NOTNULL(chan_end);
 
     /* check binding of CHANEND, return errno if illegal */
     if (_chan_checkbind(chan_end) != 0) {
-        return errno;
+        errno = EPERM;
+        PERROR("CHANEND is not bound to a PROC, do nothing\n");
+        return;
     }
 
     Proc *proc = chan_end->proc;
@@ -193,12 +195,10 @@ int chan_read(ChanEnd *chan_end, void *data, size_t size)
         break;
     }
     case CHAN_RREADY:
-        PERROR("Multiple PROCs trying to read from one CHAN, return errno\n");
-        errno = -EPERM;
-        return errno;
+        errno = EPERM;
+        PERROR("Multiple PROCs trying to read from one CHAN, do nothing\n");
+        return;
     }
-
-    return 0;
 }
 
 

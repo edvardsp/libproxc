@@ -52,8 +52,8 @@ void par_runjoin(Par *par);
 Chan *chan_create(void);
 void chan_free(Chan *chan);
 ChanEnd* chan_getend(Chan *chan);
-int chan_write(ChanEnd *chan_end, void *data, size_t size);
-int chan_read(ChanEnd *chan_end, void *data, size_t size);
+void chan_write(ChanEnd *chan_end, void *data, size_t size);
+void chan_read(ChanEnd *chan_end, void *data, size_t size);
 
 /* extern and static inline functions */
 extern pthread_key_t g_key_sched;
