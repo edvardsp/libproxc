@@ -3,7 +3,7 @@
 #include <string.h>
 #include <errno.h>
 
-#include "debug.h"
+#include "util/debug.h"
 #include "internal.h"
 
 Chan* chan_create(void)

@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <ucontext.h>
 
-#include "queue.h"
+#include "util/queue.h"
 #include "internal.h"
 
 enum ProcState {

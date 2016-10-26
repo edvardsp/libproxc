@@ -6,7 +6,7 @@
 #include <pthread.h>
 #include <features.h>
 
-#include "debug.h"
+#include "util/debug.h"
 #include "internal.h"
 
 static 

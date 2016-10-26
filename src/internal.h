@@ -6,8 +6,8 @@
 #include <ucontext.h>
 #include <pthread.h>
 
-#include "queue.h"
-#include "debug.h"
+#include "util/queue.h"
+#include "util/debug.h"
 
 #define MAX_STACK_SIZE  (128 * 1024)
 

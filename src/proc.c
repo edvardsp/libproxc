@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <ucontext.h>
 
-#include "debug.h"
+#include "util/debug.h"
 #include "internal.h"
 
 static

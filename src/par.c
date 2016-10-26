@@ -6,7 +6,7 @@
 #include <string.h>
 #include <errno.h>
 
-#include "debug.h"
+#include "util/debug.h"
 #include "internal.h"
 
 int par_create(Par **new_par)

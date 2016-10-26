@@ -7,8 +7,8 @@
 #include <ucontext.h>
 #include <pthread.h>
 
-#include "debug.h"
-#include "queue.h"
+#include "util/debug.h"
+#include "util/queue.h"
 #include "internal.h"
 
 // Holds corresponding scheduler for each pthread
