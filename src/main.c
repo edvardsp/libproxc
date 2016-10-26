@@ -54,6 +54,7 @@ void timerFxn(void)
     clock_t start, stop;
     double time_spent, sum;
 
+    printf("Repeat = %d, runs = %d\n", repeat, runs);
     sum = 0;
     for (int j = 0; j < runs; j++) {
         start = clock();
