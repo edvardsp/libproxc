@@ -11,11 +11,11 @@ void fxn1(void)
     Chan *a = ARGN(0), *b = ARGN(1);
     ChanEnd *a_end = CH_END(a), *b_end = CH_END(b);
     int value = 0;
-    chan_write(a_end, &value, sizeof(int));
+    CH_WRITE(a_end, &value, int);
     int running = 1;
     while (running) {
-        chan_read(b_end, &value, sizeof(int));
-        chan_write(a_end, &value, sizeof(int));
+        CH_READ(b_end, &value, int);
+        CH_WRITE(a_end, &value, int);
     }
 }
 void fxn2(void) 
@@ -25,9 +25,9 @@ void fxn2(void)
     int value;
     int running = 1;
     while (running) {
-        chan_read(a_end, &value, sizeof(int));
-        chan_write(d_end, &value, sizeof(int));
-        chan_write(c_end, &value, sizeof(int));
+        CH_READ(a_end, &value, int);
+        CH_WRITE(d_end, &value, int);
+        CH_WRITE(c_end, &value, int);
     }
 }
 
@@ -38,9 +38,9 @@ void fxn3(void)
     int value;
     int running = 1;
     while (running) {
-        chan_read(c_end, &value, sizeof(int));
+        CH_READ(c_end, &value, int);
         value++;
-        chan_write(b_end, &value, sizeof(int));
+        CH_WRITE(b_end, &value, int);
     }
 }
 
@@ -61,7 +61,7 @@ void timerFxn(void)
 
         int x;
         for (int i = 0; i < repeat; i++ ) {
-            chan_read(d_end, &x, sizeof(int));
+            CH_READ(d_end, &x, int);
         }
         stop = clock();
         time_spent = (double)(stop - start) / CLOCKS_PER_SEC * 1000.0;
