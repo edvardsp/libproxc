@@ -15,14 +15,26 @@ int chan_create(Chan **new_chan)
         return errno;
     }
     memset(chan, 0, sizeof(Chan));
+    for (size_t i = 0; i < 2; i++) {
+        if ((chan->ends[i] = malloc(sizeof(ChanEnd))) == NULL) {
+            PERROR("malloc failed for ChanEnd\n");
+            if (chan->ends[0] != NULL)
+                free(chan->ends[0]);
+            free(chan);
+            return errno;
+        }
+        memset(chan->ends[i], 0, sizeof(ChanEnd));
+    }
 
-    chan->type = CHAN_WRITE_T;
     chan->state = CHAN_WAIT;
     
     chan->data = NULL;
     chan->data_size = 0;
 
-    chan->proc_wait = NULL;
+    for (size_t i = 0; i < 2; i++) {
+        chan->ends[i]->proc = NULL;
+        chan->ends[i]->chan = chan;
+    }
 
     *new_chan = chan;
     return 0;
@@ -35,11 +47,51 @@ void chan_free(Chan *chan)
     free(chan);
 }
 
-void chan_write(Chan *chan, void *data, size_t size)
+ChanEnd* chan_getend(Chan *chan)
 {
     ASSERT_NOTNULL(chan);
+    
+    if (chan->num_ends < 2) {
+        return chan->ends[chan->num_ends++];
+    }
+    PERROR("Two ChanEnds has already been aquired, NULL returned\n");
+    return NULL;
+}
 
-    Scheduler *sched = scheduler_self();
+static 
+int _chan_bindend(ChanEnd *chan_end)
+{
+    /* if NULL, this proc is bounded to this CHANEND */
+    if (chan_end->proc == NULL) {
+        PDEBUG("PROC binds to CHANEND\n");
+        Scheduler *sched = scheduler_self();
+        chan_end->proc = sched->curr_proc;
+        return 0;
+    }
+    /* else, check that this proc is the one bounded to this CHANEND */
+    else if (chan_end->proc != chan_end->proc->sched->curr_proc) {
+        /* if this is not the case, return error */ 
+        PERROR("This PROC is not bound to this CHANEND\n");
+        errno = -EPERM;
+        return errno;
+    }
+    return 0;
+}
+
+int chan_write(ChanEnd *chan_end, void *data, size_t size)
+{
+    ASSERT_NOTNULL(chan_end);
+
+    /* check binding of CHANEND, return errno if illegal */
+    if (_chan_bindend(chan_end) != 0) {
+        return errno;
+    }
+
+    Proc *proc = chan_end->proc;
+    Chan *chan = chan_end->chan;
+    ASSERT_NOTNULL(proc);
+    ASSERT_NOTNULL(chan);
+
     /* FIXME atomic */
     switch (chan->state) {
     case CHAN_WAIT: 
@@ -49,11 +101,11 @@ void chan_write(Chan *chan, void *data, size_t size)
         chan->data = data;
         chan->data_size = size;
         
-        chan->proc_wait = sched->curr_proc;
+        chan->end_wait = chan_end;
 
         /* only yield when chan is not ready */
-        sched->curr_proc->state = PROC_CHANWAIT;
-        proc_yield();
+        proc->state = PROC_CHANWAIT;
+        proc_yield(proc);
         break;
 
     case CHAN_RREADY: {
@@ -73,24 +125,35 @@ void chan_write(Chan *chan, void *data, size_t size)
         chan->data = NULL;
         chan->data_size = 0;
 
-        chan->proc_wait->state = PROC_READY;
-        scheduler_addproc(chan->proc_wait);
+        /* resume waiting PROC on other CHANEND */
+        Proc *wait_proc = chan->end_wait->proc;
+        wait_proc->state = PROC_READY;
+        scheduler_addproc(wait_proc);
         break;
     }
     case CHAN_WREADY:
-        PERROR("Multiple PROCs trying to write to one CHAN, block indefinitely\n");
-        sched->curr_proc->state = PROC_ERROR;
-        proc_yield();
-        break;
+        PERROR("Multiple PROCs trying to write to one CHAN, return errno\n");
+        errno = -EPERM;
+        return errno;
     }
 
+    return 0;
 }
 
-void chan_read(Chan *chan, void *data, size_t size)
+int chan_read(ChanEnd *chan_end, void *data, size_t size)
 {
+    ASSERT_NOTNULL(chan_end);
+
+    /* check binding of CHANEND, return errno if illegal */
+    if (_chan_bindend(chan_end) != 0) {
+        return errno;
+    }
+
+    Proc *proc = chan_end->proc;
+    Chan *chan = chan_end->chan;
+    ASSERT_NOTNULL(proc);
     ASSERT_NOTNULL(chan);
 
-    Scheduler *sched = scheduler_self();
     /* FIXME atomic */
     switch (chan->state) {
     case CHAN_WAIT:
@@ -100,11 +163,11 @@ void chan_read(Chan *chan, void *data, size_t size)
         chan->data = data;
         chan->data_size = size;
 
-        chan->proc_wait = sched->curr_proc;
+        chan->end_wait = chan_end;
 
         /* only yield when chan is not ready */
-        sched->curr_proc->state = PROC_CHANWAIT;
-        proc_yield();
+        proc->state = PROC_CHANWAIT;
+        proc_yield(proc);
         break;
 
     case CHAN_WREADY: {
@@ -123,17 +186,18 @@ void chan_read(Chan *chan, void *data, size_t size)
         chan->data = NULL;
         chan->data_size = 0;
 
-        chan->proc_wait->state = PROC_READY;
-        scheduler_addproc(chan->proc_wait);
+        Proc *wait_proc = chan->end_wait->proc;
+        wait_proc->state = PROC_READY;
+        scheduler_addproc(wait_proc);
         break;
     }
     case CHAN_RREADY:
-        PERROR("Multiple PROCs trying to read from one CHAN, block indefinitely\n");
-        sched->curr_proc->state = PROC_ERROR;
-        proc_yield();
-        break;
+        PERROR("Multiple PROCs trying to read from one CHAN, return errno\n");
+        errno = -EPERM;
+        return errno;
     }
 
+    return 0;
 }
 
 

@@ -52,7 +52,7 @@ void par_runjoin(Par *par)
     }
 
     par->par_proc->state = PROC_PARJOIN;
-    proc_yield();
+    proc_yield(par->par_proc);
     PDEBUG("par_runjoin JOINS\n");
 }
 

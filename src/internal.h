@@ -21,6 +21,7 @@ struct Scheduler;
 /* CSP paradigm relevant structs */
 struct Par;
 struct Chan;
+struct ChanEnd;
 
 /* typedefs for internal use */
 typedef struct Proc Proc;
@@ -28,6 +29,7 @@ typedef struct Scheduler Scheduler;
 
 typedef struct Par Par;
 typedef struct Chan Chan;
+typedef struct ChanEnd ChanEnd;
 
 /* queue declarations */
 TAILQ_HEAD(ProcQ, Proc);
@@ -36,7 +38,7 @@ TAILQ_HEAD(ProcQ, Proc);
 int  proc_create(Proc **new_proc, ProcFxn fxn);
 void proc_free(Proc *proc);
 int  proc_setargs(Proc *proc, va_list args);
-void proc_yield(void);
+void proc_yield(Proc *proc);
 
 int  scheduler_create(Scheduler **new_sched);
 void scheduler_free(Scheduler *sched);
@@ -49,8 +51,8 @@ void par_runjoin(Par *par);
 
 int  chan_create(Chan **new_chan);
 void chan_free(Chan *chan);
-void chan_write(Chan *chan, void *data, size_t size);
-void chan_read(Chan *chan, void *data, size_t size);
+int chan_write(ChanEnd *chan_end, void *data, size_t size);
+int chan_read(ChanEnd *chan_end, void *data, size_t size);
 
 /* extern and static inline functions */
 extern pthread_key_t g_key_sched;

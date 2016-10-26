@@ -7,19 +7,19 @@
 typedef void (*ProcFxn)(void);
 
 typedef struct Chan Chan;
+typedef struct ChanEnd ChanEnd;
 
 int  chan_create(Chan **new_chan);
 void chan_free(Chan *chan);
-void chan_write(Chan *chan, void *data, size_t size);
-void chan_read(Chan *chan, void *data, size_t size);
+ChanEnd* chan_getend(Chan *chan);
+int chan_write(ChanEnd *chan_end, void *data, size_t size);
+int chan_read(ChanEnd *chan_end, void *data, size_t size);
 
 void proxc_start(ProcFxn fxn);
 
 void* proxc_proc(ProcFxn, ...);
 int   proxc_par(int, ...);
 void* proxc_argn(size_t n);
-
-void proc_yield(void);
 
 #ifndef PROXC_NO_MACRO
 

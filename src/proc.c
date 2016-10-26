@@ -111,9 +111,11 @@ int proc_setargs(Proc *proc, va_list args)
     return 0;
 }
 
-void proc_yield(void)
+void proc_yield(Proc *proc)
 {
-    Scheduler *sched = scheduler_self();
+    Scheduler *sched;
+    if (proc == NULL) sched = scheduler_self();
+    else              sched = proc->sched;
 
     PDEBUG("yielding\n");
     scheduler_switch(&sched->curr_proc->ctx, &sched->ctx);
