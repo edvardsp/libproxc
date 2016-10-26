@@ -6,13 +6,13 @@
 #include "debug.h"
 #include "internal.h"
 
-int chan_create(Chan **new_chan)
+Chan* chan_create(void)
 {
     Chan *chan;
 
     if ((chan = malloc(sizeof(Chan))) == NULL) {
         PERROR("malloc failed for Chan\n");
-        return errno;
+        return NULL;
     }
     memset(chan, 0, sizeof(Chan));
     for (size_t i = 0; i < 2; i++) {
@@ -21,7 +21,7 @@ int chan_create(Chan **new_chan)
             if (chan->ends[0] != NULL)
                 free(chan->ends[0]);
             free(chan);
-            return errno;
+            return NULL;
         }
         memset(chan->ends[i], 0, sizeof(ChanEnd));
     }
@@ -36,8 +36,7 @@ int chan_create(Chan **new_chan)
         chan->ends[i]->chan = chan;
     }
 
-    *new_chan = chan;
-    return 0;
+    return chan;
 }
 
 void chan_free(Chan *chan)

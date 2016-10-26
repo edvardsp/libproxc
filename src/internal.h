@@ -49,8 +49,9 @@ int  par_create(Par **new_par);
 void par_free(Par *par);
 void par_runjoin(Par *par);
 
-int  chan_create(Chan **new_chan);
+Chan *chan_create(void);
 void chan_free(Chan *chan);
+ChanEnd* chan_getend(Chan *chan);
 int chan_write(ChanEnd *chan_end, void *data, size_t size);
 int chan_read(ChanEnd *chan_end, void *data, size_t size);
 

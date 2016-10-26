@@ -9,7 +9,7 @@ typedef void (*ProcFxn)(void);
 typedef struct Chan Chan;
 typedef struct ChanEnd ChanEnd;
 
-int  chan_create(Chan **new_chan);
+Chan* chan_create(void);
 void chan_free(Chan *chan);
 ChanEnd* chan_getend(Chan *chan);
 int chan_write(ChanEnd *chan_end, void *data, size_t size);

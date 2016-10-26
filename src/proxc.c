@@ -147,7 +147,7 @@ int proxc_ch_open(int arg_start, ...)
     va_start(args, arg_start);
     Chan **new_chan = (Chan **)va_arg(args, Chan **);
     while (new_chan != NULL) {
-        chan_create(new_chan);
+        *new_chan = chan_create();
         new_chan = (Chan **)va_arg(args, Chan **);
     }
     va_end(args);
