@@ -9,7 +9,7 @@
 void fxn1(void) 
 { 
     Chan *a = ARGN(0), *b = ARGN(1);
-    ChanEnd *a_end = chan_getend(a), *b_end = chan_getend(b);
+    ChanEnd *a_end = CH_END(a), *b_end = CH_END(b);
     int value = 0;
     chan_write(a_end, &value, sizeof(int));
     int running = 1;
@@ -21,7 +21,7 @@ void fxn1(void)
 void fxn2(void) 
 { 
     Chan *a = ARGN(0), *c = ARGN(1), *d = ARGN(2);
-    ChanEnd *a_end = chan_getend(a), *c_end = chan_getend(c), *d_end = chan_getend(d); 
+    ChanEnd *a_end = CH_END(a), *c_end = CH_END(c), *d_end = CH_END(d); 
     int value;
     int running = 1;
     while (running) {
@@ -34,7 +34,7 @@ void fxn2(void)
 void fxn3(void)
 {
     Chan *b = ARGN(0), *c = ARGN(1);
-    ChanEnd *b_end = chan_getend(b), *c_end = chan_getend(c);
+    ChanEnd *b_end = CH_END(b), *c_end = CH_END(c);
     int value;
     int running = 1;
     while (running) {
@@ -48,9 +48,9 @@ __attribute((noreturn))
 void timerFxn(void)
 {
     Chan *d = ARGN(0);
-    ChanEnd *d_end = chan_getend(d);
-    int repeat = 5000;
-    int runs = 30;
+    ChanEnd *d_end = CH_END(d);
+    int repeat = 10000;
+    int runs = 50;
     clock_t start, stop;
     double time_spent, sum;
 
@@ -77,20 +77,14 @@ void foofunc(void)
     printf("foofunc: PAR start\n");
 
     Chan *a, *b, *c, *d;
-    chan_create(&a);
-    chan_create(&b);
-    chan_create(&c);
-    chan_create(&d);
+    CH_OPEN(&a, &b, &c, &d);
     PAR(
         PROC(fxn1, a, b),
         PROC(fxn2, a, c, d),
         PROC(fxn3, b, c),
         PROC(timerFxn, d)
     );
-    chan_free(a);
-    chan_free(b);
-    chan_free(c);
-    chan_free(d);
+    CH_CLOSE(a, b, c, d);
 
     printf("foofunc: PAR ended\n");
 }
