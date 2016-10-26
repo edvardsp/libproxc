@@ -141,3 +141,31 @@ void* proxc_argn(size_t n)
     return proc->args[n];
 }
 
+int proxc_ch_open(int arg_start, ...)
+{
+    va_list args;
+    va_start(args, arg_start);
+    Chan **new_chan = (Chan **)va_arg(args, Chan **);
+    while (new_chan != NULL) {
+        chan_create(new_chan);
+        new_chan = (Chan **)va_arg(args, Chan **);
+    }
+    va_end(args);
+
+    return 0;
+}
+
+int proxc_ch_close(int arg_start, ...)
+{
+    va_list args;
+    va_start(args, arg_start);
+    Chan *chan = (Chan *)va_arg(args, Chan *);
+    while (chan != NULL) {
+        chan_free(chan);
+        chan = (Chan *)va_arg(args, Chan *);
+    }
+    va_end(args);
+
+    return 0;
+}
+
