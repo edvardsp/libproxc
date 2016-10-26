@@ -51,27 +51,29 @@ ChanEnd* chan_getend(Chan *chan)
 {
     ASSERT_NOTNULL(chan);
     
+    /* FIXME atomic */
     if (chan->num_ends < 2) {
-        return chan->ends[chan->num_ends++];
+        PDEBUG("PROC binds to CHANEND\n");
+        ChanEnd *chan_end = chan->ends[chan->num_ends++];
+        chan_end->proc = scheduler_self()->curr_proc;
+        chan_end->chan = chan;
+        return chan_end;
     }
     PERROR("Two ChanEnds has already been aquired, NULL returned\n");
     return NULL;
 }
 
 static 
-int _chan_bindend(ChanEnd *chan_end)
+int _chan_checkbind(ChanEnd *chan_end)
 {
-    /* if NULL, this proc is bounded to this CHANEND */
-    if (chan_end->proc == NULL) {
-        PDEBUG("PROC binds to CHANEND\n");
-        Scheduler *sched = scheduler_self();
-        chan_end->proc = sched->curr_proc;
-        return 0;
-    }
-    /* else, check that this proc is the one bounded to this CHANEND */
-    else if (chan_end->proc != chan_end->proc->sched->curr_proc) {
-        /* if this is not the case, return error */ 
-        PERROR("This PROC is not bound to this CHANEND\n");
+    /* 
+     * if CHANEND isn't bound to a PROC, or not bound to
+     * the running PROC, return error
+     */
+    #define THIS_PROC chan_end->proc
+    #define CURR_PROC chan_end->proc->sched->curr_proc
+    if (THIS_PROC == NULL || THIS_PROC != CURR_PROC) {
+        PERROR("CHANEND is not bound to a PROC, return errno\n");
         errno = -EPERM;
         return errno;
     }
@@ -83,7 +85,7 @@ int chan_write(ChanEnd *chan_end, void *data, size_t size)
     ASSERT_NOTNULL(chan_end);
 
     /* check binding of CHANEND, return errno if illegal */
-    if (_chan_bindend(chan_end) != 0) {
+    if (_chan_checkbind(chan_end) != 0) {
         return errno;
     }
 
@@ -145,7 +147,7 @@ int chan_read(ChanEnd *chan_end, void *data, size_t size)
     ASSERT_NOTNULL(chan_end);
 
     /* check binding of CHANEND, return errno if illegal */
-    if (_chan_bindend(chan_end) != 0) {
+    if (_chan_checkbind(chan_end) != 0) {
         return errno;
     }
 
