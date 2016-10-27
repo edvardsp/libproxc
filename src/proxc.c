@@ -205,6 +205,11 @@ int proxc_go(void *builder)
     ASSERT_NOTNULL(builder);
 
     Builder *build = (Builder *)builder;
+
+    /* this notifies scheduler when the bottom of the build is reached */
+    build->header.is_root = 1;
+    build->header.run_proc = NULL;
+
     csp_runbuild(build);
 
     /* FIXME cleanup */

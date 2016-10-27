@@ -84,7 +84,6 @@ void _scheduler_parsebuild(Builder *build)
 
     Builder *parent = build->header.parent;
     Proc *run_proc = build->header.run_proc;
-    ASSERT_0(!(parent || run_proc)); // both cannot be 0
 
     switch (build->header.type) {
     case PROC_BUILD: {
@@ -129,9 +128,12 @@ void _scheduler_parsebuild(Builder *build)
     return;
 
 __is_root:
-    ASSERT_NOTNULL(run_proc);
-    run_proc->state = PROC_READY;
-    scheduler_addproc(run_proc);
+    /* if run_proc defined, then root of build is in a RUN, */
+    /* else in GO, then no need to reschedule anythin */
+    if (run_proc != NULL) {
+        run_proc->state = PROC_READY;
+        scheduler_addproc(run_proc);
+    }
 }
 
 int scheduler_run(void)
