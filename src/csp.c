@@ -79,7 +79,6 @@ void csp_runbuild(Builder *build)
     case SEQ_BUILD: {
         PDEBUG("SEQ_BUILD started\n");
         SeqBuild *seq_build = (SeqBuild *)build;
-        seq_build->curr_build = TAILQ_NEXT(seq_build->curr_build, header.node);
         csp_runbuild(seq_build->curr_build);
         break;
     }
