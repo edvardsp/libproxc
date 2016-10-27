@@ -4,6 +4,8 @@
 
 #include <stddef.h>
 
+#define PROXC_NULL  ((void *)-1)
+
 typedef void (*ProcFxn)(void);
 
 typedef struct Chan Chan;
@@ -18,9 +20,13 @@ void chan_read(ChanEnd *chan_end, void *data, size_t size);
 void proxc_start(ProcFxn fxn);
 
 void* proxc_argn(size_t n);
-void* proxc_proc(ProcFxn, ...);
 
-int proxc_par(int, ...);
+void* proxc_proc(ProcFxn, ...);
+void* proxc_par(int, ...);
+void* proxc_seq(int, ...);
+
+int proxc_go(void *);
+int proxc_run(void *);
 
 int proxc_ch_open(int, ...);
 int proxc_ch_close(int, ...);
@@ -28,16 +34,17 @@ int proxc_ch_close(int, ...);
 #ifndef PROXC_NO_MACRO
 
 #   define ARGN(index)  proxc_argn(index)
-#   define PROC(...)    proxc_proc(__VA_ARGS__, NULL)
 
-#   define PAR(...)  proxc_par(0, __VA_ARGS__, NULL)
+#   define PROC(...)  proxc_proc(__VA_ARGS__, PROXC_NULL)
+#   define PAR(...)   proxc_par(0, __VA_ARGS__, PROXC_NULL)
+#   define SEQ(...)   proxc_seq(0, __VA_ARGS__, PROXC_NULL)
 
-#   define CH_OPEN(...) \
-        proxc_ch_open(0, __VA_ARGS__, NULL)
-#   define CH_CLOSE(...) \
-        proxc_ch_close(0, __VA_ARGS__, NULL)
-#   define CH_END(ch) \
-        chan_getend(ch)
+#   define GO(build)   proxc_go(build)
+#   define RUN(build)  proxc_run(build)
+
+#   define CH_OPEN(...)   proxc_ch_open(0, __VA_ARGS__, PROXC_NULL)
+#   define CH_CLOSE(...)  proxc_ch_close(0, __VA_ARGS__, PROXC_NULL)
+#   define CH_END(ch)     chan_getend(ch)
 #   define CH_WRITE(ch_end, data, type) \
         chan_write(ch_end, data, sizeof(type)) 
 #   define CH_READ(ch_end, data, type) \

@@ -1,6 +1,7 @@
 
 #include <stddef.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <unistd.h>
 #include <sched.h>
 #include <pthread.h>
@@ -79,59 +80,6 @@ void proxc_start(ProcFxn fxn)
 
 }
 
-/*
- * Variadic args is a zero terminated list
- * of void * arguments to fxn. In fxn context,
- * args are accessed through proxc_argn() method.
- */
-void* proxc_proc(ProcFxn fxn, ...)
-{
-    Proc *proc;
-    ASSERT_0(proc_create(&proc, fxn));
-
-    va_list args;
-    va_start(args, fxn);
-    ASSERT_0(proc_setargs(proc, args));
-    va_end(args);
-
-    return proc;
-} 
-
-/*
- * Variadic args are zero terminated list
- * of pointers to allready allocated PROCS.
- * args_start is only for va_start() call.
- */
-int proxc_par(int args_start, ...) 
-{
-    /* allocate PAR struct */
-    Par *par;
-    ASSERT_0(par_create(&par));
-
-    /* parse args and add PROCS to joinQ */
-    va_list args;
-    va_start(args, args_start);
-    Proc *proc = va_arg(args, Proc *);
-    while (proc != NULL) {
-        par->num_procs++;
-        proc->par_struct = par;
-        TAILQ_INSERT_TAIL(&par->joinQ, proc, parQ_next);
-
-        proc = va_arg(args, Proc *);
-    }
-    va_end(args);
-
-    /* if procs, run and join PAR */
-    if (par->num_procs > 0) {
-        PDEBUG("PAR starting with %zu PROCS\n", par->num_procs);
-        par_runjoin(par);
-    }
-    /* cleanup */
-    par_free(par);
-
-    return 0;
-}
-
 void* proxc_argn(size_t n)
 {
     Proc *proc = scheduler_self()->curr_proc;
@@ -141,16 +89,172 @@ void* proxc_argn(size_t n)
     return proc->args[n];
 }
 
+/*
+ * Variadic args is a PROXC_NULL terminated list
+ * of void * arguments to fxn. In fxn context,
+ * args are accessed through proxc_argn() method.
+ */
+void* proxc_proc(ProcFxn fxn, ...)
+{
+    ASSERT_NOTNULL(fxn);
+
+    PDEBUG("PROC build\n");
+
+    /* alloc proc struct */
+    int ret;
+    Proc *proc;
+    ret = proc_create(&proc, fxn);
+    ASSERT_0(ret);
+
+    /* alloc builder struct */
+    ProcBuild *builder;
+    if ((builder = csp_create(PROC_BUILD)) == NULL) {
+        PERROR("malloc failed for ProcBuild\n");
+        proc_free(proc);
+        return NULL;
+    }
+
+    /* set args list for fxn */
+    va_list args;
+    va_start(args, fxn);
+    ret = proc_setargs(proc, args);
+    ASSERT_0(ret);
+    va_end(args);
+
+    /* set builder members */
+    builder->proc = proc;
+
+    /* and ready scheduler for build */
+    proc->proc_build = builder;
+
+    return builder;
+} 
+
+
+/*
+ * Variadic args is a PROXC_NULL terminated list
+ * of pointers to allready allocated PROCS.
+ * args_start is only for va_start() call.
+ */
+void* proxc_par(int args_start, ...) 
+{
+
+    /* alloc builder struct */
+    ParBuild *builder;
+    if ((builder = csp_create(PAR_BUILD)) == NULL) {
+        PERROR("malloc failed for ParBuild\n");
+        return NULL;
+    }
+    
+    /* set builder members */
+    builder->num_childs = 0;
+    TAILQ_INIT(&builder->childQ);
+
+    /* parse args and insert them into builderQ */
+    va_list args;
+    va_start(args, args_start);
+    int ret;
+    ret = csp_insertchilds(&builder->num_childs, (Builder *)builder, 
+                           &builder->childQ, args);
+    PDEBUG("PAR build, %zu childs\n", builder->num_childs);
+    ASSERT_0(ret);
+    va_end(args);
+
+    /* FIXME cleanup on NULL */
+
+    return builder;
+}
+
+/*
+ * Variadic args is a PROXC_NULL terminated list
+ * of pointers to allready allocated PROCS.
+ * args_start is only for va_start() call.
+ */
+void* proxc_seq(int arg_start, ...)
+{
+
+    /* alloc builder struct */
+    SeqBuild *builder;
+    if ((builder = csp_create(SEQ_BUILD)) == NULL) {
+        PERROR("malloc failed for SeqBuild\n");
+        return NULL;
+    }
+
+    /* set builder members */
+    builder->num_childs = 0;
+    TAILQ_INIT(&builder->childQ);
+
+    va_list args;
+    va_start(args, arg_start);
+    int ret;
+    ret = csp_insertchilds(&builder->num_childs, (Builder *)builder, 
+                           &builder->childQ, args);
+    PDEBUG("SEQ build, %zu childs\n", builder->num_childs);
+    ASSERT_0(ret);
+    builder->curr_build = TAILQ_FIRST(&builder->childQ);
+    va_end(args);
+
+    /* FIXME cleanup on error */
+
+    return builder;
+}
+
+
+int proxc_go(void *builder)
+{
+    ASSERT_NOTNULL(builder);
+
+    Builder *build = (Builder *)builder;
+    csp_runbuild(build);
+
+    /* FIXME cleanup */
+
+    return 0;
+}
+
+int proxc_run(void *builder)
+{
+    ASSERT_NOTNULL(builder);
+
+    Builder *build = (Builder *)builder; 
+    Scheduler *sched = scheduler_self();
+
+    /* this triggers rescheduling of this PROC when RUN tree is done */
+    build->header.is_root = 1;
+    build->header.run_proc = sched->curr_proc;
+
+    PDEBUG("RUN building CSP tree\n");
+    csp_runbuild(build);
+    PDEBUG("RUN built CSP tree\n");
+
+    sched->curr_proc->state = PROC_RUNWAIT;
+    proc_yield(sched->curr_proc);
+
+    PDEBUG("RUN CSP tree finished\n");
+
+    /* FIXME cleanup */
+
+    return 0;
+}
+
 int proxc_ch_open(int arg_start, ...)
 {
     va_list args;
     va_start(args, arg_start);
     Chan **new_chan = (Chan **)va_arg(args, Chan **);
-    while (new_chan != NULL) {
+    while (new_chan != PROXC_NULL) {
+        if (new_chan == NULL) {
+            errno = EPERM;
+            PERROR("new_chan in proxc_ch_open is NULL\n");
+            break;
+        }
         *new_chan = chan_create();
+        PDEBUG("new CHAN is opened\n");
         new_chan = (Chan **)va_arg(args, Chan **);
-    }
+    } 
     va_end(args);
+
+    /* FIXME on error */
 
     return 0;
 }
@@ -160,10 +264,11 @@ int proxc_ch_close(int arg_start, ...)
     va_list args;
     va_start(args, arg_start);
     Chan *chan = (Chan *)va_arg(args, Chan *);
-    while (chan != NULL) {
+    while (chan != PROXC_NULL) {
         chan_free(chan);
+        PDEBUG("CHAN is closed\n");
         chan = (Chan *)va_arg(args, Chan *);
-    }
+    } 
     va_end(args);
 
     return 0;

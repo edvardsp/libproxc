@@ -64,7 +64,7 @@ int proc_create(Proc **new_proc, ProcFxn fxn)
     proc->stack.size = sched->stack_size;
     proc->state = PROC_READY;
     proc->sched = sched;
-    proc->par_struct = NULL;
+    proc->proc_build = NULL;
 
     /* configure context */
     ASSERT_0(getcontext(&proc->ctx));
@@ -93,7 +93,7 @@ int proc_setargs(Proc *proc, va_list args)
     #define SMALL_SIZE_OPT 16
     void *tmp_args[SMALL_SIZE_OPT]; 
     void *xarg = va_arg(args, void *);
-    while (xarg != NULL) {
+    while (xarg != PROXC_NULL) {
         ASSERT_TRUE(proc->num_args < SMALL_SIZE_OPT);
         tmp_args[proc->num_args++] = xarg;
         xarg = va_arg(args, void *);

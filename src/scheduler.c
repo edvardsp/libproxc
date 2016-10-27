@@ -76,6 +76,64 @@ void scheduler_addproc(Proc *proc)
     TAILQ_INSERT_TAIL(&sched->readyQ, proc, readyQ_next);
 }
 
+static
+void _scheduler_parsebuild(Builder *build)
+{
+    ASSERT_NOTNULL(build);
+    /* FIXME atomic */
+
+    Builder *parent = build->header.parent;
+    Proc *run_proc = build->header.run_proc;
+    ASSERT_0(!(parent || run_proc)); // both cannot be 0
+
+    switch (build->header.type) {
+    case PROC_BUILD: {
+        if (build->header.is_root) 
+            goto __is_root;
+        else 
+            _scheduler_parsebuild(parent);
+        return;
+    }
+    case PAR_BUILD: {
+        ParBuild *par_build = (ParBuild *)build;
+        if (--par_build->num_childs == 0) {
+            /* FIXME cleanup */
+            /* if build is done AND is root */
+            if (par_build->header.is_root) 
+                goto __is_root;
+            else
+                _scheduler_parsebuild(parent);
+            return;
+        }
+        /* if num_childs != 0 means still running childs */
+        break;
+    }
+    case SEQ_BUILD: {
+        SeqBuild *seq_build = (SeqBuild *)build;
+        if (--seq_build->num_childs == 0) {
+            /* FIXME cleanup */
+            if (seq_build->header.is_root) 
+                goto __is_root;
+                _scheduler_parsebuild(parent);
+            return;
+        }
+
+        /* run next build in SEQ list */
+        Builder *cbuild= TAILQ_NEXT(seq_build->curr_build, header.node);
+        ASSERT_NOTNULL(cbuild);
+        csp_runbuild(cbuild);
+        seq_build->curr_build = cbuild; 
+        break;
+    }
+    }
+    return;
+
+__is_root:
+    ASSERT_NOTNULL(run_proc);
+    run_proc->state = PROC_READY;
+    scheduler_addproc(run_proc);
+}
+
 int scheduler_run(void)
 {
     Scheduler *sched = scheduler_self();
@@ -94,7 +152,7 @@ int scheduler_run(void)
         }
 
         /* no proc found, break */
-        break;
+            break;
 
         /* from here, a PROC is found to resume */
 procFound:
@@ -112,22 +170,19 @@ procFound:
             scheduler_addproc(sched->curr_proc);
             break;
         case PROC_ENDED: {
-            /*  check if curr_proc is in a PAR */
-            Par *par = sched->curr_proc->par_struct;
-            if (par != NULL) {
-                /* if last one, resume PAR joining PROC */
-                /* FIXME atomic */
-                if (--par->num_procs == 0) {
-                    par->par_proc->state = PROC_READY;
-                    scheduler_addproc(par->par_proc);
-                }
-            }
+            /* FIXME atomic */
 
+            ProcBuild *build = sched->curr_proc->proc_build;
+            /*  resolve ProcBuild */
+            if (build != NULL) {
+                _scheduler_parsebuild((Builder *)build);
+            }
+                    
             /* cleanup */
             proc_free(sched->curr_proc);
         }
             break;
-        case PROC_PARJOIN:
+        case PROC_RUNWAIT:
             /* do nothing, as this proc will be revived  */
             break;
         case PROC_CHANWAIT:

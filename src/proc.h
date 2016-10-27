@@ -14,8 +14,8 @@ enum ProcState {
     PROC_READY,
     PROC_RUNNING,
     PROC_ENDED,
-    PROC_PARJOIN,
-    PROC_CHANWAIT
+    PROC_CHANWAIT,
+    PROC_RUNWAIT
 };
 
 struct Proc {
@@ -39,9 +39,8 @@ struct Proc {
     TAILQ_ENTRY(Proc)  readyQ_next;
     RB_ENTRY(Proc)     sleepRB_node;
 
-    /* PAR related */
-    struct Par         *par_struct;
-    TAILQ_ENTRY(Proc)  parQ_next;
+    /* Par/Seq/Proc-builder related */
+    struct ProcBuild  *proc_build;
 };
 
 #endif /* PROC_H__ */
