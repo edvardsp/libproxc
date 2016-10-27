@@ -43,7 +43,7 @@ int proc_create(Proc **new_proc, ProcFxn fxn)
     memset(proc, 0, sizeof(Proc));
 
     Scheduler *sched = scheduler_self();
-    if ((proc->stack = malloc(sched->stack_size)) == NULL) {
+    if ((proc->stack.ptr = malloc(sched->stack_size)) == NULL) {
         free(proc);
         PERROR("malloc failed for Proc stack\n");
         return errno;
@@ -61,7 +61,7 @@ int proc_create(Proc **new_proc, ProcFxn fxn)
     proc->args = NULL;
 
     /* configure members */
-    proc->stack_size = sched->stack_size;
+    proc->stack.size = sched->stack_size;
     proc->state = PROC_READY;
     proc->sched = sched;
     proc->par_struct = NULL;
@@ -69,8 +69,8 @@ int proc_create(Proc **new_proc, ProcFxn fxn)
     /* configure context */
     ASSERT_0(getcontext(&proc->ctx));
     proc->ctx.uc_link          = &sched->ctx;
-    proc->ctx.uc_stack.ss_sp   = proc->stack;
-    proc->ctx.uc_stack.ss_size = proc->stack_size;
+    proc->ctx.uc_stack.ss_sp   = proc->stack.ptr;
+    proc->ctx.uc_stack.ss_size = proc->stack.size;
     makecontext(&proc->ctx, (void(*)(void))_proc_mainfxn, 1, proc);
 
     *new_proc = proc;
@@ -83,7 +83,7 @@ void proc_free(Proc *proc)
     if (proc == NULL) return;
 
     free(proc->args);
-    free(proc->stack);
+    free(proc->stack.ptr);
     free(proc);
 }
 

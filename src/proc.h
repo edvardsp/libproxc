@@ -29,19 +29,19 @@ struct Proc {
     void     **args;
 
     /* stack and size */
-    size_t  stack_size;
-    void    *stack;
+    struct {
+        size_t  size;
+        void    *ptr;
+    } stack;
     
     /* scheduler related */
     struct Scheduler   *sched;
     TAILQ_ENTRY(Proc)  readyQ_next;
+    RB_ENTRY(Proc)     sleepRB_node;
 
     /* PAR related */
     struct Par         *par_struct;
     TAILQ_ENTRY(Proc)  parQ_next;
-
-    /* CHAN related */
-    TAILQ_ENTRY(Proc)  chanQ_next;
 };
 
 #endif /* PROC_H__ */

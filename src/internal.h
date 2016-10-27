@@ -7,6 +7,7 @@
 #include <pthread.h>
 
 #include "util/queue.h"
+#include "util/tree.h"
 #include "util/debug.h"
 
 #define MAX_STACK_SIZE  (128 * 1024)
@@ -31,8 +32,9 @@ typedef struct Par Par;
 typedef struct Chan Chan;
 typedef struct ChanEnd ChanEnd;
 
-/* queue declarations */
+/* queue and tree declarations */
 TAILQ_HEAD(ProcQ, Proc);
+RB_HEAD(ProcRB, Proc);
 
 /* function declarations */
 int  proc_create(Proc **new_proc, ProcFxn fxn);

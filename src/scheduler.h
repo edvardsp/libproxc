@@ -14,8 +14,9 @@ struct Scheduler {
     size_t       stack_size;
     struct Proc  *curr_proc;
 
-    /* different PROC queues */
-    struct ProcQ  readyQ;
+    /* different PROC queues and trees */
+    struct ProcQ   readyQ;
+    struct ProcRB  sleepRB;
 };
 
 #endif /* SCHEDULER_H__ */
