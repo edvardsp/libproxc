@@ -10,7 +10,7 @@
 #include "internal.h"
 
 void* csp_create(enum BuildType type) {
-    Builder *builder;
+    Builder *builder = NULL;
     switch (type) {
     case PROC_BUILD: builder = malloc(sizeof(ProcBuild)); break;
     case PAR_BUILD:  builder = malloc(sizeof(ParBuild));  break;
