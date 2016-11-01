@@ -6,72 +6,28 @@
 
 #include "proxc.h"
 
-void fxn1(void) 
-{ 
-    int val = *(int *)ARGN(0);
-    printf("fxn1: start %d\n", val);
-
-    printf("fxn1: stop\n");
-}
-
-void fxn2(void) 
-{ 
-    int val = *(int *)ARGN(0);
-    printf("fxn2: start %d\n", val);
-
-    printf("fxn2: stop\n");
-}
-
-void fxn3(void)
-{
-    int val = *(int *)ARGN(0);
-    printf("fxn3: start %d\n", val);
-
-    printf("fxn3: stop\n");
-}
-
-void fxn4(void)
-{
-    int val = *(int *)ARGN(0);
-    printf("fxn4: start %d\n", val);
-
-    printf("fxn4: stop\n");
-}
-
 __attribute__((noreturn))
 void foofunc(void)
 {
     printf("foofunc: start\n");
 
-    int f = 1, s = 2;
+    Chan *ch1, *ch2;
+    CH_OPEN(&ch1, &ch2);
+    ChanEnd *ch1_end = CH_END(ch1), *ch2_end = CH_END(ch2);
+    int x = 1, y = 2;
+    int val1, val2;
+    switch(ALT(
+        GUARD(x < y, ch1_end, &val1, int),
+        GUARD(x == 2, ch2_end, &val2, int)
+    )) {
+    case 0: // guard 0
 
-    printf("First RUN\n");
-    RUN(PAR(
-            PAR(
-                SEQ( PROC(fxn1, &f), PROC(fxn2, &f) ),
-                PROC(fxn3, &f)
-            ),
-            SEQ(
-                PROC(fxn1, &s),
-                PAR( PROC(fxn2, &s), PROC(fxn3, &s) )
-            )
-        )
-    );
+        break;
+    case 1: // guard 1
 
-    printf("Second RUN\n");
-    RUN(PAR(
-            PAR(
-                SEQ( PROC(fxn1, &f), PROC(fxn2, &f) ),
-                PROC(fxn3, &f),
-                PROC(fxn4, &f)
-            ),
-            SEQ(
-                PROC(fxn1, &s),
-                PROC(fxn2, &s),
-                PAR( PROC(fxn3, &s), PROC(fxn4, &s) )
-            )
-        )
-    );
+        break;
+    }
+    CH_CLOSE(ch1, ch2);
 
     printf("foofunc: stop\n");
     exit(0);

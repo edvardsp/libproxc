@@ -35,6 +35,9 @@ struct ProcBuild;
 struct ParBuild;
 struct SeqBuild;
 
+struct Guard;
+struct Alt;
+
 /* typedefs for internal use */
 typedef struct Proc Proc;
 typedef struct Scheduler Scheduler;
@@ -47,11 +50,16 @@ typedef struct ParBuild ParBuild;
 typedef struct SeqBuild SeqBuild;
 typedef struct Builder Builder;
 
+typedef struct Guard Guard;
+typedef struct Alt Alt;
+
 /* queue and tree declarations */
 TAILQ_HEAD(ProcQ, Proc);
 RB_HEAD(ProcRB, Proc);
 
 TAILQ_HEAD(BuilderQ, Builder);
+
+TAILQ_HEAD(GuardQ, Guard);
 
 /* function declarations */
 int  proc_create(Proc **new_proc, ProcFxn fxn);
@@ -74,6 +82,13 @@ void* csp_create(enum BuildType type);
 void csp_free(Builder *build);
 int csp_insertchilds(size_t *num_childs, Builder *builder, struct BuilderQ *childQ, va_list vargs);
 void csp_runbuild(Builder *build);
+
+Guard* alt_guardcreate(ChanEnd *ch_end, void *out, size_t size);
+void   alt_guardfree(Guard *guard);
+Alt*   alt_create(void);
+void   alt_free(Alt *alt);
+void   alt_addguard(Alt *alt, Guard *guard);
+int    alt_select(Alt *alt);
 
 /* extern and static inline functions */
 extern pthread_key_t g_key_sched;

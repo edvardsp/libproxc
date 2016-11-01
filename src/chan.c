@@ -56,6 +56,7 @@ ChanEnd* chan_getend(Chan *chan)
         ChanEnd *chan_end = chan->ends[chan->num_ends++];
         chan_end->proc = scheduler_self()->curr_proc;
         chan_end->chan = chan;
+        chan_end->guard = NULL;
         return chan_end;
     }
     errno = EPERM;

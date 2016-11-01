@@ -15,7 +15,8 @@ enum ProcState {
     PROC_RUNNING,
     PROC_ENDED,
     PROC_CHANWAIT,
-    PROC_RUNWAIT
+    PROC_RUNWAIT,
+    PROC_ALTWAIT
 };
 
 struct Proc {

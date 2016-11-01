@@ -240,6 +240,41 @@ int proxc_run(Builder *root)
     return 0;
 }
 
+Guard* proxc_guard(int cond, ChanEnd *ch_end, void *out, size_t size)
+{
+    ASSERT_NOTNULL(ch_end);
+    
+    /* if cond is true, return a guard, else NULL */
+    return (cond) 
+        ? alt_guardcreate(ch_end, out, size)
+        : NULL;
+}
+
+int proxc_alt(int arg_start, ...)
+{
+    Alt *alt = alt_create();
+    if (alt == NULL) {
+        return -1;
+    }
+
+    va_list args;
+    va_start(args, arg_start);
+    Guard *guard = va_arg(args, Guard *);
+    while (guard != PROXC_NULL) {
+        alt_addguard(alt, guard);
+        guard = va_arg(args, Guard *);
+    }
+    va_end(args);
+
+    /* wait on guards */
+    int key = alt_select(alt);
+
+    /* FIXME cleanup */
+    alt_free(alt);
+
+    return key;
+}
+
 int proxc_ch_open(int arg_start, ...)
 {
     va_list args;

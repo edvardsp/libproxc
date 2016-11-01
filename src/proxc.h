@@ -13,6 +13,8 @@ typedef struct ChanEnd ChanEnd;
 
 typedef struct Builder Builder;
 
+typedef struct Guard Guard;
+
 Chan* chan_create(void);
 void chan_free(Chan *chan);
 ChanEnd* chan_getend(Chan *chan);
@@ -30,6 +32,9 @@ Builder* proxc_seq(int, ...);
 int proxc_go(Builder *root);
 int proxc_run(Builder *root);
 
+Guard* proxc_guard(int cond, ChanEnd* ch_end, void *out, size_t size);
+int    proxc_alt(int, ...);
+
 int proxc_ch_open(int, ...);
 int proxc_ch_close(int, ...);
 
@@ -43,6 +48,9 @@ int proxc_ch_close(int, ...);
 
 #   define GO(build)   proxc_go(build)
 #   define RUN(build)  proxc_run(build)
+
+#   define GUARD(cond, ch, out, type)   proxc_guard(cond, ch, out, sizeof(type))
+#   define ALT(...)  proxc_alt(0, __VA_ARGS__, PROXC_NULL)
 
 #   define CH_OPEN(...)   proxc_ch_open(0, __VA_ARGS__, PROXC_NULL)
 #   define CH_CLOSE(...)  proxc_ch_close(0, __VA_ARGS__, PROXC_NULL)
