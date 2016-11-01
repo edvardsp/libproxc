@@ -15,9 +15,9 @@ Guard* alt_guardcreate(ChanEnd *ch_end, void *out, size_t size)
     }
 
     /* set struct members */
-    guard->pri_case = -1;
-    guard->ch_end = ch_end;
-    guard->data.ptr = out;
+    guard->pri_case  = -1;
+    guard->ch_end    = ch_end;
+    guard->data.ptr  = out;
     guard->data.size = size;
 
     /* and set reference from chan_end to guard */
