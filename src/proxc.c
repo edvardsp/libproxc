@@ -269,7 +269,7 @@ int proxc_alt(int arg_start, ...)
     /* wait on guards */
     int key = alt_select(alt);
 
-    /* FIXME cleanup */
+    /* cleanup */
     alt_free(alt);
 
     return key;
