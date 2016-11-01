@@ -67,7 +67,7 @@ void alt_addguard(Alt *alt, Guard *guard)
     /* a NULL guard means disabled */
     if (guard == NULL) return;
     
-    alt->guards.num++;
+    guard->pri_case = alt->guards.num++;
     TAILQ_INSERT_TAIL(&alt->guards.Q, guard, node);
 }
 
