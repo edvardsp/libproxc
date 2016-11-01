@@ -100,6 +100,7 @@ int scheduler_switch(ucontext_t *from, ucontext_t *to)
 #include "scheduler.h"
 #include "chan.h"
 #include "csp.h"
+#include "alt.h"
 
 #endif /* INTERNAL_H_ */
 
