@@ -11,6 +11,8 @@ typedef void (*ProcFxn)(void);
 typedef struct Chan Chan;
 typedef struct ChanEnd ChanEnd;
 
+typedef struct Builder Builder;
+
 Chan* chan_create(void);
 void chan_free(Chan *chan);
 ChanEnd* chan_getend(Chan *chan);
@@ -21,12 +23,12 @@ void proxc_start(ProcFxn fxn);
 
 void* proxc_argn(size_t n);
 
-void* proxc_proc(ProcFxn, ...);
-void* proxc_par(int, ...);
-void* proxc_seq(int, ...);
+Builder* proxc_proc(ProcFxn, ...);
+Builder* proxc_par(int, ...);
+Builder* proxc_seq(int, ...);
 
-int proxc_go(void *);
-int proxc_run(void *);
+int proxc_go(Builder *root);
+int proxc_run(Builder *root);
 
 int proxc_ch_open(int, ...);
 int proxc_ch_close(int, ...);

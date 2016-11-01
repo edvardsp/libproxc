@@ -94,7 +94,7 @@ void* proxc_argn(size_t n)
  * of void * arguments to fxn. In fxn context,
  * args are accessed through proxc_argn() method.
  */
-void* proxc_proc(ProcFxn fxn, ...)
+Builder* proxc_proc(ProcFxn fxn, ...)
 {
     ASSERT_NOTNULL(fxn);
 
@@ -127,7 +127,7 @@ void* proxc_proc(ProcFxn fxn, ...)
     /* and ready scheduler for build */
     proc->proc_build = builder;
 
-    return builder;
+    return (Builder *)builder;
 } 
 
 
@@ -136,7 +136,7 @@ void* proxc_proc(ProcFxn fxn, ...)
  * of pointers to allready allocated PROCS.
  * args_start is only for va_start() call.
  */
-void* proxc_par(int args_start, ...) 
+Builder* proxc_par(int args_start, ...) 
 {
 
     /* alloc builder struct */
@@ -162,7 +162,7 @@ void* proxc_par(int args_start, ...)
 
     /* FIXME cleanup on NULL */
 
-    return builder;
+    return (Builder *)builder;
 }
 
 /*
@@ -170,7 +170,7 @@ void* proxc_par(int args_start, ...)
  * of pointers to allready allocated PROCS.
  * args_start is only for va_start() call.
  */
-void* proxc_seq(int arg_start, ...)
+Builder* proxc_seq(int arg_start, ...)
 {
 
     /* alloc builder struct */
@@ -196,15 +196,15 @@ void* proxc_seq(int arg_start, ...)
 
     /* FIXME cleanup on error */
 
-    return builder;
+    return (Builder *)builder;
 }
 
 
-int proxc_go(void *builder)
+int proxc_go(Builder *root)
 {
-    ASSERT_NOTNULL(builder);
+    ASSERT_NOTNULL(root);
 
-    Builder *build = (Builder *)builder;
+    Builder *build = (Builder *)root;
 
     /* this notifies scheduler when the bottom of the build is reached */
     build->header.is_root = 1;
@@ -212,16 +212,14 @@ int proxc_go(void *builder)
 
     csp_runbuild(build);
 
-    /* FIXME cleanup */
-
     return 0;
 }
 
-int proxc_run(void *builder)
+int proxc_run(Builder *root)
 {
-    ASSERT_NOTNULL(builder);
+    ASSERT_NOTNULL(root);
 
-    Builder *build = (Builder *)builder; 
+    Builder *build = (Builder *)root; 
     Scheduler *sched = scheduler_self();
 
     /* this triggers rescheduling of this PROC when RUN tree is done */
@@ -237,7 +235,7 @@ int proxc_run(void *builder)
 
     PDEBUG("RUN CSP tree finished\n");
 
-    /* FIXME cleanup */
+    /* cleanup is done by the scheduler */
 
     return 0;
 }
