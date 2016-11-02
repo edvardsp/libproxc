@@ -28,8 +28,8 @@ struct Chan {
 struct ChanEnd {
     struct Chan  *chan;
 
-    struct Proc  *proc;
-    struct Alt   *alt;
+    struct Proc   *proc;
+    struct Guard  *guard;
 };
 
 #endif /* CHAN_H__ */

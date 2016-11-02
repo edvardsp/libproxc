@@ -15,7 +15,8 @@ Guard* alt_guardcreate(ChanEnd *ch_end, void *out, size_t size)
     }
 
     /* set struct members */
-    guard->pri_case  = -1;
+    guard->key       = -1;
+    guard->alt       = NULL;
     guard->ch_end    = ch_end;
     guard->data.ptr  = out;
     guard->data.size = size;
@@ -26,6 +27,9 @@ Guard* alt_guardcreate(ChanEnd *ch_end, void *out, size_t size)
 void alt_guardfree(Guard *guard)
 {
     if (guard == NULL) return;
+
+    /* reset CHANEND */
+    guard->ch_end->guard = NULL;
 
     free(guard);
 }
@@ -40,8 +44,9 @@ Alt* alt_create(void)
     }
 
     alt->is_resolved = 0;
-    alt->pri_count = 0;
-    alt->guards.num = 0;
+    alt->key_count   = 0;
+    alt->winner      = NULL;
+    alt->guards.num  = 0;
     TAILQ_INIT(&alt->guards.Q);
 
     return alt;
@@ -64,12 +69,14 @@ void alt_addguard(Alt *alt, Guard *guard)
     ASSERT_NOTNULL(alt);
 
     /* always increment pri_count, to match the switch cases */
-    int old_count = alt->pri_count++;
+    int key = alt->key_count++;
     /* a NULL guard means disabled */
     if (guard == NULL) return;
-    
-    guard->ch_end->alt = alt;
-    guard->pri_case = old_count;
+   
+    guard->key           = key;
+    guard->alt           = alt; 
+    guard->ch_end->guard = guard;
+
     alt->guards.num++;
     TAILQ_INSERT_TAIL(&alt->guards.Q, guard, node);
 }
@@ -86,7 +93,7 @@ int alt_select(Alt *alt)
         /* if yes, then complete operation, and return key */
         if (chan_tryread(guard->ch_end, guard->data.ptr, guard->data.size)) {
             PDEBUG("chan was ready\n");
-            return guard->pri_case;
+            return guard->key;
         }
         chan_altread(guard->ch_end, guard->data.ptr, guard->data.size);
     }
@@ -97,18 +104,7 @@ int alt_select(Alt *alt)
     proc->state = PROC_ALTWAIT;
     proc_yield(proc);
 
-    /* remove ALT from rest of guards */ 
-    TAILQ_FOREACH(guard, &alt->guards.Q, node) {
-        Chan *chan = guard->ch_end->chan;
-        if (   chan->state == CHAN_ALTREAD 
-            && guard->ch_end->alt == alt) {
-            chan->state = CHAN_WAIT;
-            chan->data = NULL;
-            chan->data_size = 0;
-            chan->end_wait = NULL;
-        }
-    }
-
-    /* FIXME correct case */
-    return 0;
+    /* from here, winner contains the winning GUARD */
+    ASSERT_NOTNULL(alt->winner);
+    return alt->winner->key;
 }

@@ -7,8 +7,9 @@
 #include "internal.h"
 
 struct Guard {
-    int pri_case;
+    int key;
 
+    Alt      *alt;
     ChanEnd  *ch_end;
 
     struct {
@@ -20,8 +21,10 @@ struct Guard {
 };
 
 struct Alt {
-    int is_resolved;
-    int pri_count;
+    int  is_resolved;
+    int  key_count;
+
+    Guard  *winner;
     struct {
         size_t         num;
         struct GuardQ  Q;

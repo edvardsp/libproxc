@@ -54,9 +54,11 @@ ChanEnd* chan_getend(Chan *chan)
     if (chan->num_ends < 2) {
         PDEBUG("PROC binds to CHANEND\n");
         ChanEnd *chan_end = chan->ends[chan->num_ends++];
-        chan_end->proc = scheduler_self()->curr_proc;
-        chan_end->chan = chan;
-        chan_end->alt = NULL;
+
+        chan_end->proc  = scheduler_self()->curr_proc;
+        chan_end->chan  = chan;
+        chan_end->guard = NULL;
+
         return chan_end;
     }
     errno = EPERM;
@@ -163,11 +165,20 @@ int chan_trywrite(ChanEnd *chan_end, void *data, size_t size)
         return 0; 
     case CHAN_ALTREAD: {
         PDEBUG("in CHAN write, ALT on other end\n");
-        Alt *alt = chan->end_wait->alt;
-        if (alt->is_resolved) {
+        Guard *guard = chan->end_wait->guard;
+        chan->end_wait->guard = NULL;
+        /* if guard is NULL or ALT is resolved, proceed normally */
+        /* as if the CHAN is CHAN_WAIT */
+        if (!guard || guard->alt->is_resolved) {
+            PDEBUG("ALT finished, continue as if CHAN_WAIT\n");
+            chan->state     = CHAN_WAIT;
+            chan->data      = NULL;
+            chan->data_size = 0;
+            chan->end_wait  = NULL;
             return 0;
         }
-        alt->is_resolved = 1;
+        guard->alt->is_resolved = 1;
+        guard->alt->winner = guard;
     }
     case CHAN_OKREAD: {
         PDEBUG("CHAN trywrite, read ready\n");
