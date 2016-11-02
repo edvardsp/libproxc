@@ -84,21 +84,17 @@ void chan_write(ChanEnd *chan_end, void *data, size_t size)
 {
     ASSERT_NOTNULL(chan_end);
 
-    /* check binding of CHANEND, return errno if illegal */
-    if (_chan_checkbind(chan_end) != 0) {
-        errno = EPERM;
-        PERROR("CHANEND is not bound to a PROC, do nothing\n");
+    /* chan_trywrite checks bind */
+    if (chan_trywrite(chan_end, data, size)) {
         return;
-    }
+    } 
 
     Proc *proc = chan_end->proc;
     Chan *chan = chan_end->chan;
     ASSERT_NOTNULL(proc);
     ASSERT_NOTNULL(chan);
 
-    /* FIXME atomic */
-    switch (chan->state) {
-    case CHAN_WAIT: 
+    if (chan->state == CHAN_WAIT) {
         PDEBUG("CHAN write, wait on read\n");
         chan->state = CHAN_WREADY;
 
@@ -107,39 +103,9 @@ void chan_write(ChanEnd *chan_end, void *data, size_t size)
         
         chan->end_wait = chan_end;
 
-        /* only yield when chan is not ready */
+        /* yield, and let other end reschedule this end */
         proc->state = PROC_CHANWAIT;
         proc_yield(proc);
-        break;
-
-    case CHAN_RREADY: {
-        PDEBUG("CHAN write, read ready\n");
-        chan->state = CHAN_WAIT;
-
-        size_t min_size = (size > chan->data_size) 
-                        ? chan->data_size 
-                        : size;
-        /* only copy over data if is requested by both sides */
-        if (min_size > 0) {
-            ASSERT_NOTNULL(data);
-            ASSERT_NOTNULL(chan->data);
-            memcpy(chan->data, data, min_size);
-        }
-
-        chan->data = NULL;
-        chan->data_size = 0;
-
-        /* resume waiting PROC on other CHANEND */
-        Proc *wait_proc = chan->end_wait->proc;
-        wait_proc->state = PROC_READY;
-        chan->end_wait = NULL;
-        scheduler_addproc(wait_proc);
-        break;
-    }
-    case CHAN_WREADY:
-        errno = EPERM;
-        PERROR("Multiple PROCs trying to write to one CHAN, do nothing\n");
-        return;
     }
 }
 
@@ -147,10 +113,8 @@ void chan_read(ChanEnd *chan_end, void *data, size_t size)
 {
     ASSERT_NOTNULL(chan_end);
 
-    /* check binding of CHANEND, return errno if illegal */
-    if (_chan_checkbind(chan_end) != 0) {
-        errno = EPERM;
-        PERROR("CHANEND is not bound to a PROC, do nothing\n");
+    /* chan_tryread checks bind */
+    if (chan_tryread(chan_end, data, size)) {
         return;
     }
 
@@ -159,9 +123,7 @@ void chan_read(ChanEnd *chan_end, void *data, size_t size)
     ASSERT_NOTNULL(proc);
     ASSERT_NOTNULL(chan);
 
-    /* FIXME atomic */
-    switch (chan->state) {
-    case CHAN_WAIT:
+    if (chan->state == CHAN_WAIT) {
         PDEBUG("CHAN read, wait on write\n");
         chan->state = CHAN_RREADY;
 
@@ -170,37 +132,9 @@ void chan_read(ChanEnd *chan_end, void *data, size_t size)
 
         chan->end_wait = chan_end;
 
-        /* only yield when chan is not ready */
+        /* yield, and let other end reschedule this end */
         proc->state = PROC_CHANWAIT;
         proc_yield(proc);
-        break;
-
-    case CHAN_WREADY: {
-        PDEBUG("CHAN read, write ready\n");
-        chan->state = CHAN_WAIT;
-
-        size_t min_size = (size > chan->data_size) 
-                        ? chan->data_size 
-                        : size;
-        if (min_size > 0) {
-            ASSERT_NOTNULL(data);
-            ASSERT_NOTNULL(chan->data);
-            memcpy(data, chan->data, min_size);
-        }
-
-        chan->data = NULL;
-        chan->data_size = 0;
-
-        Proc *wait_proc = chan->end_wait->proc;
-        wait_proc->state = PROC_READY;
-        chan->end_wait = NULL;
-        scheduler_addproc(wait_proc);
-        break;
-    }
-    case CHAN_RREADY:
-        errno = EPERM;
-        PERROR("Multiple PROCs trying to read from one CHAN, do nothing\n");
-        return;
     }
 }
 
@@ -215,9 +149,7 @@ int chan_trywrite(ChanEnd *chan_end, void *data, size_t size)
         return 0;
     }
 
-    Proc *proc = chan_end->proc;
     Chan *chan = chan_end->chan;
-    ASSERT_NOTNULL(proc);
     ASSERT_NOTNULL(chan);
 
     /* FIXME atomic */
@@ -267,9 +199,7 @@ int chan_tryread(ChanEnd *chan_end, void *data, size_t size)
         return 0;
     }
 
-    Proc *proc = chan_end->proc;
     Chan *chan = chan_end->chan;
-    ASSERT_NOTNULL(proc);
     ASSERT_NOTNULL(chan);
 
     /* FIXME atomic */
