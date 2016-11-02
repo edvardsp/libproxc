@@ -50,6 +50,8 @@ int scheduler_create(Scheduler **new_sched)
     ASSERT_0(getcontext(&sched->ctx));
 
     TAILQ_INIT(&sched->readyQ);
+    TAILQ_INIT(&sched->altQ);
+    RB_INIT(&sched->sleepRB);
 
     *new_sched = sched;
 
@@ -68,12 +70,16 @@ void scheduler_free(Scheduler *sched)
 void scheduler_addproc(Proc *proc)
 {
     ASSERT_NOTNULL(proc);
-    ASSERT_IS(proc->state, PROC_READY);
 
     PDEBUG("scheduler_addproc called\n");
        
     Scheduler *sched = proc->sched;
-    TAILQ_INSERT_TAIL(&sched->readyQ, proc, readyQ_next);
+    if (proc->state == PROC_READY) {
+        TAILQ_INSERT_TAIL(&sched->readyQ, proc, readyQ_next);
+    }
+    else if (proc->state == PROC_ALTWAIT) {
+        /* FIXME */ 
+    }
 }
 
 static

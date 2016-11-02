@@ -16,6 +16,7 @@ struct Scheduler {
 
     /* different PROC queues and trees */
     struct ProcQ   readyQ;
+    struct ProcQ   altQ;
     struct ProcRB  sleepRB;
 };
 
