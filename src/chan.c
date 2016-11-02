@@ -202,4 +202,106 @@ void chan_read(ChanEnd *chan_end, void *data, size_t size)
     }
 }
 
+int chan_trywrite(ChanEnd *chan_end, void *data, size_t size)
+{
+    ASSERT_NOTNULL(chan_end);
+
+    /* check binding of CHANEND, return errno if illegal */
+    if (_chan_checkbind(chan_end) != 0) {
+        errno = EPERM;
+        PERROR("CHANEND is not bound to a PROC, do nothing\n");
+        return 0;
+    }
+
+    Proc *proc = chan_end->proc;
+    Chan *chan = chan_end->chan;
+    ASSERT_NOTNULL(proc);
+    ASSERT_NOTNULL(chan);
+
+    /* FIXME atomic */
+    switch (chan->state) {
+    case CHAN_WREADY:
+        errno = EPERM;
+        PERROR("Multiple PROCs trying to write to one CHAN, do nothing\n");
+        // FALLTHROUGH
+    case CHAN_WAIT:
+        /* is not ready, fails */
+        return 0;
+    case CHAN_RREADY: {
+        PDEBUG("CHAN trywrite, read ready\n");
+        chan->state = CHAN_WAIT;
+
+        size_t min_size = (size > chan->data_size)
+                        ? chan->data_size
+                        : size;
+        /* only copy over data if is requested by both sides */
+        if (min_size > 0) {
+            ASSERT_NOTNULL(data);
+            ASSERT_NOTNULL(chan->data);
+            memcpy(chan->data, data, min_size);
+        }
+
+        chan->data = NULL;
+        chan->data_size = 0;
+
+        /* resume waiting PROC on other CHANEND */
+        Proc *wait_proc = chan->end_wait->proc;
+        wait_proc->state = PROC_READY;
+        scheduler_addproc(wait_proc);
+        return 1;
+    }
+    }
+}
+
+int chan_tryread(ChanEnd *chan_end, void *data, size_t size)
+{
+    ASSERT_NOTNULL(chan_end);
+
+    /* check binding of CHANEND, return errno if illegal */
+    if (_chan_checkbind(chan_end) != 0) {
+        errno = EPERM;
+        PERROR("CHANEND is not bound to a PROC, do nothing\n");
+        return 0;
+    }
+
+    Proc *proc = chan_end->proc;
+    Chan *chan = chan_end->chan;
+    ASSERT_NOTNULL(proc);
+    ASSERT_NOTNULL(chan);
+
+    /* FIXME atomic */
+    switch (chan->state) {
+    case CHAN_RREADY:
+        errno = EPERM;
+        PERROR("Multiple PROCs trying to read to one CHAN, do nothing\n");
+        // FALLTHROUGH
+    case CHAN_WAIT:
+        /* is not ready, fails */
+        return 0;
+    case CHAN_WREADY: {
+        PDEBUG("CHAN tryread, write ready\n");
+        chan->state = CHAN_WAIT;
+
+        size_t min_size = (size > chan->data_size)
+                        ? chan->data_size
+                        : size;
+        /* only copy over data if is requested by both sides */
+        if (min_size > 0) {
+            ASSERT_NOTNULL(data);
+            ASSERT_NOTNULL(chan->data);
+            memcpy(data, chan->data, min_size);
+        }
+
+        chan->data = NULL;
+        chan->data_size = 0;
+
+        /* resume waiting PROC on other CHANEND */
+        Proc *wait_proc = chan->end_wait->proc;
+        wait_proc->state = PROC_READY;
+        scheduler_addproc(wait_proc);
+        return 1;
+    }
+    }
+    return 0;
+}
 

@@ -20,6 +20,8 @@ void chan_free(Chan *chan);
 ChanEnd* chan_getend(Chan *chan);
 void chan_write(ChanEnd *chan_end, void *data, size_t size);
 void chan_read(ChanEnd *chan_end, void *data, size_t size);
+int  chan_trywrite(ChanEnd *chan_end, void *data, size_t size);
+int  chan_tryread(ChanEnd *chan_end, void *data, size_t size);
 
 void proxc_start(ProcFxn fxn);
 
