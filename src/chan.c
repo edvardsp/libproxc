@@ -132,6 +132,7 @@ void chan_write(ChanEnd *chan_end, void *data, size_t size)
         /* resume waiting PROC on other CHANEND */
         Proc *wait_proc = chan->end_wait->proc;
         wait_proc->state = PROC_READY;
+        chan->end_wait = NULL;
         scheduler_addproc(wait_proc);
         break;
     }
@@ -192,6 +193,7 @@ void chan_read(ChanEnd *chan_end, void *data, size_t size)
 
         Proc *wait_proc = chan->end_wait->proc;
         wait_proc->state = PROC_READY;
+        chan->end_wait = NULL;
         scheduler_addproc(wait_proc);
         break;
     }
@@ -247,6 +249,7 @@ int chan_trywrite(ChanEnd *chan_end, void *data, size_t size)
         /* resume waiting PROC on other CHANEND */
         Proc *wait_proc = chan->end_wait->proc;
         wait_proc->state = PROC_READY;
+        chan->end_wait = NULL;
         scheduler_addproc(wait_proc);
         return 1;
     }
@@ -298,6 +301,7 @@ int chan_tryread(ChanEnd *chan_end, void *data, size_t size)
         /* resume waiting PROC on other CHANEND */
         Proc *wait_proc = chan->end_wait->proc;
         wait_proc->state = PROC_READY;
+        chan->end_wait = NULL;
         scheduler_addproc(wait_proc);
         return 1;
     }
