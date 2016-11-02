@@ -67,7 +67,7 @@ void alt_addguard(Alt *alt, Guard *guard)
     /* a NULL guard means disabled */
     if (guard == NULL) return;
     
-    guard->pri_case = alt->guards.num++;
+    guard->pri_case = (int)alt->guards.num++;
     TAILQ_INSERT_TAIL(&alt->guards.Q, guard, node);
 }
 
@@ -79,6 +79,7 @@ int alt_select(Alt *alt)
     TAILQ_FOREACH(guard, &alt->guards.Q, node) {
         /* check non-blocking if any guards are ready */
         /* if yes, then complete operation, and return key */
+
     }
     
     /* wait until on of the chan_ends reschedules ALT */
