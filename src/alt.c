@@ -75,11 +75,16 @@ int alt_select(Alt *alt)
 {
     ASSERT_NOTNULL(alt);
 
+    PDEBUG("alt_select finding case\n");
+
     Guard *guard;
     TAILQ_FOREACH(guard, &alt->guards.Q, node) {
         /* check non-blocking if any guards are ready */
         /* if yes, then complete operation, and return key */
-
+        if (chan_tryread(guard->ch_end, guard->data.ptr, guard->data.size)) {
+            PDEBUG("chan was ready\n");
+            return guard->pri_case;
+        }
     }
     
     /* wait until on of the chan_ends reschedules ALT */
