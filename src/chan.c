@@ -56,7 +56,7 @@ ChanEnd* chan_getend(Chan *chan)
         ChanEnd *chan_end = chan->ends[chan->num_ends++];
         chan_end->proc = scheduler_self()->curr_proc;
         chan_end->chan = chan;
-        chan_end->guard = NULL;
+        chan_end->alt = NULL;
         return chan_end;
     }
     errno = EPERM;
@@ -96,7 +96,7 @@ void chan_write(ChanEnd *chan_end, void *data, size_t size)
 
     if (chan->state == CHAN_WAIT) {
         PDEBUG("CHAN write, wait on read\n");
-        chan->state = CHAN_WREADY;
+        chan->state = CHAN_OKWRITE;
 
         chan->data = data;
         chan->data_size = size;
@@ -125,7 +125,7 @@ void chan_read(ChanEnd *chan_end, void *data, size_t size)
 
     if (chan->state == CHAN_WAIT) {
         PDEBUG("CHAN read, wait on write\n");
-        chan->state = CHAN_RREADY;
+        chan->state = CHAN_OKREAD;
 
         chan->data = data;
         chan->data_size = size;
@@ -154,14 +154,22 @@ int chan_trywrite(ChanEnd *chan_end, void *data, size_t size)
 
     /* FIXME atomic */
     switch (chan->state) {
-    case CHAN_WREADY:
+    case CHAN_OKWRITE:
         errno = EPERM;
         PERROR("Multiple PROCs trying to write to one CHAN, do nothing\n");
         // FALLTHROUGH
     case CHAN_WAIT:
         /* is not ready, fails */
-        return 0;
-    case CHAN_RREADY: {
+        return 0; 
+    case CHAN_ALTREAD: {
+        PDEBUG("in CHAN write, ALT on other end\n");
+        Alt *alt = chan->end_wait->alt;
+        if (alt->is_resolved) {
+            return 0;
+        }
+        alt->is_resolved = 1;
+    }
+    case CHAN_OKREAD: {
         PDEBUG("CHAN trywrite, read ready\n");
         chan->state = CHAN_WAIT;
 
@@ -204,14 +212,15 @@ int chan_tryread(ChanEnd *chan_end, void *data, size_t size)
 
     /* FIXME atomic */
     switch (chan->state) {
-    case CHAN_RREADY:
+    case CHAN_ALTREAD:
+    case CHAN_OKREAD:
         errno = EPERM;
         PERROR("Multiple PROCs trying to read to one CHAN, do nothing\n");
         // FALLTHROUGH
     case CHAN_WAIT:
         /* is not ready, fails */
         return 0;
-    case CHAN_WREADY: {
+    case CHAN_OKWRITE: {
         PDEBUG("CHAN tryread, write ready\n");
         chan->state = CHAN_WAIT;
 
@@ -237,5 +246,24 @@ int chan_tryread(ChanEnd *chan_end, void *data, size_t size)
     }
     }
     return 0;
+}
+
+void chan_altread(ChanEnd *chan_end, void *data, size_t size)
+{
+    ASSERT_NOTNULL(chan_end);
+
+    Chan *chan = chan_end->chan;
+    ASSERT_NOTNULL(chan);
+
+    if (chan->state != CHAN_WAIT) {
+        errno = EPERM;
+        PERROR("CHAN state is not CHAN_WAIT in chan_altread\n");
+        return;
+    }
+
+    chan->state     = CHAN_ALTREAD;
+    chan->data      = data;
+    chan->data_size = size;
+    chan->end_wait  = chan_end;
 }
 

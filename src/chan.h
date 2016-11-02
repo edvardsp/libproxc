@@ -9,8 +9,9 @@
 
 enum ChanState {
     CHAN_WAIT = 0,  /* no PROC using the CHAN */
-    CHAN_WREADY,    /* a PROC is trying to write on CHAN */
-    CHAN_RREADY     /* a PROC is trying to read from CHAN */
+    CHAN_OKWRITE,   /* a PROC is trying to write on CHAN */
+    CHAN_OKREAD,    /* a PROC is trying to read from CHAN */
+    CHAN_ALTREAD    /* CHAN is being read in an ALT */
 };
 
 struct Chan {
@@ -28,7 +29,7 @@ struct ChanEnd {
     struct Chan  *chan;
 
     struct Proc  *proc;
-    struct Guard  *guard;
+    struct Alt   *alt;
 };
 
 #endif /* CHAN_H__ */

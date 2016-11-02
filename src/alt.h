@@ -20,6 +20,8 @@ struct Guard {
 };
 
 struct Alt {
+    int is_resolved;
+    int pri_count;
     struct {
         size_t         num;
         struct GuardQ  Q;
