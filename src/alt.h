@@ -21,10 +21,11 @@ struct Guard {
 };
 
 struct Alt {
-    int  is_resolved;
     int  key_count;
 
-    Guard  *winner;
+    int    is_accepted;
+    Guard  *accepted;
+    
     struct {
         size_t         num;
         struct GuardQ  Q;

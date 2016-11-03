@@ -82,64 +82,6 @@ int _chan_checkbind(ChanEnd *chan_end)
     return 0;
 }
 
-void chan_write(ChanEnd *chan_end, void *data, size_t size)
-{
-    ASSERT_NOTNULL(chan_end);
-
-    /* chan_trywrite checks bind */
-    if (chan_trywrite(chan_end, data, size)) {
-        return;
-    } 
-
-    Proc *proc = chan_end->proc;
-    Chan *chan = chan_end->chan;
-    ASSERT_NOTNULL(proc);
-    ASSERT_NOTNULL(chan);
-
-    if (chan->state == CHAN_WAIT) {
-        PDEBUG("CHAN write, wait on read\n");
-        chan->state = CHAN_OKWRITE;
-
-        chan->data = data;
-        chan->data_size = size;
-        
-        chan->end_wait = chan_end;
-
-        /* yield, and let other end reschedule this end */
-        proc->state = PROC_CHANWAIT;
-        proc_yield(proc);
-    }
-}
-
-void chan_read(ChanEnd *chan_end, void *data, size_t size)
-{
-    ASSERT_NOTNULL(chan_end);
-
-    /* chan_tryread checks bind */
-    if (chan_tryread(chan_end, data, size)) {
-        return;
-    }
-
-    Proc *proc = chan_end->proc;
-    Chan *chan = chan_end->chan;
-    ASSERT_NOTNULL(proc);
-    ASSERT_NOTNULL(chan);
-
-    if (chan->state == CHAN_WAIT) {
-        PDEBUG("CHAN read, wait on write\n");
-        chan->state = CHAN_OKREAD;
-
-        chan->data = data;
-        chan->data_size = size;
-
-        chan->end_wait = chan_end;
-
-        /* yield, and let other end reschedule this end */
-        proc->state = PROC_CHANWAIT;
-        proc_yield(proc);
-    }
-}
-
 int chan_trywrite(ChanEnd *chan_end, void *data, size_t size)
 {
     ASSERT_NOTNULL(chan_end);
@@ -166,19 +108,37 @@ int chan_trywrite(ChanEnd *chan_end, void *data, size_t size)
     case CHAN_ALTREAD: {
         PDEBUG("in CHAN write, ALT on other end\n");
         Guard *guard = chan->end_wait->guard;
-        chan->end_wait->guard = NULL;
-        /* if guard is NULL or ALT is resolved, proceed normally */
-        /* as if the CHAN is CHAN_WAIT */
-        if (!guard || guard->alt->is_resolved) {
-            PDEBUG("ALT finished, continue as if CHAN_WAIT\n");
-            chan->state     = CHAN_WAIT;
-            chan->data      = NULL;
+        Alt *alt = guard->alt;
+
+        if (!alt_accept(alt, guard)) {
+            chan->state = CHAN_WAIT;
+            chan->data = NULL;
             chan->data_size = 0;
-            chan->end_wait  = NULL;
+            chan->end_wait = NULL;
             return 0;
         }
-        guard->alt->is_resolved = 1;
-        guard->alt->winner = guard;
+
+        chan->state = CHAN_WAIT;
+
+        size_t min_size = (size > chan->data_size)
+                        ? chan->data_size
+                        : size;
+        /* only copy over data if is requested by both sides */
+        if (min_size > 0) {
+            ASSERT_NOTNULL(data);
+            ASSERT_NOTNULL(chan->data);
+            memcpy(chan->data, data, min_size);
+        }
+
+        chan->data = NULL;
+        chan->data_size = 0;
+
+        /* resume waiting PROC on other CHANEND */
+        Proc *wait_proc = chan->end_wait->proc;
+        wait_proc->state = PROC_READY;
+        chan->end_wait = NULL;
+        scheduler_addproc(wait_proc);
+        return 1;
     }
     case CHAN_OKREAD: {
         PDEBUG("CHAN trywrite, read ready\n");
@@ -259,22 +219,136 @@ int chan_tryread(ChanEnd *chan_end, void *data, size_t size)
     return 0;
 }
 
-void chan_altread(ChanEnd *chan_end, void *data, size_t size)
+void chan_write(ChanEnd *chan_end, void *data, size_t size)
+{
+    ASSERT_NOTNULL(chan_end);
+
+    /* chan_trywrite checks bind */
+    if (chan_trywrite(chan_end, data, size)) {
+        return;
+    } 
+
+    Proc *proc = chan_end->proc;
+    Chan *chan = chan_end->chan;
+    ASSERT_NOTNULL(proc);
+    ASSERT_NOTNULL(chan);
+
+    if (chan->state == CHAN_WAIT) {
+        PDEBUG("CHAN write, wait on read\n");
+        chan->state = CHAN_OKWRITE;
+
+        chan->data = data;
+        chan->data_size = size;
+        
+        chan->end_wait = chan_end;
+
+        /* yield, and let other end reschedule this end */
+        proc->state = PROC_CHANWAIT;
+        proc_yield(proc);
+    }
+}
+
+void chan_read(ChanEnd *chan_end, void *data, size_t size)
+{
+    ASSERT_NOTNULL(chan_end);
+
+    /* chan_tryread checks bind */
+    if (chan_tryread(chan_end, data, size)) {
+        return;
+    }
+
+    Proc *proc = chan_end->proc;
+    Chan *chan = chan_end->chan;
+    ASSERT_NOTNULL(proc);
+    ASSERT_NOTNULL(chan);
+
+    if (chan->state == CHAN_WAIT) {
+        PDEBUG("CHAN read, wait on write\n");
+        chan->state = CHAN_OKREAD;
+
+        chan->data = data;
+        chan->data_size = size;
+
+        chan->end_wait = chan_end;
+
+        /* yield, and let other end reschedule this end */
+        proc->state = PROC_CHANWAIT;
+        proc_yield(proc);
+    }
+}
+
+void chan_altenable(ChanEnd *chan_end, void *data, size_t size)
+{
+    ASSERT_NOTNULL(chan_end);
+
+    /* check binding of CHANEND, return errno if illegal */
+    if (_chan_checkbind(chan_end) != 0) {
+        errno = EPERM;
+        PERROR("CHANEND is not bound to this CHAN, do nothing\n");
+        return;
+    }
+
+    Chan *chan = chan_end->chan;
+    ASSERT_NOTNULL(chan);
+
+    switch (chan->state) {
+    case CHAN_WAIT:
+        PDEBUG("chan_altenable, no PROC on other end\n");
+        chan->state = CHAN_ALTREAD;
+        chan->data = data;
+        chan->data_size = size;
+        chan->end_wait = chan_end;
+        return;
+    case CHAN_OKWRITE: {
+        PDEBUG("chan_altenable, found PROC on other end\n");
+        Guard *guard = chan_end->guard;
+        Alt *alt = guard->alt;
+        if (!alt_accept(alt, guard)) {
+            return;
+        }
+
+        chan->state = CHAN_WAIT;
+
+        size_t min_size = (size > chan->data_size)
+                        ? chan->data_size
+                        : size;
+        /* only copy over data if is requested by both sides */
+        if (min_size > 0) {
+            ASSERT_NOTNULL(data);
+            ASSERT_NOTNULL(chan->data);
+            memcpy(data, chan->data, min_size);
+        }
+
+        chan->data = NULL;
+        chan->data_size = 0;
+        
+        /* resume waiting PROC on other CHANEND */
+        Proc *wait_proc = chan->end_wait->proc;
+        wait_proc->state = PROC_READY;
+        chan->end_wait = NULL;
+        scheduler_addproc(wait_proc);
+        return;
+    } 
+    case CHAN_OKREAD:
+    case CHAN_ALTREAD:
+        errno = EPERM;
+        PERROR("Multiple PROCs trying to read to one CHAN, do nothing\n");
+        return;
+    }
+}
+
+void chan_altdisable(ChanEnd *chan_end)
 {
     ASSERT_NOTNULL(chan_end);
 
     Chan *chan = chan_end->chan;
     ASSERT_NOTNULL(chan);
 
-    if (chan->state != CHAN_WAIT) {
-        errno = EPERM;
-        PERROR("CHAN state is not CHAN_WAIT in chan_altread\n");
-        return;
+    if (chan->state == CHAN_ALTREAD) {
+        chan->state = CHAN_WAIT;
+        chan->data = NULL;
+        chan->data_size = 0;
+        chan->end_wait = NULL;
     }
-
-    chan->state     = CHAN_ALTREAD;
-    chan->data      = data;
-    chan->data_size = size;
-    chan->end_wait  = chan_end;
 }
 

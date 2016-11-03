@@ -43,9 +43,9 @@ Alt* alt_create(void)
         return NULL;
     }
 
-    alt->is_resolved = 0;
     alt->key_count   = 0;
-    alt->winner      = NULL;
+    alt->is_accepted = 0;
+    alt->accepted    = NULL;
     alt->guards.num  = 0;
     TAILQ_INIT(&alt->guards.Q);
 
@@ -63,22 +63,62 @@ void alt_free(Alt *alt)
     free(alt);
 }
 
-
 void alt_addguard(Alt *alt, Guard *guard)
 {
     ASSERT_NOTNULL(alt);
 
-    /* always increment pri_count, to match the switch cases */
+    /* always increment key_count, to match the switch cases */
     int key = alt->key_count++;
-    /* a NULL guard means disabled */
-    if (guard == NULL) return;
+    /* a NULL guard means not active */
+    if (guard == NULL) {
+        PDEBUG("AltGuard %d inactive\n", key);
+        return;
+    }
    
-    guard->key           = key;
-    guard->alt           = alt; 
-    guard->ch_end->guard = guard;
+    PDEBUG("AltGuard %d active\n", key);
+    guard->key = key;
+    guard->alt = alt; 
 
     alt->guards.num++;
     TAILQ_INSERT_TAIL(&alt->guards.Q, guard, node);
+}
+
+int alt_accept(Alt *alt, Guard *guard)
+{
+    ASSERT_NOTNULL(alt);
+    ASSERT_NOTNULL(guard);
+
+    /* FIXME atomic compare and swap */
+    if (!alt->is_accepted) {
+        PDEBUG("alt_accept succeded!\n");
+        alt->is_accepted = 1;
+        alt->accepted = guard;
+        return 1;
+    }
+    PDEBUG("alt_accept failed\n");
+    return 0;
+}
+
+int alt_enable(Alt *alt, Guard *guard)
+{
+    ASSERT_NOTNULL(alt);
+    ASSERT_NOTNULL(guard);
+
+    ChanEnd *ch_end = guard->ch_end;
+    ASSERT_NOTNULL(ch_end);
+
+    ch_end->guard = guard;
+    chan_altenable(ch_end, guard->data.ptr, guard->data.size);
+
+    return alt->is_accepted;
+}
+
+void alt_disable(Alt *alt, Guard *guard)
+{
+    ASSERT_NOTNULL(alt);
+    ASSERT_NOTNULL(guard);
+
+    chan_altdisable(guard->ch_end);
 }
 
 int alt_select(Alt *alt)
@@ -89,22 +129,26 @@ int alt_select(Alt *alt)
 
     Guard *guard;
     TAILQ_FOREACH(guard, &alt->guards.Q, node) {
-        /* check non-blocking if any guards are ready */
-        /* if yes, then complete operation, and return key */
-        if (chan_tryread(guard->ch_end, guard->data.ptr, guard->data.size)) {
-            PDEBUG("chan was ready\n");
-            return guard->key;
+        if (alt_enable(alt, guard)) {
+            goto AltAccepted;
         }
-        chan_altread(guard->ch_end, guard->data.ptr, guard->data.size);
     }
     
     /* wait until on of the chan_ends reschedules ALT */
-    Scheduler *sched = scheduler_self();
-    Proc *proc = sched->curr_proc;
-    proc->state = PROC_ALTWAIT;
-    proc_yield(proc);
+    if (!alt->is_accepted) {
+        Proc *proc = scheduler_self()->curr_proc;
+        proc->state = PROC_ALTWAIT;
+        proc_yield(proc);
+    }
+
+AltAccepted: /* Only one guard is accepted from here */
+
+    TAILQ_FOREACH_REVERSE(guard, &alt->guards.Q, GuardQ, node) {
+        alt_disable(alt, guard);
+    }
+
 
     /* from here, winner contains the winning GUARD */
-    ASSERT_NOTNULL(alt->winner);
-    return alt->winner->key;
+    ASSERT_NOTNULL(alt->accepted);
+    return alt->accepted->key;
 }

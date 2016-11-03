@@ -79,7 +79,8 @@ int  chan_trywrite(ChanEnd *chan_end, void *data, size_t size);
 int  chan_tryread(ChanEnd *chan_end, void *data, size_t size);
 void chan_write(ChanEnd *chan_end, void *data, size_t size);
 void chan_read(ChanEnd *chan_end, void *data, size_t size);
-void chan_altread(ChanEnd *chan_end, void *data, size_t size);
+void chan_altenable(ChanEnd *chan_end, void *data, size_t size);
+void chan_altdisable(ChanEnd *chan_end);
 
 void* csp_create(enum BuildType type);
 void csp_free(Builder *build);
@@ -91,6 +92,7 @@ void   alt_guardfree(Guard *guard);
 Alt*   alt_create(void);
 void   alt_free(Alt *alt);
 void   alt_addguard(Alt *alt, Guard *guard);
+int    alt_accept(Alt *alt, Guard *guard);
 int    alt_select(Alt *alt);
 
 /* extern and static inline functions */
