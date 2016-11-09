@@ -29,6 +29,13 @@ void _scheduler_key_create(void)
     ASSERT_0(pthread_key_create(&g_key_sched, _scheduler_key_free));
 }
 
+Scheduler* scheduler_self(void)
+{
+    Scheduler *sched = pthread_getspecific(g_key_sched);
+    ASSERT_NOTNULL(sched);
+    return sched;
+}
+
 int scheduler_create(Scheduler **new_sched)
 {
     ASSERT_NOTNULL(new_sched);

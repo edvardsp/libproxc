@@ -62,11 +62,13 @@ TAILQ_HEAD(BuilderQ, Builder);
 TAILQ_HEAD(GuardQ, Guard);
 
 /* function declarations */
+Proc* proc_self(void);
 int  proc_create(Proc **new_proc, ProcFxn fxn);
 void proc_free(Proc *proc);
 int  proc_setargs(Proc *proc, va_list args);
 void proc_yield(Proc *proc);
 
+Scheduler* scheduler_self(void);
 int  scheduler_create(Scheduler **new_sched);
 void scheduler_free(Scheduler *sched);
 void scheduler_addproc(Proc *proc);
@@ -95,17 +97,7 @@ void   alt_addguard(Alt *alt, Guard *guard);
 int    alt_accept(Alt *alt, Guard *guard);
 int    alt_select(Alt *alt);
 
-/* extern and static inline functions */
-extern pthread_key_t g_key_sched;
-
-static inline
-Scheduler* scheduler_self(void)
-{
-    Scheduler *sched = pthread_getspecific(g_key_sched);
-    ASSERT_NOTNULL(sched);
-    return sched;
-}
-
+/* static inline functions */
 static inline
 int scheduler_switch(ucontext_t *from, ucontext_t *to)
 {

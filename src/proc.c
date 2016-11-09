@@ -29,6 +29,13 @@ void _proc_mainfxn(Proc *proc)
     PDEBUG("_proc_mainfxn done\n");
 }
 
+Proc* proc_self(void)
+{
+    Proc *proc = scheduler_self()->curr_proc;
+    ASSERT_NOTNULL(proc);
+    return proc;
+}
+
 int proc_create(Proc **new_proc, ProcFxn fxn)
 {
     ASSERT_NOTNULL(new_proc);
