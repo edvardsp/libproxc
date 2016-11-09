@@ -42,8 +42,8 @@ struct Alt;
 typedef struct Proc Proc;
 typedef struct Scheduler Scheduler;
 
-typedef struct Chan Chan;
 typedef struct ChanEnd ChanEnd;
+typedef struct Chan Chan;
 
 typedef struct ProcBuild ProcBuild;
 typedef struct ParBuild ParBuild;
@@ -56,6 +56,8 @@ typedef struct Alt Alt;
 /* queue and tree declarations */
 TAILQ_HEAD(ProcQ, Proc);
 RB_HEAD(ProcRB, Proc);
+
+TAILQ_HEAD(ChanEndQ, ChanEnd);
 
 TAILQ_HEAD(BuilderQ, Builder);
 

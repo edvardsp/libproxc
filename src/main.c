@@ -8,104 +8,86 @@
 
 void fxn1(void) 
 { 
-    printf("fxn1: start\n");
-
-    Chan *ch = ARGN(0);
-    ChanEnd *ch_end = chan_getend(ch);
-    
+    Chan *a = ARGN(0), *b = ARGN(1);
+    ChanEnd *a_end = CH_END(a), *b_end = CH_END(b);
+    int value = 0;
+    CH_WRITE(a_end, &value, int);
     int running = 1;
     while (running) {
-        int value = 42;
-        printf("fxn1: trying to write %d\n", value);
-        chan_write(ch_end, &value, sizeof(int));
-        printf("fxn1: succeded\n");
+        CH_READ(b_end, &value, int);
+        CH_WRITE(a_end, &value, int);
     }
-
-    printf("fxn1: stop\n");
 }
-
 void fxn2(void) 
 { 
-    printf("fxn2: start\n");
-
-    Chan *ch = ARGN(0);
-    ChanEnd *ch_end = chan_getend(ch);
-
+    Chan *a = ARGN(0), *c = ARGN(1), *d = ARGN(2);
+    ChanEnd *a_end = CH_END(a), *c_end = CH_END(c), *d_end = CH_END(d); 
+    int value;
     int running = 1;
     while (running) {
-        int value = 666;
-        printf("fxn2: trying to write %d\n", value);
-        chan_write(ch_end, &value, sizeof(int));
-        printf("fxn2: succeded\n");
+        CH_READ(a_end, &value, int);
+        CH_WRITE(d_end, &value, int);
+        CH_WRITE(c_end, &value, int);
     }
-
-    printf("fxn2: stop\n");
 }
 
 void fxn3(void)
 {
-    printf("fxn3: start\n");
-
-    Chan *ch = ARGN(0);
-    ChanEnd *ch_end = chan_getend(ch);
-
+    Chan *b = ARGN(0), *c = ARGN(1);
+    ChanEnd *b_end = CH_END(b), *c_end = CH_END(c);
+    int value;
     int running = 1;
     while (running) {
-        int value = 1337;
-        printf("fxn3: trying to write %d\n", value);
-        chan_write(ch_end, &value, sizeof(int));
-        printf("fxn3: succeded\n");
+        CH_READ(c_end, &value, int);
+        value++;
+        CH_WRITE(b_end, &value, int);
     }
-
-    printf("fxn3: stop\n");
 }
 
-__attribute__((noreturn))
+__attribute((noreturn))
+void timerFxn(void)
+{
+    Chan *d = ARGN(0);
+    ChanEnd *d_end = CH_END(d);
+    int repeat = 10000;
+    int runs = 50;
+    clock_t start, stop;
+    double time_spent, sum;
+
+    printf("Repeat = %d, runs = %d\n", repeat, runs);
+    sum = 0;
+    for (int j = 0; j < runs; j++) {
+        start = clock();
+
+        int x;
+        for (int i = 0; i < repeat; i++ ) {
+            CH_READ(d_end, &x, int);
+        }
+        stop = clock();
+        time_spent = (double)(stop - start) / CLOCKS_PER_SEC * 1000.0;
+        sum += time_spent;
+        printf("\t%f\n", time_spent);
+    }
+
+    printf("Average = %f ms/iteration\n", (sum) / (runs));
+    exit(0);
+}
+
 void foofunc(void)
 {
     printf("foofunc: PAR start\n");
 
-    #define NUM_CHS 3
-    Chan *chs[NUM_CHS];
-    ChanEnd *ch_ends[NUM_CHS];
-    for (int i = 0; i < NUM_CHS; i++) {
-        chs[i] = chan_create();
-        ch_ends[i] = chan_getend(chs[i]);  
-    }
-
-    GO(PAR(
-           PROC(fxn3, chs[2]),
-           PROC(fxn2, chs[1]),
-           PROC(fxn1, chs[0])
-       )
-    );
-
-    int x = 2, y = 4;
-    int val1, val2, val3;
-    for (int i = 0; i < 10; i++) {
-        printf("foofunc: round %d\n", i);
-        switch(ALT(
-            GUARD(i  < y, ch_ends[0], &val1, int),
-            GUARD(i  > x, ch_ends[1], &val2, int),
-            GUARD(1, ch_ends[2], &val3, int)
-        )) {
-        case 0: // guard 0
-            printf("\tguard 0 accepted, %d\n", val1);
-            break;
-        case 1: // guard 1
-            printf("\tguard 1 accepted, %d\n", val2);
-            break;
-        case 2: // guard 2
-            printf("\tguard 2 accepted, %d\n", val3);
-            break;
-        }
-    }
-
-    for (int i = 0; i < NUM_CHS; i++)
-        chan_free(chs[i]);
+    Chan *a, *b, *c, *d;
+    CH_OPEN(&a, &b, &c, &d);
+    RUN(PAR(
+        PROC(fxn1, a, b),
+        PROC(fxn2, a, c, d),
+        PROC(fxn3, b, c),
+        PROC(timerFxn, d)
+    ));
+    CH_CLOSE(a, b, c, d);
 
     printf("foofunc: PAR ended\n");
-    exit(0);
 }
 
 int main(int argc, char **argv)

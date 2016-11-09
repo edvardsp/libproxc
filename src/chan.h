@@ -7,29 +7,30 @@
 
 #include "internal.h"
 
-enum ChanState {
-    CHAN_WAIT = 0,  /* no PROC using the CHAN */
-    CHAN_OKWRITE,   /* a PROC is trying to write on CHAN */
-    CHAN_OKREAD,    /* a PROC is trying to read from CHAN */
-    CHAN_ALTREAD    /* CHAN is being read in an ALT */
+struct ChanEnd {
+    enum {
+        CHAN_WRITER,
+        CHAN_READER,
+        CHAN_ALTER,
+    } type;
+
+    struct {
+        size_t  size;
+        void    *ptr;
+    } data;
+    
+    struct Proc   *proc;
+    struct Guard  *guard;
+
+    TAILQ_ENTRY(ChanEnd)  node;
 };
 
 struct Chan {
-    enum ChanState  state;
+    uint64_t  id;
 
-    void    *data;
     size_t  data_size;
-
-    size_t num_ends;
-    struct ChanEnd  *ends[2];
-    struct ChanEnd  *end_wait;
-};
-
-struct ChanEnd {
-    struct Chan  *chan;
-
-    struct Proc   *proc;
-    struct Guard  *guard;
+    
+    struct ChanEndQ  endQ;
 };
 
 #endif /* CHAN_H__ */

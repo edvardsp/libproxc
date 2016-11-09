@@ -46,6 +46,78 @@ void chan_free(Chan *chan)
     free(chan);
 }
 
+void _chan_write(Chan *chan, void *data)
+{
+    // acquire lock <<
+    
+    // while chanQ not empty then
+        // pop chanQ
+        // if node alt then
+            // if accepted then
+                // release lock >>
+                // write over to alter
+                // resume alter
+                // return, continue self
+            // else
+                // continue
+    // if chanQ not empty and contains readers then
+        // pop chanQ
+        // release lock >>
+        // write over to reader
+        // resume reader
+        // return, continue self
+    
+    // enqueue in chanQ
+    // release lock >>
+    // yield
+}
+
+void _chan_read(Chan *chan, void *data, size_t size)
+{
+    ASSERT_NOTNULL(chan);
+    
+    if (size != chan->data_size) {
+        errno = EPERM;
+        PERROR("data size not matching CHAN data size\n");
+        /* FIXME */
+        abort();
+    }
+
+    // << acquire lock <<
+
+    
+
+    // if chanQ not empty and contains writers then
+        // pop chanQ
+        // release lock >>
+        // writer over from writer
+        // resume writer
+        // return, continue self
+    
+    // enqueue in chanQ
+    // release lock >>
+    // yield
+}
+
+void _chan_altread(Chan *chan, void *data)
+{
+    // acquire lock <<
+    
+    // if chanQ not empty and contains writers then
+        // if accepted then
+            // pop chanQ
+            // release lock >>
+            // writer over from writer
+            // resume writer
+            // return, continue self
+        // else
+            // release lock >>
+            // return, continue self
+    
+    // enqueue in altQ
+    // release lock >>
+}
+
 ChanEnd* chan_getend(Chan *chan)
 {
     ASSERT_NOTNULL(chan);
