@@ -84,9 +84,9 @@ void* proxc_argn(size_t n)
 {
     Proc *proc = scheduler_self()->curr_proc;
     /* if n is index out of range, return NULL */
-    if (n >= proc->num_args) return NULL;
+    if (n >= proc->args.num) return NULL;
     
-    return proc->args[n];
+    return proc->args.ptr[n];
 }
 
 /*

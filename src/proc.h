@@ -26,8 +26,10 @@ struct Proc {
 
     /* fxn and args */
     ProcFxn  fxn;
-    size_t   num_args;
-    void     **args;
+    struct {
+        size_t  num;
+        void    **ptr;
+    } args;
 
     /* stack and size */
     struct {
