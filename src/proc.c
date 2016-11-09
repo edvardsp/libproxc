@@ -36,14 +36,14 @@ int proc_create(Proc **new_proc, ProcFxn fxn)
     /* arg can be NULL */
 
     Proc *proc;
-    if ((proc = malloc(sizeof(Proc))) == NULL) {
+    if (!(proc = malloc(sizeof(Proc)))) {
         PERROR("malloc failed for Proc\n");
         return errno;
     }
     memset(proc, 0, sizeof(Proc));
 
     Scheduler *sched = scheduler_self();
-    if ((proc->stack.ptr = malloc(sched->stack_size)) == NULL) {
+    if (!(proc->stack.ptr = malloc(sched->stack_size))) {
         free(proc);
         PERROR("malloc failed for Proc stack\n");
         return errno;
@@ -80,7 +80,7 @@ int proc_create(Proc **new_proc, ProcFxn fxn)
 
 void proc_free(Proc *proc)
 {
-    if (proc == NULL) return;
+    if (!proc) return;
 
     free(proc->args.ptr);
     free(proc->stack.ptr);
@@ -100,7 +100,7 @@ int proc_setargs(Proc *proc, va_list args)
     } 
 
     /* allocate args array for proc */
-    if ((proc->args.ptr = malloc(sizeof(void *) * proc->args.num)) == NULL) {
+    if (!(proc->args.ptr = malloc(sizeof(void *) * proc->args.num))) {
         PERROR("malloc failed for Proc Args\n");
         return errno;
     }
@@ -113,9 +113,9 @@ int proc_setargs(Proc *proc, va_list args)
 
 void proc_yield(Proc *proc)
 {
-    Scheduler *sched;
-    if (proc == NULL) sched = scheduler_self();
-    else              sched = proc->sched;
+    Scheduler *sched = (!proc)
+                     ? scheduler_self()
+                     : proc->sched;
 
     PDEBUG("yielding\n");
     scheduler_switch(&sched->curr_proc->ctx, &sched->ctx);

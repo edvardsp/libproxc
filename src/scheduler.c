@@ -34,7 +34,7 @@ int scheduler_create(Scheduler **new_sched)
     ASSERT_NOTNULL(new_sched);
 
     Scheduler *sched;
-    if ((sched = malloc(sizeof(Scheduler))) == NULL) {
+    if (!(sched = malloc(sizeof(Scheduler)))) {
         PERROR("malloc failed for Scheduler\n");
         return errno;
     }
@@ -60,7 +60,7 @@ int scheduler_create(Scheduler **new_sched)
 
 void scheduler_free(Scheduler *sched)
 {
-    if (sched == NULL) return;
+    if (!sched) return;
 
     /* FIXME cleanup Proc's in Qs */
     memset(sched, 0, sizeof(Scheduler));

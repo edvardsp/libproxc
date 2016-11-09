@@ -10,13 +10,13 @@ Chan* chan_create(void)
 {
     Chan *chan;
 
-    if ((chan = malloc(sizeof(Chan))) == NULL) {
+    if (!(chan = malloc(sizeof(Chan)))) {
         PERROR("malloc failed for Chan\n");
         return NULL;
     }
     memset(chan, 0, sizeof(Chan));
     for (size_t i = 0; i < 2; i++) {
-        if ((chan->ends[i] = malloc(sizeof(ChanEnd))) == NULL) {
+        if (!(chan->ends[i] = malloc(sizeof(ChanEnd)))) {
             PERROR("malloc failed for ChanEnd\n");
             if (chan->ends[0] != NULL)
                 free(chan->ends[0]);
@@ -41,7 +41,7 @@ Chan* chan_create(void)
 
 void chan_free(Chan *chan)
 {
-    if (chan == NULL) return;
+    if (!chan) return;
 
     free(chan);
 }
@@ -75,7 +75,7 @@ int _chan_checkbind(ChanEnd *chan_end)
      */
     #define THIS_PROC chan_end->proc
     #define CURR_PROC chan_end->proc->sched->curr_proc
-    if (THIS_PROC == NULL || THIS_PROC != CURR_PROC) {
+    if (!THIS_PROC || THIS_PROC != CURR_PROC) {
         errno = EPERM;
         return errno;
     }

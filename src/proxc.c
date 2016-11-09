@@ -48,7 +48,7 @@ void proxc_start(ProcFxn fxn)
     pthread_t *pthreads = NULL;
     if (nprocessors_onln > 1) {
         unsigned long num_pthreads = (unsigned long)(nprocessors_onln - 1);
-        if ((pthreads = malloc(sizeof(pthread_t) * num_pthreads)) == 0) {
+        if (!(pthreads = malloc(sizeof(pthread_t) * num_pthreads))) {
             PERROR("malloc failed for pthread_t\n");
             exit(EXIT_FAILURE);
         }
@@ -108,7 +108,7 @@ Builder* proxc_proc(ProcFxn fxn, ...)
 
     /* alloc builder struct */
     ProcBuild *builder;
-    if ((builder = csp_create(PROC_BUILD)) == NULL) {
+    if (!(builder = csp_create(PROC_BUILD))) {
         PERROR("malloc failed for ProcBuild\n");
         proc_free(proc);
         return NULL;
@@ -141,7 +141,7 @@ Builder* proxc_par(int args_start, ...)
 
     /* alloc builder struct */
     ParBuild *builder;
-    if ((builder = csp_create(PAR_BUILD)) == NULL) {
+    if (!(builder = csp_create(PAR_BUILD))) {
         PERROR("malloc failed for ParBuild\n");
         return NULL;
     }
@@ -175,7 +175,7 @@ Builder* proxc_seq(int arg_start, ...)
 
     /* alloc builder struct */
     SeqBuild *builder;
-    if ((builder = csp_create(SEQ_BUILD)) == NULL) {
+    if (!(builder = csp_create(SEQ_BUILD))) {
         PERROR("malloc failed for SeqBuild\n");
         return NULL;
     }
@@ -253,7 +253,7 @@ Guard* proxc_guard(int cond, ChanEnd *ch_end, void *out, size_t size)
 int proxc_alt(int arg_start, ...)
 {
     Alt *alt = alt_create();
-    if (alt == NULL) {
+    if (!alt) {
         return -1;
     }
 
@@ -281,7 +281,7 @@ int proxc_ch_open(int arg_start, ...)
     va_start(args, arg_start);
     Chan **new_chan = (Chan **)va_arg(args, Chan **);
     while (new_chan != PROXC_NULL) {
-        if (new_chan == NULL) {
+        if (!new_chan) {
             errno = EPERM;
             PERROR("new_chan in proxc_ch_open is NULL\n");
             break;

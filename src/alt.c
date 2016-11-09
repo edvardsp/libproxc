@@ -9,7 +9,7 @@ Guard* alt_guardcreate(ChanEnd *ch_end, void *out, size_t size)
 
     /* alloc GUARD struct */
     Guard *guard;
-    if ((guard = malloc(sizeof(Guard))) == NULL) {
+    if (!(guard = malloc(sizeof(Guard)))) {
         PERROR("malloc failed for GUARD\n");
         return NULL;
     }
@@ -26,7 +26,7 @@ Guard* alt_guardcreate(ChanEnd *ch_end, void *out, size_t size)
 
 void alt_guardfree(Guard *guard)
 {
-    if (guard == NULL) return;
+    if (!guard) return;
 
     /* reset CHANEND */
     guard->ch_end->guard = NULL;
@@ -38,7 +38,7 @@ Alt* alt_create(void)
 {
     /* alloc ALT struct */
     Alt *alt;
-    if ((alt = malloc(sizeof(Alt))) == NULL) {
+    if (!(alt = malloc(sizeof(Alt)))) {
         PERROR("malloc failed for ALT\n");
         return NULL;
     }
@@ -54,7 +54,7 @@ Alt* alt_create(void)
 
 void alt_free(Alt *alt)
 {
-    if (alt == NULL) return;
+    if (!alt) return;
 
     Guard *guard;
     TAILQ_FOREACH(guard, &alt->guards.Q, node) {
@@ -70,7 +70,7 @@ void alt_addguard(Alt *alt, Guard *guard)
     /* always increment key_count, to match the switch cases */
     int key = alt->key_count++;
     /* a NULL guard means not active */
-    if (guard == NULL) {
+    if (!guard) {
         PDEBUG("AltGuard %d inactive\n", key);
         return;
     }

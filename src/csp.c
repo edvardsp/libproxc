@@ -16,7 +16,7 @@ void* csp_create(enum BuildType type) {
     case PAR_BUILD:  builder = malloc(sizeof(ParBuild));  break;
     case SEQ_BUILD:  builder = malloc(sizeof(SeqBuild));  break;
     }
-    if (builder == NULL) return NULL;
+    if (!builder) return NULL;
 
     builder->header.type = type;
     builder->header.parent = NULL;
@@ -28,7 +28,7 @@ void* csp_create(enum BuildType type) {
 
 void csp_free(Builder *build)
 {
-    if (build == NULL) return;
+    if (!build) return;
 
     free(build);
 }
@@ -42,7 +42,7 @@ int csp_insertchilds(size_t *num_childs, Builder *builder, struct BuilderQ *chil
     Builder *child = va_arg(vargs, Builder *);
     while (child != PROXC_NULL) {
         /* NULL means failure in child build */
-        if (child == NULL) {
+        if (!child) {
             errno = EPERM;
             PERROR("child in csp_insertchilds is NULL\n");
             break;
