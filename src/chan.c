@@ -38,6 +38,8 @@ int chan_write(Chan *chan, void *data, size_t size)
     ASSERT_NOTNULL(chan);
     ASSERT_EQ(size, chan->data_size);
 
+    Proc *proc = proc_self();
+
     // << acquire lock <<
     
     ChanEnd *first = TAILQ_FIRST(&chan->endQ);
@@ -56,11 +58,11 @@ int chan_write(Chan *chan, void *data, size_t size)
         /* resume reader */
         first->proc->state = PROC_READY;
         scheduler_addproc(first->proc);
+        proc_yield(proc);
         return 1;
     }
 
     /* if not, chanQ is empty or contains writers, enqueue self */
-    Proc *proc = proc_self();
     struct ChanEnd reader_end = {
         .type  = CHAN_WRITER,
         .data  = data,
@@ -86,6 +88,8 @@ int chan_read(Chan *chan, void *data, size_t size)
     ASSERT_NOTNULL(chan);
     ASSERT_EQ(size, chan->data_size); 
 
+    Proc *proc = proc_self();
+
     // << acquire lock <<
 
     ChanEnd *first = TAILQ_FIRST(&chan->endQ);
@@ -104,11 +108,11 @@ int chan_read(Chan *chan, void *data, size_t size)
         /* resume writer */
         first->proc->state = PROC_READY;
         scheduler_addproc(first->proc);
+        proc_yield(proc);
         return 1;
     }
     
     /* if not, chanQ is empty or contains readers, enqueue self */
-    Proc *proc = proc_self();
     struct ChanEnd writer_end = {
         .type  = CHAN_READER,
         .data  = data,
