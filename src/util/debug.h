@@ -13,14 +13,22 @@
 #   define ASSERT_EQ(lhs, rhs)   ASSERT((lhs) == (rhs)) 
 #   define ASSERT_NEQ(lhs, rhs)  ASSERT((lhs) != (rhs))
 
+#   define CYAN(txt)  "\x1b[36;1m" txt "\x1b[0m"
+#   define RED(txt)   "\x1b[31;1m" txt "\x1b[0m"
+
+#   define PANIC(msg, ...) do { \
+        fprintf(stderr, "<<" RED("PANIC") ">> " msg, \
+                ##__VA_ARGS__); \
+        fflush(stderr); \
+        abort(); \
+} while (0)
+
 #if defined(NDEBUG)
 
 #   define ASSERT(x) (void)(x)
 
 #   define PDEBUG(...)  /* do nothing */
 #   define PERROR(msg)  /* do nothing */
-
-#   define PANIC(...)  abort()
 
 #else /* !defined(NDEBUG) */
 
@@ -33,9 +41,6 @@
         } \
 } while (0)
 
-#   define CYAN(txt)  "\x1b[36;1m" txt "\x1b[0m"
-#   define RED(txt)   "\x1b[31;1m" txt "\x1b[0m"
-
 #   define PDEBUG(msg, ...) do { \
         fprintf(stderr, "[" CYAN("DEBUG") "] %s:%d:%s(): " msg, \
                 __FILE__, __LINE__, __func__, ##__VA_ARGS__); \
@@ -47,13 +52,6 @@
                 __FILE__, __LINE__, __func__); \
         fflush(stderr); \
         perror("\t-"); \
-} while (0)
-
-#   define PANIC(msg, ...) do { \
-        fprintf(stderr, "<<" RED("PANIC") ">> %s:%d:%s(): " msg, \
-                __FILE__, __LINE__, __func__, ##__VA_ARGS__); \
-        fflush(stderr); \
-        abort(); \
 } while (0)
 
 #endif /* defined(NDEBUG) */
