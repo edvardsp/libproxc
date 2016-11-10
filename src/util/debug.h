@@ -6,17 +6,17 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#   define ASSERT_0(x)           ASSERT((x) == 0)  
-#   define ASSERT_TRUE(x)        ASSERT(!!(x)) 
-#   define ASSERT_FALSE(x)       ASSERT(!(x)) 
-#   define ASSERT_NOTNULL(x)     ASSERT((x) != NULL) 
-#   define ASSERT_EQ(lhs, rhs)   ASSERT((lhs) == (rhs)) 
-#   define ASSERT_NEQ(lhs, rhs)  ASSERT((lhs) != (rhs))
+#define ASSERT_0(x)           ASSERT((x) == 0)  
+#define ASSERT_TRUE(x)        ASSERT(!!(x)) 
+#define ASSERT_FALSE(x)       ASSERT(!(x)) 
+#define ASSERT_NOTNULL(x)     ASSERT((x) != NULL) 
+#define ASSERT_EQ(lhs, rhs)   ASSERT((lhs) == (rhs)) 
+#define ASSERT_NEQ(lhs, rhs)  ASSERT((lhs) != (rhs))
 
-#   define CYAN(txt)  "\x1b[36;1m" txt "\x1b[0m"
-#   define RED(txt)   "\x1b[31;1m" txt "\x1b[0m"
+#define CYAN(txt)  "\x1b[36;1m" txt "\x1b[0m"
+#define RED(txt)   "\x1b[31;1m" txt "\x1b[0m"
 
-#   define PANIC(msg, ...) do { \
+#define PANIC(msg, ...) do { \
         fprintf(stderr, "<<" RED("PANIC") ">> " msg, \
                 ##__VA_ARGS__); \
         fflush(stderr); \
