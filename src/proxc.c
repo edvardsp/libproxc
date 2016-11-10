@@ -89,6 +89,11 @@ void* proxc_argn(size_t n)
     return proc->args.ptr[n];
 }
 
+void proxc_yield(void)
+{
+    proc_yield(NULL);
+}
+
 /*
  * Variadic args is a PROXC_NULL terminated list
  * of void * arguments to fxn. In fxn context,

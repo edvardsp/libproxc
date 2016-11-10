@@ -9,14 +9,13 @@
 typedef void (*ProcFxn)(void);
 
 typedef struct Chan Chan;
-
 typedef struct Builder Builder;
-
 typedef struct Guard Guard;
 
 void proxc_start(ProcFxn fxn);
 
 void* proxc_argn(size_t n);
+void  proxc_yield(void);
 
 Builder* proxc_proc(ProcFxn, ...);
 Builder* proxc_par(int, ...);
@@ -36,6 +35,7 @@ int   proxc_chread(Chan *chan, void *data, size_t size);
 #ifndef PROXC_NO_MACRO
 
 #   define ARGN(index)  proxc_argn(index)
+#   define YIELD()      proxc_yield()
 
 #   define PROC(...)  proxc_proc(__VA_ARGS__, PROXC_NULL)
 #   define PAR(...)   proxc_par(0, __VA_ARGS__, PROXC_NULL)
