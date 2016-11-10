@@ -8,39 +8,39 @@
 
 void fxn1(void) 
 { 
+    printf("fxn1: start\n");
     Chan *a = ARGN(0), *b = ARGN(1);
-    ChanEnd *a_end = CH_END(a), *b_end = CH_END(b);
     int value = 0;
-    CH_WRITE(a_end, &value, int);
+    CHWRITE(a, &value, int);
     int running = 1;
     while (running) {
-        CH_READ(b_end, &value, int);
-        CH_WRITE(a_end, &value, int);
+        CHREAD(b, &value, int);
+        CHWRITE(a, &value, int);
     }
 }
 void fxn2(void) 
 { 
+    printf("fxn2: start\n");
     Chan *a = ARGN(0), *c = ARGN(1), *d = ARGN(2);
-    ChanEnd *a_end = CH_END(a), *c_end = CH_END(c), *d_end = CH_END(d); 
     int value;
     int running = 1;
     while (running) {
-        CH_READ(a_end, &value, int);
-        CH_WRITE(d_end, &value, int);
-        CH_WRITE(c_end, &value, int);
+        CHREAD(a, &value, int);
+        CHWRITE(d, &value, int);
+        CHWRITE(c, &value, int);
     }
 }
 
 void fxn3(void)
 {
+    printf("fxn3: start\n");
     Chan *b = ARGN(0), *c = ARGN(1);
-    ChanEnd *b_end = CH_END(b), *c_end = CH_END(c);
     int value;
     int running = 1;
     while (running) {
-        CH_READ(c_end, &value, int);
+        CHREAD(c, &value, int);
         value++;
-        CH_WRITE(b_end, &value, int);
+        CHWRITE(b, &value, int);
     }
 }
 
@@ -48,7 +48,6 @@ __attribute((noreturn))
 void timerFxn(void)
 {
     Chan *d = ARGN(0);
-    ChanEnd *d_end = CH_END(d);
     int repeat = 10000;
     int runs = 50;
     clock_t start, stop;
@@ -61,7 +60,7 @@ void timerFxn(void)
 
         int x;
         for (int i = 0; i < repeat; i++ ) {
-            CH_READ(d_end, &x, int);
+            CHREAD(d, &x, int);
         }
         stop = clock();
         time_spent = (double)(stop - start) / CLOCKS_PER_SEC * 1000.0;
@@ -77,15 +76,22 @@ void foofunc(void)
 {
     printf("foofunc: PAR start\n");
 
-    Chan *a, *b, *c, *d;
-    CH_OPEN(&a, &b, &c, &d);
+    Chan *a = CHOPEN(int);
+    Chan *b = CHOPEN(int);
+    Chan *c = CHOPEN(int);
+    Chan *d = CHOPEN(int);
+
     RUN(PAR(
-        PROC(fxn1, a, b),
-        PROC(fxn2, a, c, d),
-        PROC(fxn3, b, c),
+        PROC(fxn1,     a, b),
+        PROC(fxn2,     a, c, d),
+        PROC(fxn3,     b, c),
         PROC(timerFxn, d)
     ));
-    CH_CLOSE(a, b, c, d);
+
+    CHCLOSE(a);
+    CHCLOSE(b);
+    CHCLOSE(c);
+    CHCLOSE(d);
 
     printf("foofunc: PAR ended\n");
 }

@@ -9,19 +9,10 @@
 typedef void (*ProcFxn)(void);
 
 typedef struct Chan Chan;
-typedef struct ChanEnd ChanEnd;
 
 typedef struct Builder Builder;
 
 typedef struct Guard Guard;
-
-Chan* chan_create(void);
-void chan_free(Chan *chan);
-ChanEnd* chan_getend(Chan *chan);
-void chan_write(ChanEnd *chan_end, void *data, size_t size);
-void chan_read(ChanEnd *chan_end, void *data, size_t size);
-int  chan_trywrite(ChanEnd *chan_end, void *data, size_t size);
-int  chan_tryread(ChanEnd *chan_end, void *data, size_t size);
 
 void proxc_start(ProcFxn fxn);
 
@@ -34,11 +25,13 @@ Builder* proxc_seq(int, ...);
 int proxc_go(Builder *root);
 int proxc_run(Builder *root);
 
-Guard* proxc_guard(int cond, ChanEnd* ch_end, void *out, size_t size);
+Guard* proxc_guard(int cond, Chan* chan, void *out, size_t size);
 int    proxc_alt(int, ...);
 
-int proxc_ch_open(int, ...);
-int proxc_ch_close(int, ...);
+Chan* proxc_chopen(size_t size);
+void  proxc_chclose(Chan *chan);
+int   proxc_chwrite(Chan *chan, void *data, size_t size);
+int   proxc_chread(Chan *chan, void *data, size_t size);
 
 #ifndef PROXC_NO_MACRO
 
@@ -54,13 +47,10 @@ int proxc_ch_close(int, ...);
 #   define GUARD(cond, ch, out, type)   proxc_guard(cond, ch, out, sizeof(type))
 #   define ALT(...)  proxc_alt(0, __VA_ARGS__, PROXC_NULL)
 
-#   define CH_OPEN(...)   proxc_ch_open(0, __VA_ARGS__, PROXC_NULL)
-#   define CH_CLOSE(...)  proxc_ch_close(0, __VA_ARGS__, PROXC_NULL)
-#   define CH_END(ch)     chan_getend(ch)
-#   define CH_WRITE(ch_end, data, type) \
-        chan_write(ch_end, data, sizeof(type)) 
-#   define CH_READ(ch_end, data, type) \
-        chan_read(ch_end, data, sizeof(type)) 
+#   define CHOPEN(type)               proxc_chopen(sizeof(type))
+#   define CHCLOSE(chan)              proxc_chclose(chan)
+#   define CHWRITE(chan, data, type)  proxc_chwrite(chan, data, sizeof(type))
+#   define CHREAD(chan, data, type)   proxc_chread(chan, data, sizeof(type)) 
 
 #endif /* PROXC_NO_MACRO */
 

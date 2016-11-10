@@ -14,14 +14,13 @@ struct ChanEnd {
         CHAN_ALTER,
     } type;
 
-    struct {
-        size_t  size;
-        void    *ptr;
-    } data;
+    void  *data;
     
+    struct Chan  *chan;
+
     struct Proc   *proc;
     struct Guard  *guard;
-
+    
     TAILQ_ENTRY(ChanEnd)  node;
 };
 

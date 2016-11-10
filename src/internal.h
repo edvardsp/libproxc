@@ -76,15 +76,11 @@ void scheduler_free(Scheduler *sched);
 void scheduler_addproc(Proc *proc);
 int  scheduler_run(void);
 
-Chan *chan_create(void);
+Chan *chan_create(size_t size);
 void chan_free(Chan *chan);
-ChanEnd* chan_getend(Chan *chan);
-int  chan_trywrite(ChanEnd *chan_end, void *data, size_t size);
-int  chan_tryread(ChanEnd *chan_end, void *data, size_t size);
-void chan_write(ChanEnd *chan_end, void *data, size_t size);
-void chan_read(ChanEnd *chan_end, void *data, size_t size);
-void chan_altenable(ChanEnd *chan_end, void *data, size_t size);
-void chan_altdisable(ChanEnd *chan_end);
+int  chan_write(Chan *chan, void *data, size_t size);
+int  chan_read(Chan *chan, void *data, size_t size);
+int  chan_altread(Chan *chan, void *data, size_t size);
 
 void* csp_create(enum BuildType type);
 void csp_free(Builder *build);

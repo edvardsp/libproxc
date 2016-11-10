@@ -108,7 +108,7 @@ int alt_enable(Alt *alt, Guard *guard)
     ASSERT_NOTNULL(ch_end);
 
     ch_end->guard = guard;
-    chan_altenable(ch_end, guard->data.ptr, guard->data.size);
+    //chan_altenable(ch_end, guard->data.ptr, guard->data.size);
 
     return alt->is_accepted;
 }
@@ -118,7 +118,7 @@ void alt_disable(Alt *alt, Guard *guard)
     ASSERT_NOTNULL(alt);
     ASSERT_NOTNULL(guard);
 
-    chan_altdisable(guard->ch_end);
+    //chan_altdisable(guard->ch_end);
 }
 
 int alt_select(Alt *alt)

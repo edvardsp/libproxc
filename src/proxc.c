@@ -275,40 +275,23 @@ int proxc_alt(int arg_start, ...)
     return key;
 }
 
-int proxc_ch_open(int arg_start, ...)
+Chan* proxc_chopen(size_t size)
 {
-    va_list args;
-    va_start(args, arg_start);
-    Chan **new_chan = (Chan **)va_arg(args, Chan **);
-    while (new_chan != PROXC_NULL) {
-        if (!new_chan) {
-            errno = EPERM;
-            PERROR("new_chan in proxc_ch_open is NULL\n");
-            break;
-        }
-        *new_chan = chan_create();
-        PDEBUG("new CHAN is opened\n");
-        new_chan = (Chan **)va_arg(args, Chan **);
-    } 
-    va_end(args);
-
-    /* FIXME on error */
-
-    return 0;
+    return chan_create(size); 
 }
 
-int proxc_ch_close(int arg_start, ...)
+void proxc_chclose(Chan *chan)
 {
-    va_list args;
-    va_start(args, arg_start);
-    Chan *chan = (Chan *)va_arg(args, Chan *);
-    while (chan != PROXC_NULL) {
-        chan_free(chan);
-        PDEBUG("CHAN is closed\n");
-        chan = (Chan *)va_arg(args, Chan *);
-    } 
-    va_end(args);
+    chan_free(chan);
+}
 
-    return 0;
+int proxc_chwrite(Chan *chan, void *data, size_t size)
+{
+    return chan_write(chan, data, size);
+}
+
+int proxc_chread(Chan *chan, void *data, size_t size)
+{
+    return chan_read(chan, data, size);
 }
 

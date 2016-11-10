@@ -12,7 +12,7 @@
 #include "internal.h"
 
 // Holds corresponding scheduler for each pthread
-pthread_key_t g_key_sched;
+static pthread_key_t g_key_sched;
 static pthread_once_t g_key_once = PTHREAD_ONCE_INIT;
 
 static
