@@ -49,7 +49,7 @@ void timerFxn(void)
 {
     Chan *d = ARGN(0);
     int repeat = 10000;
-    int runs = 50;
+    int runs = 100;
     clock_t start, stop;
     double time_spent, sum;
 

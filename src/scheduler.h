@@ -10,7 +10,7 @@
 
 struct Scheduler {
     uint64_t     id;
-    ucontext_t   ctx;
+    Ctx          ctx;
     size_t       stack_size;
     struct Proc  *curr_proc;
 

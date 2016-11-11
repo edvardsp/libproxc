@@ -9,8 +9,7 @@
 #include "util/debug.h"
 #include "internal.h"
 
-static
-void _proc_mainfxn(Proc *proc)
+void proc_mainfxn(Proc *proc)
 {
     ASSERT_NOTNULL(proc);
     ASSERT_NOTNULL(proc->fxn);
@@ -24,9 +23,10 @@ void _proc_mainfxn(Proc *proc)
 
     proc->fxn();
 
-    proc->state = PROC_ENDED;
+    PDEBUG("proc_mainfxn done\n");
 
-    PDEBUG("_proc_mainfxn done\n");
+    proc->state = PROC_ENDED;
+    proc_yield(proc);
 }
 
 Proc* proc_self(void)
@@ -74,11 +74,7 @@ int proc_create(Proc **new_proc, ProcFxn fxn)
     proc->proc_build = NULL;
 
     /* configure context */
-    ASSERT_0(getcontext(&proc->ctx));
-    proc->ctx.uc_link          = &sched->ctx;
-    proc->ctx.uc_stack.ss_sp   = proc->stack.ptr;
-    proc->ctx.uc_stack.ss_size = proc->stack.size;
-    makecontext(&proc->ctx, (void(*)(void))_proc_mainfxn, 1, proc);
+    ctx_init(&proc->ctx, proc);
 
     *new_proc = proc;
 
@@ -125,6 +121,6 @@ void proc_yield(Proc *proc)
                      : proc->sched;
 
     PDEBUG("yielding\n");
-    scheduler_switch(&sched->curr_proc->ctx, &sched->ctx);
+    ctx_switch(&sched->curr_proc->ctx, &sched->ctx);
 }
 

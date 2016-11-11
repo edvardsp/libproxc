@@ -4,7 +4,6 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <ucontext.h>
 
 #include "util/queue.h"
 #include "internal.h"
@@ -21,7 +20,7 @@ enum ProcState {
 
 struct Proc {
     uint64_t        id;
-    ucontext_t      ctx;
+    Ctx             ctx;
     enum ProcState  state;
 
     /* fxn and args */

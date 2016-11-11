@@ -3,12 +3,14 @@
 #define INTERNAL_H__
 
 #include <stdarg.h>
-#include <ucontext.h>
 #include <pthread.h>
 
 #include "util/queue.h"
 #include "util/tree.h"
 #include "util/debug.h"
+
+#include "context.h"
+
 
 #define PROXC_NULL  ((void *)-1)
 #define MAX_STACK_SIZE  (128 * 1024)
@@ -39,6 +41,7 @@ struct Guard;
 struct Alt;
 
 /* typedefs for internal use */
+// Ctx is defined in context.h, as it is architecture dependent
 typedef struct Proc Proc;
 typedef struct Scheduler Scheduler;
 
@@ -64,11 +67,15 @@ TAILQ_HEAD(BuilderQ, Builder);
 TAILQ_HEAD(GuardQ, Guard);
 
 /* function declarations */
+void ctx_init(Ctx *ctx, Proc *proc);
+void ctx_switch(Ctx *from, Ctx *to);
+
+void  proc_mainfxn(Proc *proc);
 Proc* proc_self(void);
-int  proc_create(Proc **new_proc, ProcFxn fxn);
-void proc_free(Proc *proc);
-int  proc_setargs(Proc *proc, va_list args);
-void proc_yield(Proc *proc);
+int   proc_create(Proc **new_proc, ProcFxn fxn);
+void  proc_free(Proc *proc);
+int   proc_setargs(Proc *proc, va_list args);
+void  proc_yield(Proc *proc);
 
 Scheduler* scheduler_self(void);
 int  scheduler_create(Scheduler **new_sched);
@@ -94,15 +101,6 @@ void   alt_free(Alt *alt);
 void   alt_addguard(Alt *alt, Guard *guard);
 int    alt_accept(Alt *alt, Guard *guard);
 int    alt_select(Alt *alt);
-
-/* static inline functions */
-static inline
-int scheduler_switch(ucontext_t *from, ucontext_t *to)
-{
-    int ret = swapcontext(from, to);
-    ASSERT_0(ret);
-    return ret;
-}
 
 /* implementation of corresponding types and structs */
 /* must be after the declaration of the types */

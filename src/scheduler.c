@@ -54,7 +54,7 @@ int scheduler_create(Scheduler **new_sched)
     ASSERT_0(pthread_once(&g_key_once, _scheduler_key_create));
     ASSERT_0(pthread_setspecific(g_key_sched, sched));
     // and context
-    ASSERT_0(getcontext(&sched->ctx));
+    ctx_init(&sched->ctx, NULL);
 
     TAILQ_INIT(&sched->readyQ);
     TAILQ_INIT(&sched->altQ);
@@ -214,7 +214,7 @@ procFound:
         sched->curr_proc = curr_proc;
         sched->curr_proc->state = PROC_RUNNING;
 
-        scheduler_switch(&sched->ctx, &sched->curr_proc->ctx);
+        ctx_switch(&sched->ctx, &sched->curr_proc->ctx);
 
         switch (sched->curr_proc->state) {
         case PROC_RUNNING:
