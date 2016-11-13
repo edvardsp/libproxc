@@ -50,17 +50,17 @@ int proc_create(Proc **new_proc, ProcFxn fxn)
     memset(proc, 0, sizeof(Proc));
 
     Scheduler *sched = scheduler_self();
-    if (!(proc->stack.ptr = malloc(sched->stack_size))) {
-        free(proc);
-        PERROR("malloc failed for Proc stack\n");
-        return errno;
-    }
-
-    /* if (posix_memalign(&proc->stack, (size_t)getpagesize(), sched->stack_size)) { */
+    /* if (!(proc->stack.ptr = malloc(sched->stack_size))) { */
     /*     free(proc); */
-    /*     PERROR("posix_memalign failed\n"); */
+    /*     PERROR("malloc failed for Proc stack\n"); */
     /*     return errno; */
     /* } */
+
+    if (posix_memalign(&proc->stack.ptr, (size_t)getpagesize(), sched->stack_size)) {
+        free(proc);
+        PERROR("posix_memalign failed\n");
+        return errno;
+    }
 
     /* set fxn and args */
     proc->fxn = fxn;
