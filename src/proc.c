@@ -11,6 +11,9 @@
 
 void proc_mainfxn(Proc *proc)
 {
+//#if defined(CTX_IMPL) && defined(__x86_64__)
+//    __asm__ volatile ("movq 0x10(%%rbp), %0\n" : "=r" (proc));
+//#endif
     ASSERT_NOTNULL(proc);
     ASSERT_NOTNULL(proc->fxn);
 
