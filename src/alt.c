@@ -3,9 +3,9 @@
 
 #include "internal.h"
 
-Guard* alt_guardcreate(ChanEnd *ch_end, void *out, size_t size)
+Guard* alt_guardcreate(Chan *ch, void *data, size_t size)
 {
-    ASSERT_NOTNULL(ch_end);
+    ASSERT_NOTNULL(ch);
 
     /* alloc GUARD struct */
     Guard *guard;
@@ -17,9 +17,18 @@ Guard* alt_guardcreate(ChanEnd *ch_end, void *out, size_t size)
     /* set struct members */
     guard->key       = -1;
     guard->alt       = NULL;
-    guard->ch_end    = ch_end;
-    guard->data.ptr  = out;
+    guard->chan      = ch;
+    guard->data.ptr  = data;
     guard->data.size = size;
+
+    struct ChanEnd ch_end = {
+        .type = CHAN_ALTER,
+        .data = data,
+        .chan = ch,
+        .proc = NULL,
+        .guard = guard
+    };
+    guard->ch_end = ch_end;
 
     return guard;
 }
@@ -27,9 +36,6 @@ Guard* alt_guardcreate(ChanEnd *ch_end, void *out, size_t size)
 void alt_guardfree(Guard *guard)
 {
     if (!guard) return;
-
-    /* reset CHANEND */
-    guard->ch_end->guard = NULL;
 
     free(guard);
 }
@@ -45,9 +51,10 @@ Alt* alt_create(void)
 
     alt->key_count   = 0;
     alt->is_accepted = 0;
-    alt->accepted    = NULL;
+    alt->key_accept  = -1;
     alt->guards.num  = 0;
     TAILQ_INIT(&alt->guards.Q);
+    alt->alt_proc = proc_self();
 
     return alt;
 }
@@ -78,47 +85,46 @@ void alt_addguard(Alt *alt, Guard *guard)
     PDEBUG("AltGuard %d active\n", key);
     guard->key = key;
     guard->alt = alt; 
+    guard->ch_end.proc = alt->alt_proc;
 
     alt->guards.num++;
     TAILQ_INSERT_TAIL(&alt->guards.Q, guard, node);
 }
 
-int alt_accept(Alt *alt, Guard *guard)
+int alt_accept(Guard *guard)
 {
-    ASSERT_NOTNULL(alt);
     ASSERT_NOTNULL(guard);
 
+    Alt *alt = guard->alt;
     /* FIXME atomic compare and swap */
     if (!alt->is_accepted) {
         PDEBUG("alt_accept succeded!\n");
         alt->is_accepted = 1;
-        alt->accepted = guard;
+        alt->key_accept = guard->key;
         return 1;
     }
     PDEBUG("alt_accept failed\n");
     return 0;
 }
 
-int alt_enable(Alt *alt, Guard *guard)
+int alt_enable(Guard *guard)
 {
-    ASSERT_NOTNULL(alt);
     ASSERT_NOTNULL(guard);
-
-    ChanEnd *ch_end = guard->ch_end;
-    ASSERT_NOTNULL(ch_end);
-
-    ch_end->guard = guard;
-    //chan_altenable(ch_end, guard->data.ptr, guard->data.size);
-
-    return alt->is_accepted;
+    
+    return chan_altread(guard->chan, guard, guard->data.ptr, guard->data.size);
 }
 
-void alt_disable(Alt *alt, Guard *guard)
+void alt_disable(Guard *guard)
 {
-    ASSERT_NOTNULL(alt);
     ASSERT_NOTNULL(guard);
+    
 
-    //chan_altdisable(guard->ch_end);
+    Chan *chan = guard->chan;
+    if (TAILQ_EMPTY(&chan->altQ)) {
+        return;
+    }
+    ChanEnd *ch_end = &guard->ch_end;
+    TAILQ_REMOVE(&chan->altQ, ch_end, node);
 }
 
 int alt_select(Alt *alt)
@@ -129,7 +135,7 @@ int alt_select(Alt *alt)
 
     Guard *guard;
     TAILQ_FOREACH(guard, &alt->guards.Q, node) {
-        if (alt_enable(alt, guard)) {
+        if (alt_enable(guard)) {
             goto AltAccepted;
         }
     }
@@ -144,11 +150,10 @@ int alt_select(Alt *alt)
 AltAccepted: /* Only one guard is accepted from here */
 
     TAILQ_FOREACH_REVERSE(guard, &alt->guards.Q, GuardQ, node) {
-        alt_disable(alt, guard);
+        alt_disable(guard);
     }
 
 
     /* from here, winner contains the winning GUARD */
-    ASSERT_NOTNULL(alt->accepted);
-    return alt->accepted->key;
+    return alt->key_accept;
 }

@@ -30,6 +30,7 @@ struct Chan {
     size_t  data_size;
     
     struct ChanEndQ  endQ;
+    struct ChanEndQ  altQ;
 };
 
 #endif /* CHAN_H__ */

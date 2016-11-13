@@ -1,53 +1,77 @@
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <time.h>
 
 #include "proxc.h"
 
-void generate(void)
-{
-    Chan *chlong = ARGN(0);
+void fxn(void) 
+{ 
+    Chan *ch = ARGN(0);
+    long id = (long)(long *)ARGN(1);
+    
+    printf("fxn%ld: start\n", id);
 
     int running = 1;
-    long i = 2;
     while (running) {
-        CHWRITE(chlong, &i, long);
-        i++;
+        long value = id;
+        printf("fxn%ld: trying to write %ld\n", id, value);
+        CHWRITE(ch, &value, sizeof(long));
+        printf("fxn%ld: succeded\n", id);
     }
+
+    printf("fxn%ld: stop\n", id);
 }
 
-void filter(void)
+__attribute__((noreturn))
+void foofunc(void)
 {
-    Chan *in_chlong = ARGN(0);
-    Chan *out_chlong = ARGN(1);
-    long prime = (long)(long *)ARGN(2);
-    
-    int running = 1;
-    long i;
-    while (running) {
-        CHREAD(in_chlong, &i, long);
-        if (i % prime != 0) {
-            CHWRITE(out_chlong, &i, long);
+    printf("foofunc: start\n");
+
+    enum { NUM_WRITERS = 3 };
+
+    Chan *chs[NUM_WRITERS];
+    for (long i = 0; i < NUM_WRITERS; i++) {
+        chs[i] = CHOPEN(long);
+        GO(PROC(fxn, chs[i], (void *)i));
+    }
+
+    int x = 2, y = 4;
+    long val1, val2;
+    for (int i = 0; i < 10; i++) {
+        printf("foofunc: round %d\n", i);
+        switch(ALT(
+            GUARD(i  < y, chs[0], &val1, long),
+            GUARD(i  > x, chs[1], &val2, long),
+            GUARD(1,      chs[2], &val1, long)
+        )) {
+        case 0: // guard 0
+            printf("\tguard 0 accepted, %ld\n", val1);
+            break;
+        case 1: // guard 1
+            printf("\tguard 1 accepted, %ld\n", val2);
+            break;
+        case 2: // guard 2
+            printf("\tguard 2 accepted, %ld\n", val2);
+            break;
         }
     }
+
+    for (int i = 0; i < NUM_WRITERS; i++)
+        CHCLOSE(chs[i]);
+
+    printf("foofunc: ended\n");
+    exit(0);
 }
 
-void proxc(void)
+int main(int argc, char **argv)
 {
-    enum { NUM_PRIMES = 100000 };
+    (void)argc; (void)argv;
+    printf("main start\n");
 
-    Chan *chlong = CHOPEN(long);
-    GO(PROC(generate, chlong));
-    long prime;
-    for (long i = 0; i < NUM_PRIMES; i++) {
-        CHREAD(chlong, &prime, long);
-        //printf("%ld: %ld\n", i, prime);
-        Chan *ch1long = CHOPEN(long);
-        GO(PROC(filter, chlong, ch1long, (void *)prime));
-        chlong = ch1long;
-    }
+    proxc_start(foofunc);
+    
+    return 0;
 }
 
-int main(void) 
-{
-    proxc_start(proxc);
-}

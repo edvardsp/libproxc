@@ -245,13 +245,13 @@ int proxc_run(Builder *root)
     return 0;
 }
 
-Guard* proxc_guard(int cond, ChanEnd *ch_end, void *out, size_t size)
+Guard* proxc_guard(int cond, Chan *chan, void *out, size_t size)
 {
-    ASSERT_NOTNULL(ch_end);
+    ASSERT_NOTNULL(chan);
     
     /* if cond is true, return a guard, else NULL */
     return (cond) 
-        ? alt_guardcreate(ch_end, out, size)
+        ? alt_guardcreate(chan, out, size)
         : NULL;
 }
 
