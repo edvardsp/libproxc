@@ -33,14 +33,12 @@ void filter(void)
 
 void proxc(void)
 {
-    enum { NUM_PRIMES = 100000 };
-
     Chan *chlong = CHOPEN(long);
     GO(PROC(generate, chlong));
     long prime;
-    for (long i = 0; i < NUM_PRIMES; i++) {
+    for (long i = 0; i < 1000; i++) {
         CHREAD(chlong, &prime, long);
-        //printf("%ld: %ld\n", i, prime);
+        printf("%ld: %ld\n", i, prime);
         Chan *ch1long = CHOPEN(long);
         GO(PROC(filter, chlong, ch1long, (void *)prime));
         chlong = ch1long;

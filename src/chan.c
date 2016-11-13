@@ -16,7 +16,7 @@ Chan* chan_create(size_t data_size)
         return NULL;
     }
 
-    PDEBUG("CHAN of type size %zu created\n", data_size);
+    //PDEBUG("CHAN of type size %zu created\n", data_size);
 
     /* set CHAN members */
     chan->data_size = data_size;
@@ -29,7 +29,7 @@ void chan_free(Chan *chan)
 {
     if (!chan) return;
 
-    PDEBUG("CHAN closed\n");
+    //PDEBUG("CHAN closed\n");
     free(chan);
 }
 
@@ -50,7 +50,7 @@ int chan_write(Chan *chan, void *data, size_t size)
 
         // >> release lock >>
 
-        PDEBUG("CHAN write, reader found\n");
+        //PDEBUG("CHAN write, reader found\n");
         
         /* copy over data */
         memcpy(first->data, data, size);
@@ -74,7 +74,7 @@ int chan_write(Chan *chan, void *data, size_t size)
 
     // >> release lock >>
     
-    PDEBUG("CHAN write, no readers, enqueue\n");
+    //PDEBUG("CHAN write, no readers, enqueue\n");
 
     /* yield until reader reschedules this end */
     proc->state = PROC_CHANWAIT;
@@ -100,7 +100,7 @@ int chan_read(Chan *chan, void *data, size_t size)
 
         // >> release lock >>
         
-        PDEBUG("CHAN read, writer found\n");
+        //PDEBUG("CHAN read, writer found\n");
         
         /* copy over data */
         memcpy(data, first->data, size);
@@ -124,7 +124,7 @@ int chan_read(Chan *chan, void *data, size_t size)
     
     // >> release lock >>
 
-    PDEBUG("CHAN read, no writers, enqueue\n");
+    //PDEBUG("CHAN read, no writers, enqueue\n");
 
     /* yield until writer reschedules this end */
     proc->state = PROC_CHANWAIT;

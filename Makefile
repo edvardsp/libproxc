@@ -16,7 +16,7 @@ ifeq ($(CC),clang)
 WARN += -Weverything -Wno-reserved-id-macro -Wno-gnu-zero-variadic-macro-arguments \
 	   -Wno-missing-prototypes -Wno-padded -Wno-switch-enum
 endif
-DEFINES = -D_GNU_SOURCE
+DEFINES = -D_GNU_SOURCE -DCTX_IMPL
 INCLUDES = -I$(SRC_DIR)
 
 CFLAGS = -std=gnu99 $(OPT) $(WARN) $(DEFINES) $(INCLUDES)

@@ -11,6 +11,9 @@
 
 void proc_mainfxn(Proc *proc)
 {
+//#if defined(CTX_IMPL) && defined(__x86_64__)
+//    __asm__ volatile ("movq 0x10(%%rbp), %0\n" : "=r" (proc));
+//#endif
     ASSERT_NOTNULL(proc);
     ASSERT_NOTNULL(proc->fxn);
 
@@ -50,17 +53,17 @@ int proc_create(Proc **new_proc, ProcFxn fxn)
     memset(proc, 0, sizeof(Proc));
 
     Scheduler *sched = scheduler_self();
-    if (!(proc->stack.ptr = malloc(sched->stack_size))) {
-        free(proc);
-        PERROR("malloc failed for Proc stack\n");
-        return errno;
-    }
-
-    /* if (posix_memalign(&proc->stack, (size_t)getpagesize(), sched->stack_size)) { */
+    /* if (!(proc->stack.ptr = malloc(sched->stack_size))) { */
     /*     free(proc); */
-    /*     PERROR("posix_memalign failed\n"); */
+    /*     PERROR("malloc failed for Proc stack\n"); */
     /*     return errno; */
     /* } */
+
+    if (posix_memalign(&proc->stack.ptr, (size_t)getpagesize(), sched->stack_size)) {
+        free(proc);
+        PERROR("posix_memalign failed\n");
+        return errno;
+    }
 
     /* set fxn and args */
     proc->fxn = fxn;

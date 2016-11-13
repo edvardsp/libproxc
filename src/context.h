@@ -8,17 +8,19 @@
 
 #ifdef CTX_IMPL
 
-#if defined(__i386__) // 32-bit
+#if !defined(__i386__) && !defined(__x86_64__)
+#error "Only i386 and x86_64 architecture is supported"
+#endif
+
 struct Ctx {
+#if defined(__i386__) // 32-bit
     uint32_t ebx;
     uint32_t esi;
     uint32_t edi;
     uint32_t ebp;
     uint32_t esp;
     uint32_t eip;
-};
 #elif defined(__x86_64__) // 64-bit
-struct Ctx {
     uint64_t rbx;
     uint64_t rsp;
     uint64_t rbp;
@@ -27,14 +29,13 @@ struct Ctx {
     uint64_t r14;
     uint64_t r15;
     uint64_t rip;
-};
-#else
-#error "This architecture is not supported"
+    uint64_t rdi; // this is for arg1 in proc_mainfxn
 #endif /* __i386__ vs __x86_64__ */
+};
 
 typedef struct Ctx Ctx;
 
-#else 
+#else /* !CTX_IMPL */
 
 #include <ucontext.h>
 
