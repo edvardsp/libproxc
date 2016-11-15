@@ -84,26 +84,46 @@ void proc_free(Proc *proc)
     free(proc);
 }
 
-int proc_setargs(Proc *proc, va_list args)
+static inline
+int _proc_copyargs(Proc *proc, void **buf, size_t buf_size)
 {
-    /* FIXME for over 16 args */
-    #define SMALL_SIZE_OPT 16
-    void *tmp_args[SMALL_SIZE_OPT]; 
-    void *xarg = va_arg(args, void *);
-    while (xarg != PROXC_NULL) {
-        ASSERT_TRUE(proc->args.num < SMALL_SIZE_OPT);
-        tmp_args[proc->args.num++] = xarg;
-        xarg = va_arg(args, void *);
-    } 
-
-    /* allocate args array for proc */
-    if (!(proc->args.ptr = malloc(sizeof(void *) * proc->args.num))) {
-        PERROR("malloc failed for Proc Args\n");
+    size_t new_num = proc->args.num + buf_size;
+    void *ptr;
+    if (!(ptr = realloc(proc->args.ptr, sizeof(void *) * new_num))) {
+        free(proc);
+        PERROR("realloc failed for Proc Args\n");
         return errno;
     }
+    proc->args.ptr = ptr;
+    memcpy(proc->args.ptr + proc->args.num, buf, sizeof(void *) * buf_size);
+    proc->args.num += buf_size;
+    return 0;
+}
 
-    /* copy over args */
-    memcpy(proc->args.ptr, tmp_args, sizeof(void *) * proc->args.num);
+int proc_setargs(Proc *proc, va_list args)
+{
+    enum { ARGS_N = 32 };
+    void *tmp_args[ARGS_N];
+    size_t curr_n = 0;
+    int ret;
+
+    void *xarg = va_arg(args, void *);
+    while (xarg != PROXC_NULL) {
+        tmp_args[curr_n++] = xarg;
+        xarg = va_arg(args, void *);
+
+        /* if tmp_args is full, realloc and copy over into args */
+        if (curr_n == ARGS_N) {
+            ret = _proc_copyargs(proc, tmp_args, ARGS_N);
+            ASSERT_0(ret);
+            curr_n = 0;
+        }
+    } 
+
+    if (curr_n > 0) {
+        ret = _proc_copyargs(proc, tmp_args, curr_n);
+        ASSERT_0(ret);
+    }
 
     return 0;
 }
