@@ -69,6 +69,7 @@ TAILQ_HEAD(GuardQ, Guard);
 /* function declarations */
 void ctx_init(Ctx *ctx, Proc *proc);
 void ctx_switch(Ctx *from, Ctx *to);
+void ctx_madvise(Proc *proc);
 
 void  proc_mainfxn(Proc *proc);
 Proc* proc_self(void);

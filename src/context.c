@@ -1,6 +1,8 @@
 
+#include <sys/mman.h>
 
 #include "util/debug.h"
+#include "util/util.h"
 #include "internal.h"
 
 #ifdef CTX_IMPL
@@ -10,21 +12,21 @@
  */
 void _ctx_get(Ctx *ctx);
 __asm__(
-"   .global _ctx_get           \n"
-"_ctx_get:                     \n"
+"   .global _ctx_get         \n"
+"_ctx_get:                   \n"
 #if defined(__i386__)
-"   movl    0x04(%%esp), %%edx \n" // ctx = %edx
-"                              \n"
-"   movl    %%ebx, 0x00(%%edx) \n" // %ebx
-"   movl    %%esi, 0x04(%%edx) \n" // %esi
-"   movl    %%edi, 0x08(%%edx) \n" // %edi
-"   movl    %%ebp, 0x0C(%%edx) \n" // %ebp
-"   movl    %%esp, 0x10(%%edx) \n" // %esp
-"                              \n"
-"   movl    (%%esp), %%eax     \n" // %eip
-"   movl    %%eax, 0x14(%%edx) \n" 
-"                              \n"
-"   xor     %%eax, %%eax       \n"
+"   movl    0x04(%esp), %edx \n" // ctx = %edx
+"                            \n"
+"   movl    %ebx, 0x00(%edx) \n" // %ebx
+"   movl    %esi, 0x04(%edx) \n" // %esi
+"   movl    %edi, 0x08(%edx) \n" // %edi
+"   movl    %ebp, 0x0C(%edx) \n" // %ebp
+"   movl    %esp, 0x10(%edx) \n" // %esp
+"                            \n"
+"   movl    (%esp), %eax     \n" // %eip
+"   movl    %eax, 0x14(%edx) \n" 
+"                            \n"
+"   xor     %eax, %eax       \n"
 #elif defined(__x86_64__)
 "   # %rdi is ctx            \n"
 "   movq    %rbx, 0x00(%rdi) \n" // %rbx
@@ -138,6 +140,7 @@ __asm__(
 "   ret                         \n"
 );
 
+
 #else
 
 void ctx_init(Ctx *ctx, Proc *proc)
@@ -166,3 +169,37 @@ void ctx_switch(Ctx *from, Ctx *to)
 
 #endif /* CTX_IMPL */
 
+void ctx_madvise(Proc *proc)
+{
+    ASSERT_NOTNULL(proc);
+
+    Ctx *ctx = &proc->ctx;
+    intptr_t sp;
+
+#if   defined(CTX_IMPL) && defined(__i386__) // 32-bit
+    sp = (intptr_t)ctx->esp;
+#elif defined(CTX_IMPL) && defined(__x86_64__) // 64-bit
+    sp = (intptr_t)ctx->rsp;
+#elif defined(__i386__) // 32-bit
+    sp = (intptr_t)ctx->uc_mcontext.gregs[REG_ESP];
+#elif defined(__x86_64__) // 64-bit
+    sp = (intptr_t)ctx->uc_mcontext.gregs[REG_RSP]; 
+#endif 
+
+    if (UNLIKELY(sp < (intptr_t)proc->stack.ptr)) {
+        PANIC("Stack overflow\n");
+    }
+
+    size_t unused_stack = (size_t)(sp - (intptr_t)proc->stack.ptr);
+    size_t used_stack = proc->stack.size - unused_stack;
+    size_t page_size = proc->sched->page_size;
+
+    #define page_floor(x) ((x) & ~(page_size - 1))
+    if (page_floor(used_stack) < page_floor(proc->stack.used)) {
+        int ret = madvise(proc->stack.ptr, page_floor(unused_stack), MADV_DONTNEED);
+        ASSERT_0(ret);
+        PANIC("yes\n");
+    }
+
+    proc->stack.used = used_stack;
+}

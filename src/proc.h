@@ -33,6 +33,7 @@ struct Proc {
     /* stack and size */
     struct {
         size_t  size;
+        size_t  used;
         void    *ptr;
     } stack;
     

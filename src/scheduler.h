@@ -9,9 +9,12 @@
 #include "internal.h"
 
 struct Scheduler {
-    uint64_t     id;
-    Ctx          ctx;
-    size_t       stack_size;
+    uint64_t  id;
+    Ctx       ctx;
+
+    size_t  stack_size;
+    size_t  page_size; 
+
     struct Proc  *curr_proc;
 
     /* different PROC queues and trees */

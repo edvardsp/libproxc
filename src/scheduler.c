@@ -48,6 +48,7 @@ int scheduler_create(Scheduler **new_sched)
     memset(sched, 0, sizeof(Scheduler));
 
     sched->stack_size = MAX_STACK_SIZE;
+    sched->page_size = (size_t)sysconf(_SC_PAGESIZE);
 
     /* FIXME */
     // Save scheduler for this pthread
@@ -215,6 +216,7 @@ procFound:
         sched->curr_proc->state = PROC_RUNNING;
 
         ctx_switch(&sched->ctx, &sched->curr_proc->ctx);
+        ctx_madvise(sched->curr_proc);
 
         switch (sched->curr_proc->state) {
         case PROC_RUNNING:

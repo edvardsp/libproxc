@@ -40,22 +40,14 @@ int proc_create(Proc **new_proc, ProcFxn fxn)
 {
     ASSERT_NOTNULL(new_proc);
     ASSERT_NOTNULL(fxn);
-    /* arg can be NULL */
 
     Proc *proc;
     if (!(proc = malloc(sizeof(Proc)))) {
         PERROR("malloc failed for Proc\n");
         return errno;
     }
-    memset(proc, 0, sizeof(Proc));
 
     Scheduler *sched = scheduler_self();
-    /* if (!(proc->stack.ptr = malloc(sched->stack_size))) { */
-    /*     free(proc); */
-    /*     PERROR("malloc failed for Proc stack\n"); */
-    /*     return errno; */
-    /* } */
-
     if (posix_memalign(&proc->stack.ptr, (size_t)getpagesize(), sched->stack_size)) {
         free(proc);
         PERROR("posix_memalign failed\n");
@@ -69,6 +61,7 @@ int proc_create(Proc **new_proc, ProcFxn fxn)
 
     /* configure members */
     proc->stack.size = sched->stack_size;
+    proc->stack.used = 0;
     proc->state = PROC_READY;
     proc->sched = sched;
     proc->proc_build = NULL;
