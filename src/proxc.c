@@ -82,11 +82,11 @@ void proxc_start(ProcFxn fxn)
 
 void* proxc_argn(size_t n)
 {
-    Proc *proc = scheduler_self()->curr_proc;
+    Proc *proc = proc_self();
     /* if n is index out of range, return NULL */
-    if (n >= proc->args.num) return NULL;
-    
-    return proc->args.ptr[n];
+    return (n < proc->args.num) 
+        ? proc->args.ptr[n]
+        : NULL;
 }
 
 void proxc_yield(void)
