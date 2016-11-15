@@ -85,3 +85,98 @@ void csp_runbuild(Builder *build)
     }
 }
 
+void csp_cleanupbuild(Builder *build)
+{
+    ASSERT_NOTNULL(build);
+
+    Builder *child;
+    switch (build->header.type) {
+    case PROC_BUILD:
+        PDEBUG("proc_build cleanup\n");
+        /* proc_build has no childs, and the scheduler frees */
+        /* the actual PROC struct, so only free the proc_build */
+        break;
+    case PAR_BUILD: {
+        PDEBUG("par_build cleanup\n");
+        /* recursively free all childs */
+        ParBuild *par_build = (ParBuild *)build;
+        TAILQ_FOREACH(child, &par_build->childQ, header.node) {
+            csp_cleanupbuild(child);
+        }
+        break;
+    }
+    case SEQ_BUILD: {
+        PDEBUG("seq_build cleanup\n");
+        SeqBuild *seq_build = (SeqBuild *)build;
+        TAILQ_FOREACH(child, &seq_build->childQ, header.node) {
+            csp_cleanupbuild(child);
+        }
+        break;
+    }
+    }
+
+    /* when childs are freed, free itself */
+    csp_free(build);
+}
+
+void csp_parsebuild(Builder *build)
+{
+    ASSERT_NOTNULL(build);
+    /* FIXME atomic */
+
+    int build_done = 0;
+    switch (build->header.type) {
+    case PROC_BUILD: {
+        /* a finished proc_build always causes cleanup */
+        PDEBUG("proc_build finished\n");
+        build_done = 1;
+        break;
+    }
+    case PAR_BUILD: {
+        ParBuild *par_build = (ParBuild *)build;
+        /* if par_build has no more active childs, do cleanup */
+        if (--par_build->num_childs == 0) {
+            PDEBUG("par_build finished\n");
+            build_done = 1;
+            break;
+        }
+        /* if num_childs != 0 means still running childs */
+        break;
+    }
+    case SEQ_BUILD: {
+        SeqBuild *seq_build = (SeqBuild *)build;
+        if (--seq_build->num_childs == 0) {
+            PDEBUG("seq_build finished\n");
+            build_done = 1;
+            break;
+        }
+
+        /* run next build in SEQ list */
+        Builder *cbuild= TAILQ_NEXT(seq_build->curr_build, header.node);
+        ASSERT_NOTNULL(cbuild);
+        csp_runbuild(cbuild);
+        seq_build->curr_build = cbuild;
+        break;
+    }
+    }
+
+    if (build_done) {
+        /* if root, then cleanup entire tree */
+        if (build->header.is_root) {
+            /* if run_proc defined, then root of build  */
+            /* is in a RUN, else in GO, then no need */
+            /* to reschedule anything */
+            Proc *run_proc = build->header.run_proc;
+            if (run_proc != NULL) {
+                run_proc->state = PROC_READY;
+                scheduler_addproc(run_proc);
+            }
+            csp_cleanupbuild(build);
+        }
+        /* or schedule the underlying parent */
+        else  {
+            Builder *parent = build->header.parent;
+            csp_parsebuild(parent);
+        }
+    }
+}

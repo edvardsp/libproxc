@@ -95,6 +95,8 @@ void* csp_create(enum BuildType type);
 void csp_free(Builder *build);
 int csp_insertchilds(size_t *num_childs, Builder *builder, struct BuilderQ *childQ, va_list vargs);
 void csp_runbuild(Builder *build);
+void csp_cleanupbuild(Builder *build);
+void csp_parsebuild(Builder *build);
 
 Guard* alt_guardcreate(Chan *ch, void *data, size_t size);
 void   alt_guardfree(Guard *guard);
