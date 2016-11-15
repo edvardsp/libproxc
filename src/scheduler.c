@@ -26,7 +26,9 @@ void _scheduler_key_free(void *data)
 static
 void _scheduler_key_create(void)
 {
-    ASSERT_0(pthread_key_create(&g_key_sched, _scheduler_key_free));
+    int ret;
+    ret = pthread_key_create(&g_key_sched, _scheduler_key_free);
+    ASSERT_0(ret);
 }
 
 Scheduler* scheduler_self(void)
