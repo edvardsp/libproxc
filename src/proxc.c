@@ -1,11 +1,11 @@
 
 #include <stddef.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <errno.h>
 #include <unistd.h>
 #include <sched.h>
 #include <pthread.h>
-#include <features.h>
 
 #include "util/debug.h"
 #include "internal.h"
@@ -92,6 +92,18 @@ void* proxc_argn(size_t n)
 void proxc_yield(void)
 {
     proc_yield(NULL);
+}
+
+void proxc_sleep(uint64_t usec)
+{
+    Scheduler *sched = scheduler_self();
+    if (usec > 0) {
+        sched->curr_proc->sleep_us = usec;
+        scheduler_sleep(sched, sched->curr_proc);
+        return;
+    }
+
+    proc_yield(sched->curr_proc);
 }
 
 /*

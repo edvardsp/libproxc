@@ -36,6 +36,18 @@ Scheduler* scheduler_self(void)
     return sched;
 }
 
+static
+int _scheduler_sleep_cmp(Proc *p1, Proc *p2)
+{
+    ASSERT_NOTNULL(p1);
+    ASSERT_NOTNULL(p2);
+    return (p1->sleep_us  < p2->sleep_us) ? -1
+         : (p1->sleep_us == p2->sleep_us) ?  0
+                                          :  1;
+}
+
+RB_GENERATE(ProcRB, Proc, sleepRB_node, _scheduler_sleep_cmp)
+
 int scheduler_create(Scheduler **new_sched)
 {
     ASSERT_NOTNULL(new_sched);
@@ -45,15 +57,18 @@ int scheduler_create(Scheduler **new_sched)
         PERROR("malloc failed for Scheduler\n");
         return errno;
     }
-    memset(sched, 0, sizeof(Scheduler));
 
+    /* configure members */
     sched->stack_size = MAX_STACK_SIZE;
-    sched->page_size = (size_t)sysconf(_SC_PAGESIZE);
+    sched->page_size  = (size_t)sysconf(_SC_PAGESIZE);
 
-    /* FIXME */
     // Save scheduler for this pthread
-    ASSERT_0(pthread_once(&g_key_once, _scheduler_key_create));
-    ASSERT_0(pthread_setspecific(g_key_sched, sched));
+    int ret;
+    ret = pthread_once(&g_key_once, _scheduler_key_create);
+    ASSERT_0(ret);
+    ret = pthread_setspecific(g_key_sched, sched);
+    ASSERT_0(ret);
+
     // and context
     ctx_init(&sched->ctx, NULL);
 
@@ -71,7 +86,6 @@ void scheduler_free(Scheduler *sched)
     if (!sched) return;
 
     /* FIXME cleanup Proc's in Qs */
-    memset(sched, 0, sizeof(Scheduler));
     free(sched);
 }
 
@@ -85,9 +99,14 @@ void scheduler_addproc(Proc *proc)
     if (proc->state == PROC_READY) {
         TAILQ_INSERT_TAIL(&sched->readyQ, proc, readyQ_next);
     }
-    else if (proc->state == PROC_ALTWAIT) {
-        /* FIXME */ 
-    }
+}
+
+void scheduler_sleep(Scheduler *sched, Proc *proc)
+{
+    ASSERT_NOTNULL(sched);
+    ASSERT_NOTNULL(proc);
+
+
 }
 
 static

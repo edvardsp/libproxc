@@ -37,6 +37,8 @@ struct Proc {
         void    *ptr;
     } stack;
     
+    uint64_t  sleep_us;
+
     /* scheduler related */
     struct Scheduler   *sched;
     TAILQ_ENTRY(Proc)  readyQ_next;

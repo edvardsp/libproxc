@@ -48,22 +48,23 @@ int proc_create(Proc **new_proc, ProcFxn fxn)
     }
 
     Scheduler *sched = scheduler_self();
-    if (posix_memalign(&proc->stack.ptr, (size_t)getpagesize(), sched->stack_size)) {
+    if (posix_memalign(&proc->stack.ptr, sched->page_size, sched->stack_size)) {
         free(proc);
         PERROR("posix_memalign failed\n");
         return errno;
     }
 
     /* set fxn and args */
-    proc->fxn = fxn;
+    proc->fxn      = fxn;
     proc->args.num = 0;
     proc->args.ptr = NULL;
 
     /* configure members */
     proc->stack.size = sched->stack_size;
     proc->stack.used = 0;
-    proc->state = PROC_READY;
-    proc->sched = sched;
+    proc->state      = PROC_READY;
+    proc->sleep_us   = 0;
+    proc->sched      = sched;
     proc->proc_build = NULL;
 
     /* configure context */

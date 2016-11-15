@@ -82,6 +82,7 @@ Scheduler* scheduler_self(void);
 int  scheduler_create(Scheduler **new_sched);
 void scheduler_free(Scheduler *sched);
 void scheduler_addproc(Proc *proc);
+void scheduler_sleep(Scheduler *sched, Proc *proc);
 int  scheduler_run(void);
 
 Chan *chan_create(size_t size);
