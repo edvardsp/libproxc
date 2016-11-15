@@ -195,7 +195,6 @@ void ctx_madvise(Proc *proc)
     if (page_floor(used_stack) < page_floor(proc->stack.used)) {
         int ret = madvise(proc->stack.ptr, page_floor(unused_stack), MADV_DONTNEED);
         ASSERT_0(ret);
-        PANIC("yes\n");
     }
 
     proc->stack.used = used_stack;
