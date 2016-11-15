@@ -4,7 +4,6 @@
 
 #include <stddef.h>
 
-#include "util/queue.h"
 #include "internal.h"
 
 struct Header {

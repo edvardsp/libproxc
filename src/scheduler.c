@@ -7,8 +7,6 @@
 #include <ucontext.h>
 #include <pthread.h>
 
-#include "util/debug.h"
-#include "util/queue.h"
 #include "internal.h"
 
 // Holds corresponding scheduler for each pthread
@@ -48,7 +46,8 @@ int _scheduler_sleep_cmp(Proc *p1, Proc *p2)
                                           :  1;
 }
 
-RB_GENERATE(ProcRB, Proc, sleepRB_node, _scheduler_sleep_cmp)
+RB_GENERATE(ProcRB_sleep, Proc, sleepRB_node, _scheduler_sleep_cmp)
+RB_GENERATE(ProcRB_altsleep, Proc, sleepRB_node, _scheduler_sleep_cmp)
 
 int scheduler_create(Scheduler **new_sched)
 {
@@ -76,7 +75,10 @@ int scheduler_create(Scheduler **new_sched)
 
     TAILQ_INIT(&sched->readyQ);
     TAILQ_INIT(&sched->altQ);
-    RB_INIT(&sched->sleepRB);
+    sched->sleep.num = 0;
+    RB_INIT(&sched->sleep.RB);
+    sched->altsleep.num = 0;
+    RB_INIT(&sched->altsleep.RB);
 
     *new_sched = sched;
 
@@ -91,42 +93,121 @@ void scheduler_free(Scheduler *sched)
     free(sched);
 }
 
-void scheduler_addproc(Proc *proc)
+void scheduler_addready(Proc *proc)
 {
     ASSERT_NOTNULL(proc);
 
-    PDEBUG("scheduler_addproc called\n");
+    PDEBUG("scheduler_addready called\n");
        
     Scheduler *sched = proc->sched;
-    if (proc->state == PROC_READY) {
-        TAILQ_INSERT_TAIL(&sched->readyQ, proc, readyQ_next);
-    }
+    proc->state = PROC_READY;
+    TAILQ_INSERT_TAIL(&sched->readyQ, proc, readyQ_next);
+}
+
+void scheduler_remready(Proc *proc)
+{
+    ASSERT_NOTNULL(proc);
+
+    Scheduler *sched = proc->sched;
+    TAILQ_REMOVE(&sched->readyQ, proc, readyQ_next);
 }
 
 void scheduler_addsleep(Proc *proc)
 {
     ASSERT_NOTNULL(proc);
 
+    PDEBUG("scheduler_addsleep called\n");
 
+    Scheduler *sched = proc->sched;
+    proc->state = PROC_SLEEPING;
+    size_t num_tries = 0;
+    enum { MAX_TRIES = 1000 };
+    while (RB_INSERT(ProcRB_sleep, &sched->sleep.RB, proc) && (num_tries++ < MAX_TRIES)) {
+        /* this means there is a key collision, increment usec */
+        ++proc->sleep_us;
+    }
+    ++sched->sleep.num;
+    ASSERT_TRUE(num_tries < MAX_TRIES);
 }
 
 void scheduler_remsleep(Proc *proc)
 {
     ASSERT_NOTNULL(proc);
 
+    Scheduler *sched = proc->sched;
+    RB_REMOVE(ProcRB_sleep, &sched->sleep.RB, proc);
+    --sched->sleep.num;
+}
 
+static
+void _scheduler_wakeup(Scheduler *sched)
+{
+    ASSERT_NOTNULL(sched);
+
+    if (RB_EMPTY(&sched->sleep.RB)) {
+        return;
+    } 
+
+    uint64_t now_us = gettimestamp();
+    Proc *proc;
+    while ((proc = RB_MIN(ProcRB_sleep, &sched->sleep.RB))) {
+        if (proc->sleep_us > now_us) {
+            break;
+        }
+        scheduler_remsleep(proc);
+        scheduler_addready(proc);
+    }
+}
+
+static inline
+int _scheduler_running(Scheduler *sched)
+{
+    ASSERT_NOTNULL(sched);
+
+    if (!TAILQ_EMPTY(&sched->readyQ)) {
+        return 1;
+    }
+    
+    Proc *proc;
+    uint64_t min_us = 0;
+    if (!RB_EMPTY(&sched->sleep.RB)) {
+        proc = RB_MIN(ProcRB_sleep, &sched->sleep.RB);
+        if (proc) {
+            min_us = proc->sleep_us;
+        }
+    }
+   
+    if (!RB_EMPTY(&sched->altsleep.RB)) {
+        proc = RB_MIN(ProcRB_altsleep, &sched->altsleep.RB);
+        if (proc) {
+            min_us = (proc->sleep_us < min_us) ? proc->sleep_us : min_us;
+        }
+    }
+
+    if (min_us > 0) {
+        /* FIXME */
+        uint64_t now_us = gettimestamp();
+        if (min_us > now_us) {
+            usleep((useconds_t)(min_us - now_us));
+        }
+        return 1;
+    }
+
+    return 0;
 }
 
 int scheduler_run(void)
 {
     Scheduler *sched = scheduler_self();
-    int running = 1;
     Proc *curr_proc;
-    while (running) {
-        PDEBUG("This is from scheduler!\n");
-        //usleep(500 * 1000);
 
-        /* find next proc to run */
+    while (_scheduler_running(sched)) {
+        PDEBUG("This is from scheduler!\n");
+
+        /* wake up sleeping PROC if timeout */
+        _scheduler_wakeup(sched);
+
+        /* find next PROC to run */
         /* check ready Q */
         if (!TAILQ_EMPTY(&sched->readyQ)) {
             curr_proc = TAILQ_FIRST(&sched->readyQ);
@@ -134,8 +215,8 @@ int scheduler_run(void)
             goto procFound;
         }
 
-        /* no proc found, break */
-            break;
+        /* no PROC found, reevaluate sched_running */
+        continue;
 
         /* from here, a PROC is found to resume */
 procFound:
@@ -150,8 +231,7 @@ procFound:
         switch (sched->curr_proc->state) {
         case PROC_RUNNING:
         case PROC_READY:
-            sched->curr_proc->state = PROC_READY;
-            scheduler_addproc(sched->curr_proc);
+            scheduler_addready(sched->curr_proc);
             break;
         case PROC_ENDED: {
             /* FIXME atomic */

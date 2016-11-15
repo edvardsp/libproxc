@@ -1,8 +1,6 @@
 
 #include <sys/mman.h>
 
-#include "util/debug.h"
-#include "util/util.h"
 #include "internal.h"
 
 #ifdef CTX_IMPL

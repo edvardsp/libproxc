@@ -3,7 +3,6 @@
 #include <string.h>
 #include <errno.h>
 
-#include "util/debug.h"
 #include "internal.h"
 
 Chan* chan_create(size_t data_size)
@@ -52,8 +51,7 @@ int chan_write(Chan *chan, void *data, size_t size)
             // >> release lock >>
 
             memcpy(first->data, data, size);
-            first->proc->state = PROC_READY;
-            scheduler_addproc(first->proc);
+            scheduler_addready(first->proc);
             return 1;
         }
     }
@@ -71,8 +69,7 @@ int chan_write(Chan *chan, void *data, size_t size)
         memcpy(first->data, data, size);
 
         /* resume reader */
-        first->proc->state = PROC_READY;
-        scheduler_addproc(first->proc);
+        scheduler_addready(first->proc);
         //proc_yield(proc);
         return 1;
     }
@@ -122,8 +119,7 @@ int chan_read(Chan *chan, void *data, size_t size)
         memcpy(data, first->data, size);
 
         /* resume writer */
-        first->proc->state = PROC_READY;
-        scheduler_addproc(first->proc);
+        scheduler_addready(first->proc);
         //proc_yield(proc);
         return 1;
     }
@@ -167,8 +163,7 @@ int chan_altread(Chan *chan, Guard *guard, void *data, size_t size)
 
             memcpy(guard->data.ptr, first->data, chan->data_size);
 
-            first->proc->state = PROC_READY;
-            scheduler_addproc(first->proc);
+            scheduler_addready(first->proc);
             return 1;
         }
     }

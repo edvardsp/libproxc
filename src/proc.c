@@ -6,7 +6,6 @@
 #include <unistd.h>
 #include <ucontext.h>
 
-#include "util/debug.h"
 #include "internal.h"
 
 void proc_mainfxn(Proc *proc)

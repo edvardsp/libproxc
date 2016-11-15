@@ -6,7 +6,6 @@
 #include <string.h>
 #include <errno.h>
 
-#include "util/debug.h"
 #include "internal.h"
 
 void* csp_create(enum BuildType type) {
@@ -64,7 +63,7 @@ void csp_runbuild(Builder *build)
     case PROC_BUILD: {
         PDEBUG("PROC_BUILD started\n");
         ProcBuild *proc_build = (ProcBuild *)build;
-        scheduler_addproc(proc_build->proc);
+        scheduler_addready(proc_build->proc);
         break;
     }
     case PAR_BUILD: {
@@ -168,8 +167,7 @@ void csp_parsebuild(Builder *build)
             /* to reschedule anything */
             Proc *run_proc = build->header.run_proc;
             if (run_proc != NULL) {
-                run_proc->state = PROC_READY;
-                scheduler_addproc(run_proc);
+                scheduler_addready(run_proc);
             }
             csp_cleanupbuild(build);
         }

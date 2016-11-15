@@ -7,7 +7,6 @@
 #include <sched.h>
 #include <pthread.h>
 
-#include "util/debug.h"
 #include "internal.h"
 
 static 
@@ -67,7 +66,7 @@ void proxc_start(ProcFxn fxn)
     scheduler_create(&sched);
     Proc *proc;
     proc_create(&proc, fxn);
-    scheduler_addproc(proc);
+    scheduler_addready(proc);
     scheduler_run();
 
     /* when returned from _proxc_pthreadfxn, assume program to be finished */
@@ -98,11 +97,11 @@ void proxc_sleep(uint64_t usec)
 {
     Proc *proc = proc_self();
     if (usec > 0) {
-        proc->sleep_us = usec;
+        proc->sleep_us = gettimestamp() + usec;
         scheduler_addsleep(proc);
-        return;
     }
     proc_yield(proc);
+    proc->sleep_us = 0;
 }
 
 /*

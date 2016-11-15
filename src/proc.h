@@ -5,17 +5,18 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "util/queue.h"
 #include "internal.h"
 
 enum ProcState {
     PROC_ERROR = 0,
     PROC_READY,
     PROC_RUNNING,
+    PROC_SLEEPING,
     PROC_ENDED,
     PROC_CHANWAIT,
     PROC_RUNWAIT,
-    PROC_ALTWAIT
+    PROC_ALTWAIT,
+    PROC_ALTSLEEP
 };
 
 struct Proc {

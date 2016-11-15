@@ -5,12 +5,12 @@
 #include <stdarg.h>
 #include <pthread.h>
 
+#include "util/debug.h"
+#include "util/util.h"
 #include "util/queue.h"
 #include "util/tree.h"
-#include "util/debug.h"
 
 #include "context.h"
-
 
 #define PROXC_NULL  ((void *)-1)
 #define MAX_STACK_SIZE  (128 * 1024)
@@ -58,7 +58,8 @@ typedef struct Alt Alt;
 
 /* queue and tree declarations */
 TAILQ_HEAD(ProcQ, Proc);
-RB_HEAD(ProcRB, Proc);
+RB_HEAD(ProcRB_sleep, Proc);
+RB_HEAD(ProcRB_altsleep, Proc);
 
 TAILQ_HEAD(ChanEndQ, ChanEnd);
 
@@ -81,7 +82,8 @@ void  proc_yield(Proc *proc);
 Scheduler* scheduler_self(void);
 int  scheduler_create(Scheduler **new_sched);
 void scheduler_free(Scheduler *sched);
-void scheduler_addproc(Proc *proc);
+void scheduler_addready(Proc *proc);
+void scheduler_remready(Proc *proc);
 void scheduler_addsleep(Proc *proc);
 void scheduler_remsleep(Proc *proc);
 int  scheduler_run(void);
