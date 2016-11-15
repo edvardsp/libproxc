@@ -101,9 +101,15 @@ void scheduler_addproc(Proc *proc)
     }
 }
 
-void scheduler_sleep(Scheduler *sched, Proc *proc)
+void scheduler_addsleep(Proc *proc)
 {
-    ASSERT_NOTNULL(sched);
+    ASSERT_NOTNULL(proc);
+
+
+}
+
+void scheduler_remsleep(Proc *proc)
+{
     ASSERT_NOTNULL(proc);
 
 

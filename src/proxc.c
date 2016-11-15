@@ -96,14 +96,13 @@ void proxc_yield(void)
 
 void proxc_sleep(uint64_t usec)
 {
-    Scheduler *sched = scheduler_self();
+    Proc *proc = proc_self();
     if (usec > 0) {
-        sched->curr_proc->sleep_us = usec;
-        scheduler_sleep(sched, sched->curr_proc);
+        proc->sleep_us = usec;
+        scheduler_addsleep(proc);
         return;
     }
-
-    proc_yield(sched->curr_proc);
+    proc_yield(proc);
 }
 
 /*
