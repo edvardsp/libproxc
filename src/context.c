@@ -10,7 +10,8 @@
  */
 void _ctx_get(Ctx *ctx);
 __asm__(
-"   .global _ctx_get         \n"
+"   .globl _ctx_get          \n"
+"   .type _ctx_get,@function \n"
 "_ctx_get:                   \n"
 #if defined(__i386__)
 "   movl    0x04(%esp), %edx \n" // ctx = %edx
@@ -41,6 +42,7 @@ __asm__(
 "   xor     %rax, %rax       \n"
 #endif
 "   ret                      \n"
+"                            \n"
 );
 
 void _trampoline(void)
@@ -81,8 +83,8 @@ void ctx_init(Ctx *ctx, Proc *proc)
 __asm__(
 //"   .text                       \n"
 //"   .p2align 2,,3               \n"
-"   .global ctx_switch          \n"
-//"   .type ctx_switch, @function \n"
+"   .globl ctx_switch           \n"
+"   .type ctx_switch,@function \n"
 "ctx_switch:                    \n"
 #if defined(__i386__) // 32-bit
 "   movl    0x04(%esp),    %edx \n" // from = %edx
@@ -107,10 +109,6 @@ __asm__(
 "   movl    0x14(%edx),  %eax   \n" // %eip
 "   movl    %eax,        (%esp) \n"
 #elif defined(__x86_64__) // 64-bit
-//"   .text                       \n"
-//"   .p2align 4,,15              \n"
-//"   .global ctx_switch          \n"
-//"   .type ctx_switch, @function \n"
 "   movq    %rbx,    0x00(%rdi) \n" // %rbx
 "   movq    %rsp,    0x08(%rdi) \n" // %rsp
 "   movq    %rbp,    0x10(%rdi) \n" // %rbp
@@ -136,6 +134,7 @@ __asm__(
 "   movq    %rax,        (%rsp) \n"
 #endif /* __i386__ vs __x86_64__ */
 "   ret                         \n"
+"                               \n"
 );
 
 
@@ -196,7 +195,6 @@ void ctx_madvise(Proc *proc)
     if (page_floor(used_stack) < page_floor(proc->stack.used)) {
         int ret = madvise(proc->stack.ptr, page_floor(unused_stack), MADV_DONTNEED);
         ASSERT_0(ret);
-        PANIC("yes\n");
     }
 
     proc->stack.used = used_stack;
