@@ -10,20 +10,20 @@ ProXC aims to do this, and with no macro magic!
 ## Features
 
 * Lightweight stackful coroutines, called PROC
-** supports arbitrary number of args, acquired through ARGN
+    * supports arbitrary number of args, acquired through ARGN
 * Lightweight runtime environment
 * Nestable PROC execution sequence with
-** PAR - parallel execution of given PROC, PAR and SEQ
-** SEQ - sequential execution of given PROC, PAR and SEQ
+    * PAR - parallel execution of given PROC, PAR and SEQ
+    * SEQ - sequential execution of given PROC, PAR and SEQ
 * Two methods of dispatching execution sequences
-** RUN - fork & join, given a tree of PROC, PAR and SEQ
-** GO - fire & forget, given a tree of PROC, PAR and SEQ
+    * RUN - fork & join, given a tree of PROC, PAR and SEQ
+    * GO - fire & forget, given a tree of PROC, PAR and SEQ
 * Any to any, pseudo-type safe, channels
 * ALT - wait on multiple guarded commands, which are guarded by a boolean condition
 * Guarded commands consist of
-** Skip Guard - always available
-** Time Guard - timeout on a given relative time, with a granularity of microseconds
-** Chan Guard - wait on a channel READ (Note! only channel reads are supported)
+    * Skip Guard - always available
+    * Time Guard - timeout on a given relative time, with a granularity of microseconds
+    * Chan Guard - wait on a channel READ (Note! only channel reads are supported)
 * YIELD - give up running time for another PROC, if available
 * SLEEP - suspend PROC for a given time, with a granularity of microseconds
 
@@ -47,6 +47,7 @@ Run the following in your terminal. This installs both the static and shared lib
 ## Example
 
 ```c
+#include <stdio.h>
 #include <proxc.h>
 
 void fxn1() {
