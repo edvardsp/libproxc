@@ -48,38 +48,44 @@ Run the following in your terminal. This installs both the static and shared lib
 
 ```c
 #include <stdio.h>
+#include <stdlib.h>
+
 #include <proxc.h>
 
-void fxn1() {
-    int val = *(int *)ARGN(0);
-    printf("fxn1: running %d\n", val);
+void printer() {
+    for (;;) {
+        printf("printer: Hello!\n");
+        SLEEP(MSEC(250));
+    }
 }
 
-void fxn2() {
-    int val = *(int *)ARGN(0);
-    printf("fxn2: running %d\n", val);
-}
-
-void fxn3() {
-    int val = *(int *)ARGN(0);
-    printf("fxn3: running %d\n", val);
+void fxn() {
+    int id = *(int *)ARGN(0);
+    int val = *(int *)ARGN(1);
+    printf("fxn %d: start %d\n", id, val);
+    SLEEP(MSEC(500));
+    printf("fxn %d: stop %d\n", id, val);
 }
 
 void foobar() {
-    int f = 1, s = 2;
+    GO(PROC(printer));
+
+    int ids[] = { 1, 2, 3 };
+    int one = 1, two = 2;
     printf("foobar: start\n");
     RUN(PAR(
             PAR(
-                SEQ( PROC(fxn1, &f), PROC(fxn2, &f) ),
-                PROC(fxn3, &f)
+                SEQ( PROC(fxn, &ids[0], &one), PROC(fxn, &ids[1], &one) ),
+                PROC(fxn, &ids[2], &one)
             ),
             SEQ(
-                PROC(fxn1, &s),
-                PAR( PROC(fxn2, &s), PROC(fxn3, &s) )
+                PROC(fxn, &ids[0], &two),
+                PAR( PROC(fxn, &ids[1], two), PROC(fxn, &ids[2], &two) )
             )
         )
     );
     printf("foobar: stop\n");
+    exit(0);
 }
 
 int main() {
