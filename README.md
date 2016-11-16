@@ -55,7 +55,7 @@ Run the following in your terminal. This installs both the static and shared lib
 void printer() {
     for (;;) {
         printf("printer: Hello!\n");
-        SLEEP(MSEC(250));
+        SLEEP(MSEC(500));
     }
 }
 
@@ -63,7 +63,7 @@ void fxn() {
     int id = *(int *)ARGN(0);
     int val = *(int *)ARGN(1);
     printf("fxn %d: start %d\n", id, val);
-    SLEEP(MSEC(500));
+    SLEEP(SEC(3));
     printf("fxn %d: stop %d\n", id, val);
 }
 
@@ -80,7 +80,7 @@ void foobar() {
             ),
             SEQ(
                 PROC(fxn, &ids[0], &two),
-                PAR( PROC(fxn, &ids[1], two), PROC(fxn, &ids[2], &two) )
+                PAR( PROC(fxn, &ids[1], &two), PROC(fxn, &ids[2], &two) )
             )
         )
     );
