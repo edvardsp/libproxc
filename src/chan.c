@@ -146,31 +146,49 @@ int chan_read(Chan *chan, void *data, size_t size)
     return 1;
 }
 
-int chan_altread(Chan *chan, Guard *guard, void *data, size_t size)
+int chan_altenable(Chan *chan, Guard *guard)
 {
     ASSERT_NOTNULL(chan);
-    ASSERT_NOTNULL(data);
+    ASSERT_NOTNULL(guard);
+
+    ChanEnd *ch_end = TAILQ_FIRST(&chan->endQ);
+    if (ch_end && ch_end->type == CHAN_WRITER) {
+        return 1;
+    }
+
+    TAILQ_INSERT_TAIL(&chan->altQ, &guard->ch_end, node);
+
+    return 0;
+}
+
+void chan_altdisable(Chan *chan, Guard *guard)
+{
+    ASSERT_NOTNULL(chan);
+    ASSERT_NOTNULL(guard);
+    ASSERT_EQ(chan, guard->chan);
+
+    TAILQ_REMOVE(&chan->altQ, &guard->ch_end, node);
+}
+
+void chan_altread(Chan *chan, Guard *guard, size_t size)
+{
+    ASSERT_NOTNULL(chan);
+    ASSERT_NOTNULL(guard);
     ASSERT_EQ(size, chan->data_size);
 
     // << acquire lock <<
     
     ChanEnd *first = TAILQ_FIRST(&chan->endQ);
-    if (first && first->type == CHAN_WRITER) {
-        if (alt_accept(guard)) {
-            TAILQ_REMOVE(&chan->endQ, first, node);
-
-            // >> release lock >>
-
-            memcpy(guard->data.ptr, first->data, chan->data_size);
-
-            scheduler_addready(first->proc);
-            return 1;
-        }
+    if (UNLIKELY(first->type != CHAN_WRITER)) {
+        PANIC("Altread called on chan with no writers\n");
     }
 
-    TAILQ_INSERT_TAIL(&chan->altQ, &guard->ch_end, node);
+    TAILQ_REMOVE(&chan->endQ, first, node);
 
     // >> release lock >>
-    return 0;
+
+    memcpy(guard->data.ptr, first->data, chan->data_size);
+
+    scheduler_addready(first->proc);
 }
 

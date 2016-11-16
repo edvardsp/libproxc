@@ -27,7 +27,7 @@ struct Scheduler {
     } sleep;
     struct {
         size_t num;
-        struct ProcRB_altsleep  RB;
+        struct GuardRB_altsleep  RB;
     } altsleep;
 };
 

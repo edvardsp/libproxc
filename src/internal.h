@@ -3,7 +3,6 @@
 #define INTERNAL_H__
 
 #include <stdarg.h>
-#include <pthread.h>
 
 #include "util/debug.h"
 #include "util/util.h"
@@ -37,6 +36,12 @@ struct ProcBuild;
 struct ParBuild;
 struct SeqBuild;
 
+enum GuardType {
+    GUARD_SKIP,
+    GUARD_TIME,
+    GUARD_CHAN
+};
+
 struct Guard;
 struct Alt;
 
@@ -59,7 +64,7 @@ typedef struct Alt Alt;
 /* queue and tree declarations */
 TAILQ_HEAD(ProcQ, Proc);
 RB_HEAD(ProcRB_sleep, Proc);
-RB_HEAD(ProcRB_altsleep, Proc);
+RB_HEAD(GuardRB_altsleep, Guard);
 
 TAILQ_HEAD(ChanEndQ, ChanEnd);
 
@@ -86,13 +91,17 @@ void scheduler_addready(Proc *proc);
 void scheduler_remready(Proc *proc);
 void scheduler_addsleep(Proc *proc);
 void scheduler_remsleep(Proc *proc);
+void scheduler_addaltsleep(Guard *guard);
+void scheduler_remaltsleep(Guard *guard);
 int  scheduler_run(void);
 
 Chan *chan_create(size_t size);
 void chan_free(Chan *chan);
 int  chan_write(Chan *chan, void *data, size_t size);
 int  chan_read(Chan *chan, void *data, size_t size);
-int  chan_altread(Chan *chan, Guard *guard, void *data, size_t size);
+int  chan_altenable(Chan *chan, Guard *guard);
+void chan_altdisable(Chan *chan, Guard *guard);
+void chan_altread(Chan *chan, Guard *guard, size_t size);
 
 void* csp_create(enum BuildType type);
 void csp_free(Builder *build);
@@ -101,10 +110,11 @@ void csp_runbuild(Builder *build);
 void csp_cleanupbuild(Builder *build);
 void csp_parsebuild(Builder *build);
 
-Guard* alt_guardcreate(Chan *ch, void *data, size_t size);
+Guard* alt_guardcreate(enum GuardType type, uint64_t usec, 
+                       Chan *chan, void *data, size_t size);
 void   alt_guardfree(Guard *guard);
-Alt*   alt_create(void);
-void   alt_free(Alt *alt);
+void   alt_init(Alt *alt);
+void   alt_cleanup(Alt *alt);
 void   alt_addguard(Alt *alt, Guard *guard);
 int    alt_accept(Guard *guard);
 int    alt_enable(Guard *guard);

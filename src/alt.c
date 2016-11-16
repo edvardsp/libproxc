@@ -3,32 +3,42 @@
 
 #include "internal.h"
 
-Guard* alt_guardcreate(Chan *ch, void *data, size_t size)
+Guard* alt_guardcreate(enum GuardType type, uint64_t usec, 
+                       Chan *chan, void *data, size_t size)
 {
-    ASSERT_NOTNULL(ch);
-
-    /* alloc GUARD struct */
+    /* calloc GUARD struct */
     Guard *guard;
-    if (!(guard = malloc(sizeof(Guard)))) {
-        PERROR("malloc failed for GUARD\n");
+    if (!(guard = calloc(1, sizeof(Guard)))) {
+        PERROR("calloc failed for GUARD\n");
         return NULL;
     }
 
-    /* set struct members */
-    guard->key       = -1;
-    guard->alt       = NULL;
-    guard->chan      = ch;
-    guard->data.ptr  = data;
-    guard->data.size = size;
+    /* set common members */
+    guard->type = type;
+    guard->key  = -1;
 
-    struct ChanEnd ch_end = {
-        .type = CHAN_ALTER,
-        .data = data,
-        .chan = ch,
-        .proc = NULL,
-        .guard = guard
-    };
-    guard->ch_end = ch_end;
+    /* set type members */
+    switch (type) {
+    case GUARD_SKIP:
+        break;
+    case GUARD_TIME:
+        guard->usec = usec;
+        break;
+    case GUARD_CHAN:
+        ASSERT_NOTNULL(chan);
+        guard->chan = chan;
+
+        guard->ch_end.type  = CHAN_ALTER;
+        guard->ch_end.data  = data;
+        guard->ch_end.chan  = chan;
+        guard->ch_end.guard = guard;
+
+        guard->data.ptr  = data;
+        guard->data.size = size;
+
+        guard->in_chan = 0;
+        break;
+    }
 
     return guard;
 }
@@ -40,26 +50,28 @@ void alt_guardfree(Guard *guard)
     free(guard);
 }
 
-Alt* alt_create(void)
+void alt_init(Alt *alt)
 {
-    /* alloc ALT struct */
-    Alt *alt;
-    if (!(alt = malloc(sizeof(Alt)))) {
-        PERROR("malloc failed for ALT\n");
-        return NULL;
-    }
+    /* alt is not allocated here, as it allows ALT to be */
+    /* allocated on either stack or heap */
+    ASSERT_NOTNULL(alt);
 
     alt->key_count   = 0;
     alt->is_accepted = 0;
-    alt->key_accept  = -1;
+    alt->winner      = NULL;
+
+    alt->ready.num    = 0;
+    alt->ready.guards = NULL;
+
     alt->guards.num  = 0;
     TAILQ_INIT(&alt->guards.Q);
-    alt->alt_proc = proc_self();
 
-    return alt;
+    alt->guard_skip = NULL;
+    alt->guard_time = NULL;
+    alt->proc = proc_self();
 }
 
-void alt_free(Alt *alt)
+void alt_cleanup(Alt *alt)
 {
     if (!alt) return;
 
@@ -67,7 +79,8 @@ void alt_free(Alt *alt)
     TAILQ_FOREACH(guard, &alt->guards.Q, node) {
         alt_guardfree(guard);
     }
-    free(alt);
+    /* NB! alt is not freed, because ALT is either */
+    /* allocated on stack or heap */ 
 }
 
 void alt_addguard(Alt *alt, Guard *guard)
@@ -82,12 +95,22 @@ void alt_addguard(Alt *alt, Guard *guard)
         return;
     }
    
+    /* Only keep TimeGuard with lowest usce */
+    if (guard->type == GUARD_TIME) {
+       if (alt->guard_time && (guard->usec >= alt->guard_time->usec)) {
+           PDEBUG("AltGuard %d inactive\n", key);
+           return;
+        }
+        alt_guardfree(alt->guard_time);
+        alt->guard_time = guard;
+    } 
+
     PDEBUG("AltGuard %d active\n", key);
     guard->key = key;
     guard->alt = alt; 
-    guard->ch_end.proc = alt->alt_proc;
+    guard->ch_end.proc = alt->proc;
 
-    alt->guards.num++;
+    ++alt->guards.num;
     TAILQ_INSERT_TAIL(&alt->guards.Q, guard, node);
 }
 
@@ -97,10 +120,10 @@ int alt_accept(Guard *guard)
 
     Alt *alt = guard->alt;
     /* FIXME atomic compare and swap */
-    if (!alt->is_accepted) {
+    if (alt->is_accepted == 0) {
         PDEBUG("alt_accept succeded!\n");
         alt->is_accepted = 1;
-        alt->key_accept = guard->key;
+        alt->winner = guard;
         return 1;
     }
     PDEBUG("alt_accept failed\n");
@@ -111,20 +134,70 @@ int alt_enable(Guard *guard)
 {
     ASSERT_NOTNULL(guard);
     
-    return chan_altread(guard->chan, guard, guard->data.ptr, guard->data.size);
+    switch (guard->type) {
+    case GUARD_SKIP: return 1;
+    case GUARD_TIME: 
+        scheduler_addaltsleep(guard);
+        return 0;
+    case GUARD_CHAN: 
+        if (chan_altenable(guard->chan, guard)) {
+            return 1;
+        }
+        guard->in_chan = 1;
+        return 0;
+    }
+    return 0;
 }
 
 void alt_disable(Guard *guard)
 {
     ASSERT_NOTNULL(guard);
     
-
-    Chan *chan = guard->chan;
-    if (TAILQ_EMPTY(&chan->altQ)) {
+    switch (guard->type) {
+    case GUARD_SKIP:
+        return;
+    case GUARD_TIME:
+        scheduler_remaltsleep(guard);
+        return;
+    case GUARD_CHAN:
+        if (guard->in_chan) {
+            chan_altdisable(guard->chan, guard);
+        }
         return;
     }
-    ChanEnd *ch_end = &guard->ch_end;
-    TAILQ_REMOVE(&chan->altQ, ch_end, node);
+}
+
+void alt_complete(Alt *alt, Guard *guard)
+{
+    ASSERT_NOTNULL(alt);
+    ASSERT_NOTNULL(guard);
+
+    if (guard->type == GUARD_CHAN && !guard->in_chan) {
+        chan_altread(guard->chan, guard, guard->data.size);
+    }
+
+    if (alt->ready.num > 0) {
+        proc_yield(alt->proc);
+    }
+}
+
+void alt_choose(Alt *alt)
+{
+    ASSERT_NOTNULL(alt);
+
+    if (alt->ready.num > 0) {
+        /* for now, choose randomly for N > 1 */
+        alt->winner = (alt->ready.num > 1)
+                    ? alt->ready.guards[rand() % alt->ready.num]
+                    : alt->ready.guards[0];
+        PDEBUG("One or more ready Guard, key %d wins\n", alt->winner->key);
+    }
+    /* wait until on of the chan_ends reschedules ALT */
+    else if (!alt->is_accepted) {
+        PDEBUG("No ready Guards, yield\n");
+        alt->proc->state = PROC_ALTWAIT;
+        proc_yield(alt->proc);
+    }
 }
 
 int alt_select(Alt *alt)
@@ -133,27 +206,32 @@ int alt_select(Alt *alt)
 
     PDEBUG("alt_select finding case\n");
 
+    alt->ready.num    = 0;
+    alt->ready.guards = malloc(sizeof(Guard *) * alt->guards.num);
+    if (UNLIKELY(!alt->ready.guards)) {
+        PANIC("Allocation failed for ALT\n");
+    }
+    
     Guard *guard;
     TAILQ_FOREACH(guard, &alt->guards.Q, node) {
         if (alt_enable(guard)) {
-            goto AltAccepted;
+            PDEBUG("AltGuard %d ready\n", guard->key);
+            alt->ready.guards[alt->ready.num++] = guard;
         }
     }
-    
-    /* wait until on of the chan_ends reschedules ALT */
-    if (!alt->is_accepted) {
-        Proc *proc = scheduler_self()->curr_proc;
-        proc->state = PROC_ALTWAIT;
-        proc_yield(proc);
-    }
 
-AltAccepted: /* Only one guard is accepted from here */
+    /* determine which Guard is winner, set in alt->winner */
+    alt_choose(alt);
+    
+    /* from here, a winner guard is set in alt->winner */
+    ASSERT_NOTNULL(alt->winner);
 
     TAILQ_FOREACH_REVERSE(guard, &alt->guards.Q, GuardQ, node) {
         alt_disable(guard);
     }
 
+    alt_complete(alt, alt->winner); 
 
     /* from here, winner contains the winning GUARD */
-    return alt->key_accept;
+    return alt->winner->key;
 }

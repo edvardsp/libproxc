@@ -255,37 +255,55 @@ int proxc_run(Builder *root)
     return 0;
 }
 
-Guard* proxc_guard(int cond, Chan *chan, void *out, size_t size)
+Guard* proxc_guardchan(int cond, Chan *chan, void *out, size_t size)
 {
-    ASSERT_NOTNULL(chan);
-    
-    /* if cond is true, return a guard, else NULL */
+    /* if cond is true, return ChanGuard */
     return (cond) 
-        ? alt_guardcreate(chan, out, size)
+        ? alt_guardcreate(GUARD_CHAN, 0, chan, out, size)
+        /* else NULL */
+        : NULL;
+}
+
+Guard* proxc_guardtime(int cond, uint64_t usec)
+{
+    /* if cond is true and usec > 0, return TimerGuard */
+    return (cond && usec > 0)
+        ? alt_guardcreate(GUARD_TIME, usec + gettimestamp(), NULL, NULL, 0)
+        /* if cond is true and usec == 0, return SkipGuard */
+        : (cond)
+            ? alt_guardcreate(GUARD_SKIP, 0, NULL, NULL, 0)
+            /* else NULL */
+            : NULL;
+}
+
+Guard* proxc_guardskip(int cond)
+{
+    /* if cond is true, return SkipGuard*/
+    return (cond)
+        ? alt_guardcreate(GUARD_SKIP, 0, NULL, NULL, 0)
+        /* else NULL */
         : NULL;
 }
 
 int proxc_alt(int arg_start, ...)
 {
-    Alt *alt = alt_create();
-    if (!alt) {
-        return -1;
-    }
+    Alt alt;
+    alt_init(&alt);
 
     va_list args;
     va_start(args, arg_start);
     Guard *guard = va_arg(args, Guard *);
     while (guard != PROXC_NULL) {
-        alt_addguard(alt, guard);
+        alt_addguard(&alt, guard);
         guard = va_arg(args, Guard *);
     }
     va_end(args);
 
     /* wait on guards */
-    int key = alt_select(alt);
+    int key = alt_select(&alt);
 
     /* cleanup */
-    alt_free(alt);
+    alt_cleanup(&alt);
 
     return key;
 }

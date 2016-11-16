@@ -27,7 +27,9 @@ Builder* proxc_seq(int, ...);
 int proxc_go(Builder *root);
 int proxc_run(Builder *root);
 
-Guard* proxc_guard(int cond, Chan* chan, void *out, size_t size);
+Guard* proxc_guardchan(int cond, Chan* chan, void *out, size_t size);
+Guard* proxc_guardtime(int cond, uint64_t usec);
+Guard* proxc_guardskip(int cond);
 int    proxc_alt(int, ...);
 
 Chan* proxc_chopen(size_t size);
@@ -52,8 +54,10 @@ int   proxc_chread(Chan *chan, void *data, size_t size);
 #   define GO(build)   proxc_go(build)
 #   define RUN(build)  proxc_run(build)
 
-#   define GUARD(cond, ch, out, type)   proxc_guard(cond, ch, out, sizeof(type))
-#   define ALT(...)  proxc_alt(0, __VA_ARGS__, PROXC_NULL)
+#   define CHAN_GUARD(cond, ch, out, type)  proxc_guardchan(cond, ch, out, sizeof(type))
+#   define TIME_GUARD(cond, usec)           proxc_guardtime(cond, usec)
+#   define SKIP_GUARD(cond)                 proxc_guardskip(cond)
+#   define ALT(...)                         proxc_alt(0, __VA_ARGS__, PROXC_NULL)
 
 #   define CHOPEN(type)               proxc_chopen(sizeof(type))
 #   define CHCLOSE(chan)              proxc_chclose(chan)

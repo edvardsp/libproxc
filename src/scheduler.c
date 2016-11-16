@@ -36,8 +36,8 @@ Scheduler* scheduler_self(void)
     return sched;
 }
 
-static
-int _scheduler_sleep_cmp(Proc *p1, Proc *p2)
+static inline
+int _sleep_cmp(Proc *p1, Proc *p2)
 {
     ASSERT_NOTNULL(p1);
     ASSERT_NOTNULL(p2);
@@ -46,8 +46,18 @@ int _scheduler_sleep_cmp(Proc *p1, Proc *p2)
                                           :  1;
 }
 
-RB_GENERATE(ProcRB_sleep, Proc, sleepRB_node, _scheduler_sleep_cmp)
-RB_GENERATE(ProcRB_altsleep, Proc, sleepRB_node, _scheduler_sleep_cmp)
+static inline
+int _altsleep_cmp(Guard *g1, Guard *g2)
+{
+    ASSERT_NOTNULL(g1);
+    ASSERT_NOTNULL(g2);
+    return (g1->usec  < g2->usec) ? -1
+         : (g1->usec == g2->usec) ?  0
+                                  :  1;
+}
+
+RB_GENERATE(ProcRB_sleep, Proc, sleepRB_node, _sleep_cmp)
+RB_GENERATE(GuardRB_altsleep, Guard, sleepRB_node, _altsleep_cmp)
 
 int scheduler_create(Scheduler **new_sched)
 {
@@ -116,6 +126,8 @@ void scheduler_addsleep(Proc *proc)
 {
     ASSERT_NOTNULL(proc);
 
+    if (proc->sleep_us == 0) return;
+
     PDEBUG("scheduler_addsleep called\n");
 
     Scheduler *sched = proc->sched;
@@ -139,12 +151,42 @@ void scheduler_remsleep(Proc *proc)
     --sched->sleep.num;
 }
 
+void scheduler_addaltsleep(Guard *guard)
+{
+    ASSERT_NOTNULL(guard);
+
+    if (guard->usec == 0) return;
+
+    PDEBUG("scheduler_addaltsleep called\n");
+
+    Scheduler *sched = guard->alt->proc->sched;
+
+    size_t num_tries = 0;
+    enum { MAX_TRIES = 1000 };
+    while (RB_INSERT(GuardRB_altsleep, &sched->altsleep.RB, guard)
+        && (++num_tries < MAX_TRIES)) {
+        /* this means there is a key collision, increment usec */
+        ++guard->usec;
+    }
+    ASSERT_TRUE(num_tries < MAX_TRIES);
+    ++sched->altsleep.num;
+}
+
+void scheduler_remaltsleep(Guard *guard)
+{
+    ASSERT_NOTNULL(guard);
+
+    Scheduler *sched = guard->alt->proc->sched;
+    RB_REMOVE(GuardRB_altsleep, &sched->altsleep.RB, guard);
+    --sched->altsleep.num;
+}
+
 static
 void _scheduler_wakeup(Scheduler *sched)
 {
     ASSERT_NOTNULL(sched);
 
-    if (RB_EMPTY(&sched->sleep.RB)) {
+    if (RB_EMPTY(&sched->sleep.RB) && RB_EMPTY(&sched->altsleep.RB)) {
         return;
     } 
 
@@ -154,8 +196,24 @@ void _scheduler_wakeup(Scheduler *sched)
         if (proc->sleep_us > now_us) {
             break;
         }
+        PDEBUG("PROC timeout\n");
         scheduler_remsleep(proc);
         scheduler_addready(proc);
+    }
+
+    Guard *guard;
+    while ((guard = RB_MIN(GuardRB_altsleep, &sched->altsleep.RB))) {
+        if (guard->usec > now_us) {
+            break;
+        }
+        PDEBUG("GUARD timeout\n");
+        scheduler_remaltsleep(guard);
+        Proc *alt_proc = guard->alt->proc;
+        if (alt_proc->state == PROC_ALTWAIT) {
+            if (alt_accept(guard)) {
+                scheduler_addready(alt_proc);
+            }
+        }
     }
 }
 
@@ -168,8 +226,8 @@ int _scheduler_running(Scheduler *sched)
         return 1;
     }
     
-    Proc *proc;
     uint64_t min_us = 0;
+    Proc *proc;
     if (!RB_EMPTY(&sched->sleep.RB)) {
         proc = RB_MIN(ProcRB_sleep, &sched->sleep.RB);
         if (proc) {
@@ -177,15 +235,16 @@ int _scheduler_running(Scheduler *sched)
         }
     }
    
+    Guard *guard;
     if (!RB_EMPTY(&sched->altsleep.RB)) {
-        proc = RB_MIN(ProcRB_altsleep, &sched->altsleep.RB);
-        if (proc) {
-            min_us = (proc->sleep_us < min_us) ? proc->sleep_us : min_us;
+        guard = RB_MIN(GuardRB_altsleep, &sched->altsleep.RB);
+        if (guard && (min_us == 0 || guard->usec < min_us)) {
+            min_us = guard->usec;
         }
     }
 
     if (min_us > 0) {
-        /* FIXME */
+        /* FIXME cond_timeout */
         uint64_t now_us = gettimestamp();
         if (min_us > now_us) {
             usleep((useconds_t)(min_us - now_us));
