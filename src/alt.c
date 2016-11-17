@@ -79,6 +79,10 @@ void alt_cleanup(Alt *alt)
     TAILQ_FOREACH(guard, &alt->guards.Q, node) {
         alt_guardfree(guard);
     }
+    if (alt->ready.guards) {
+        free(alt->ready.guards);
+    }
+
     /* NB! alt is not freed, because ALT is either */
     /* allocated on stack or heap */ 
 }
