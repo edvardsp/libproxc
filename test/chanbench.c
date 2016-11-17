@@ -44,11 +44,10 @@ void fxn3(void)
     }
 }
 
-__attribute((noreturn))
 void timerFxn(void)
 {
     Chan *d = ARGN(0);
-    int repeat = 10000;
+    int repeat = 100000;
     int runs = 50;
     clock_t start, stop;
     double time_spent, sum;
@@ -69,40 +68,33 @@ void timerFxn(void)
     }
 
     printf("Average = %f ms/iteration\n", (sum) / (runs));
-    exit(0);
 }
 
 void foofunc(void)
 {
-    printf("foofunc: PAR start\n");
-
     Chan *a = CHOPEN(int);
     Chan *b = CHOPEN(int);
     Chan *c = CHOPEN(int);
     Chan *d = CHOPEN(int);
 
-    RUN(PAR(
-        PROC(fxn1,     a, b),
-        PROC(fxn2,     a, c, d),
-        PROC(fxn3,     b, c),
-        PROC(timerFxn, d)
-    ));
+    GO(PAR(
+           PROC(fxn1, a, b),
+           PROC(fxn2, a, c, d),
+           PROC(fxn3, b, c)
+       )
+    );
+
+    RUN( PROC(timerFxn, d) );
 
     CHCLOSE(a);
     CHCLOSE(b);
     CHCLOSE(c);
     CHCLOSE(d);
-
-    printf("foofunc: PAR ended\n");
 }
 
-int main(int argc, char **argv)
+int main(void)
 {
-    (void)argc; (void)argv;
-    printf("main start\n");
-
     proxc_start(foofunc);
-    
     return 0;
 }
 

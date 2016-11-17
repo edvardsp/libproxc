@@ -6,54 +6,39 @@
 
 #include "proxc.h"
 
-void fxn1(void) 
-{ 
-    int val = *(int *)ARGN(0);
-    printf("fxn1: start %d\n", val);
-
-    printf("fxn1: stop\n");
-}
-
-void fxn2(void) 
-{ 
-    int val = *(int *)ARGN(0);
-    printf("fxn2: start %d\n", val);
-
-    printf("fxn2: stop\n");
-}
-
-void fxn3(void)
+void printer(void)
 {
-    int val = *(int *)ARGN(0);
-    printf("fxn3: start %d\n", val);
-
-    printf("fxn3: stop\n");
+    for (;;) {
+        printf("printer: hello!\n");
+        SLEEP(MSEC(500));
+    }
 }
 
-void fxn4(void)
+void fxn(void)
 {
-    int val = *(int *)ARGN(0);
-    printf("fxn4: start %d\n", val);
-
-    printf("fxn4: stop\n");
+    int id  = *(int *)ARGN(0);
+    int val = *(int *)ARGN(1);
+    printf("fxn%d: start, value %d\n", id, val);
+    SLEEP(SEC((uint64_t)(1 + rand() % id)));
+    printf("fxn%d: stop, value %d\n", id, val);
 }
 
-__attribute__((noreturn))
 void foofunc(void)
 {
-    printf("foofunc: start\n");
+    GO( PROC(printer) );
 
-    int f = 1, s = 2;
+    int ids[3] = { 1, 2, 3 };
+    int one = 1, two = 2;
 
     printf("First RUN\n");
     RUN(PAR(
             PAR(
-                SEQ( PROC(fxn1, &f), PROC(fxn2, &f) ),
-                PROC(fxn3, &f)
+                SEQ( PROC(fxn, &ids[0], &one), PROC(fxn, &ids[1], &one) ),
+                PROC(fxn, &ids[2], &one)
             ),
             SEQ(
-                PROC(fxn1, &s),
-                PAR( PROC(fxn2, &s), PROC(fxn3, &s) )
+                PROC(fxn, &ids[0], &two),
+                PAR( PROC(fxn, &ids[1], &two), PROC(fxn, &ids[2], &two) )
             )
         )
     );
@@ -61,29 +46,23 @@ void foofunc(void)
     printf("Second RUN\n");
     RUN(PAR(
             PAR(
-                SEQ( PROC(fxn1, &f), PROC(fxn2, &f) ),
-                PROC(fxn3, &f),
-                PROC(fxn4, &f)
+                SEQ( PROC(fxn, &ids[0], &one), PROC(fxn, &ids[1], &one) ),
+                PROC(fxn, &ids[2], &one),
+                PROC(fxn, &ids[2], &one)
             ),
             SEQ(
-                PROC(fxn1, &s),
-                PROC(fxn2, &s),
-                PAR( PROC(fxn3, &s), PROC(fxn4, &s) )
+                PROC(fxn, &ids[0], &two),
+                PROC(fxn, &ids[0], &two),
+                PAR( PROC(fxn, &ids[1], &two), PROC(fxn, &ids[2], &two) )
             )
         )
     );
-
-    printf("foofunc: stop\n");
-    exit(0);
 }
 
-int main(int argc, char **argv)
+int main(void)
 {
-    (void)argc; (void)argv;
-    printf("main start\n");
-
+    srand((unsigned int)time(0));
     proxc_start(foofunc);
-    
     return 0;
 }
 

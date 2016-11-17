@@ -25,7 +25,6 @@ void worker(void)
     printf("worker %d: stop\n", id);
 }
 
-__attribute__((noreturn))
 void foofunc(void)
 {
     printf("foofunc: start\n");
@@ -74,14 +73,10 @@ void foofunc(void)
         CHCLOSE(chs[i]);
 
     printf("foofunc: stop\n");
-    exit(0);
 }
 
-int main(int argc, char **argv)
+int main(void)
 {
-    (void)argc; (void)argv;
-    printf("main start\n");
-
     proxc_start(foofunc);
     
     return 0;

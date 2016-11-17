@@ -33,15 +33,26 @@ void filter(void)
 
 void proxc(void)
 {
-    Chan *chlong = CHOPEN(long);
+    enum { PRIME = 4000 };
+    
+    Chan *chs[PRIME+1];
+    chs[0] = CHOPEN(long);
+
+    Chan *chlong = chs[0];
     GO(PROC(generate, chlong));
-    long prime;
-    for (long i = 0; i < 1000; i++) {
+    long prime = 0;
+    for (long i = 0; i < PRIME; i++) {
         CHREAD(chlong, &prime, long);
-        printf("%ld: %ld\n", i, prime);
-        Chan *ch1long = CHOPEN(long);
-        GO(PROC(filter, chlong, ch1long, (void *)prime));
-        chlong = ch1long;
+        //printf("%ld: %ld\n", i, prime);
+        chs[i+1] = CHOPEN(long);
+        Chan *new_chlong = chs[i+1];
+        GO(PROC(filter, chlong, new_chlong, (void *)prime));
+        chlong = new_chlong;
+    }
+    printf("prime %d: %ld\n", PRIME, prime);
+
+    for (int i = 0; i <= PRIME; i++) {
+        CHCLOSE(chs[i]);
     }
 }
 
