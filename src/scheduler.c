@@ -73,6 +73,8 @@ int scheduler_create(Scheduler **new_sched)
     sched->stack_size = MAX_STACK_SIZE;
     sched->page_size  = (size_t)sysconf(_SC_PAGESIZE);
 
+    sched->is_exit = 0;
+
     // Save scheduler for this pthread
     int ret;
     ret = pthread_once(&g_key_once, _scheduler_key_create);
@@ -83,6 +85,7 @@ int scheduler_create(Scheduler **new_sched)
     // and context
     ctx_init(&sched->ctx, NULL);
 
+    TAILQ_INIT(&sched->totalQ);
     TAILQ_INIT(&sched->readyQ);
     TAILQ_INIT(&sched->altQ);
     sched->sleep.num = 0;
@@ -99,7 +102,12 @@ void scheduler_free(Scheduler *sched)
 {
     if (!sched) return;
 
-    /* FIXME cleanup Proc's in Qs */
+    Proc *proc;
+    while (!TAILQ_EMPTY(&sched->totalQ)) {
+        proc = TAILQ_FIRST(&sched->totalQ);
+        proc_free(proc);
+    }
+
     free(sched);
 }
 
@@ -218,12 +226,12 @@ void _scheduler_wakeup(Scheduler *sched)
 }
 
 static inline
-int _scheduler_running(Scheduler *sched)
+void _scheduler_checkQs(Scheduler *sched)
 {
     ASSERT_NOTNULL(sched);
 
     if (!TAILQ_EMPTY(&sched->readyQ)) {
-        return 1;
+        return;
     }
     
     uint64_t min_us = 0;
@@ -244,15 +252,17 @@ int _scheduler_running(Scheduler *sched)
     }
 
     if (min_us > 0) {
-        /* FIXME cond_timeout */
         uint64_t now_us = gettimestamp();
         if (min_us > now_us) {
             usleep((useconds_t)(min_us - now_us));
         }
-        return 1;
     }
+}
 
-    return 0;
+static inline
+int _scheduler_running(Scheduler *sched)
+{
+    return !sched->is_exit && !TAILQ_EMPTY(&sched->totalQ);
 }
 
 int scheduler_run(void)
@@ -263,6 +273,9 @@ int scheduler_run(void)
     while (_scheduler_running(sched)) {
         PDEBUG("This is from scheduler!\n");
 
+        /* check content of Qs, sleep if no active */
+        _scheduler_checkQs(sched);
+
         /* wake up sleeping PROC if timeout */
         _scheduler_wakeup(sched);
 
@@ -271,19 +284,18 @@ int scheduler_run(void)
         if (!TAILQ_EMPTY(&sched->readyQ)) {
             curr_proc = TAILQ_FIRST(&sched->readyQ);
             TAILQ_REMOVE(&sched->readyQ, curr_proc, readyQ_next);
-            goto procFound;
+        }
+        else {
+            continue;
         }
 
-        /* no PROC found, reevaluate sched_running */
-        continue;
-
         /* from here, a PROC is found to resume */
-procFound:
         ASSERT_NOTNULL(curr_proc);
         
-        sched->curr_proc = curr_proc;
+        sched->curr_proc        = curr_proc;
         sched->curr_proc->state = PROC_RUNNING;
 
+        /* context switch to proc */
         ctx_switch(&sched->ctx, &sched->curr_proc->ctx);
         ctx_madvise(sched->curr_proc);
 
@@ -292,18 +304,12 @@ procFound:
         case PROC_READY:
             scheduler_addready(sched->curr_proc);
             break;
-        case PROC_ENDED: {
-            /* FIXME atomic */
-
-            ProcBuild *build = sched->curr_proc->proc_build;
-            /*  resolve ProcBuild */
-            if (build != NULL) {
-                csp_parsebuild((Builder *)build);
-            }
+        case PROC_ENDED:
+            /* termination test */
+            sched->is_exit = (sched->curr_proc == sched->main_proc);
                     
             /* cleanup */
             proc_free(sched->curr_proc);
-        }
             break;
         case PROC_RUNWAIT:
             /* do nothing, as this proc will be revived  */

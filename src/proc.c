@@ -69,6 +69,9 @@ int proc_create(Proc **new_proc, ProcFxn fxn)
     /* configure context */
     ctx_init(&proc->ctx, proc);
 
+    /* register in sched totalQ */
+    TAILQ_INSERT_TAIL(&sched->totalQ, proc, schedQ_node);
+
     *new_proc = proc;
 
     return 0;
@@ -77,6 +80,16 @@ int proc_create(Proc **new_proc, ProcFxn fxn)
 void proc_free(Proc *proc)
 {
     if (!proc) return;
+
+    /* remove from totalQ */
+    Scheduler *sched = proc->sched;
+    TAILQ_REMOVE(&sched->totalQ, proc, schedQ_node);
+
+    /* resolve ProcBuild */
+    ProcBuild *build = proc->proc_build;
+    if (build != NULL) {
+        csp_parsebuild((Builder *)build);
+    }
 
     free(proc->args.ptr);
     free(proc->stack.ptr);

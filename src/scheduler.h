@@ -15,11 +15,16 @@ struct Scheduler {
     size_t  stack_size;
     size_t  page_size; 
 
+    int   is_exit;
+    Proc  *main_proc;
+
     struct Proc  *curr_proc;
 
     /* different PROC queues and trees */
-    struct ProcQ   readyQ;
-    struct ProcQ   altQ;
+    struct ProcQ  totalQ;
+
+    struct ProcQ  readyQ;
+    struct ProcQ  altQ;
 
     struct {
         size_t  num;

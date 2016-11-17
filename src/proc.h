@@ -42,6 +42,7 @@ struct Proc {
 
     /* scheduler related */
     struct Scheduler   *sched;
+    TAILQ_ENTRY(Proc)  schedQ_node;
     TAILQ_ENTRY(Proc)  readyQ_next;
     TAILQ_ENTRY(Proc)  altQ_next;
     RB_ENTRY(Proc)     sleepRB_node;

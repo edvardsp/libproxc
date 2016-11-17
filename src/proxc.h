@@ -14,6 +14,7 @@ typedef struct Builder Builder;
 typedef struct Guard Guard;
 
 void proxc_start(ProcFxn fxn);
+void proxc_exit(void);
 
 void* proxc_argn(size_t n);
 void  proxc_yield(void);
