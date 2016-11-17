@@ -99,7 +99,9 @@ void csp_cleanupbuild(Builder *build)
         PDEBUG("par_build cleanup\n");
         /* recursively free all childs */
         ParBuild *par_build = (ParBuild *)build;
-        TAILQ_FOREACH(child, &par_build->childQ, header.node) {
+        while (!TAILQ_EMPTY(&par_build->childQ)) {
+            child = TAILQ_FIRST(&par_build->childQ);
+            TAILQ_REMOVE(&par_build->childQ, child, header.node);
             csp_cleanupbuild(child);
         }
         break;
@@ -107,7 +109,9 @@ void csp_cleanupbuild(Builder *build)
     case SEQ_BUILD: {
         PDEBUG("seq_build cleanup\n");
         SeqBuild *seq_build = (SeqBuild *)build;
-        TAILQ_FOREACH(child, &seq_build->childQ, header.node) {
+        while (!TAILQ_EMPTY(&seq_build->childQ)) {
+            child = TAILQ_FIRST(&seq_build->childQ);
+            TAILQ_REMOVE(&seq_build->childQ, child, header.node);
             csp_cleanupbuild(child);
         }
         break;
