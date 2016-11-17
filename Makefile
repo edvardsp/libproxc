@@ -14,7 +14,7 @@ OPT =
 WARN = -Wall -Wextra -Werror
 ifeq ($(CC),clang)
 WARN += -Weverything -Wno-reserved-id-macro -Wno-gnu-zero-variadic-macro-arguments \
-	   -Wno-missing-prototypes -Wno-padded -Wno-switch-enum
+	   -Wno-missing-prototypes -Wno-padded -Wno-switch-enum -Wno-missing-noreturn
 endif
 DEFINES = -D_GNU_SOURCE -DCTX_IMPL
 INCLUDES = -I$(SRC_DIR)
