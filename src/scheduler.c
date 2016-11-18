@@ -306,7 +306,7 @@ int scheduler_run(void)
             break;
         case PROC_ENDED:
             /* termination test */
-            sched->is_exit = (sched->curr_proc == sched->main_proc);
+            sched->is_exit = sched->is_exit || (sched->curr_proc == sched->main_proc);
                     
             /* cleanup */
             proc_free(sched->curr_proc);
