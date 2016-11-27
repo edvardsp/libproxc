@@ -42,7 +42,7 @@ __asm__(
 "   xor     %rax, %rax       \n"
 #endif
 "   ret                      \n"
-"                            \n"
+".size _ctx_get, .-_ctx_get  \n"
 );
 
 void _trampoline(void)
@@ -134,7 +134,7 @@ __asm__(
 "   movq    %rax,        (%rsp) \n"
 #endif /* __i386__ vs __x86_64__ */
 "   ret                         \n"
-"                               \n"
+".size ctx_switch, .-ctx_switch \n"
 );
 
 
