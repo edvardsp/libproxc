@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <time.h>
 
-#include "proxc.h"
+#include <proxc.h>
 
 void worker(void) 
 { 
@@ -13,9 +13,8 @@ void worker(void)
     
     printf("worker %d: start\n", id);
 
-    int running = 1;
     int value = id * 3;
-    while (running) {
+    for (;;) {
         printf("worker %d: trying to write %d\n", id, value);
         CHWRITE(chint, &value, int);
         printf("worker %d: succeded\n", id);

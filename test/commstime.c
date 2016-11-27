@@ -4,56 +4,44 @@
 #include <unistd.h>
 #include <time.h>
 
-#include "proxc.h"
+#include <proxc.h>
 
-void fxn1(void) 
-{ 
-    printf("fxn1: start\n");
+void prefix(void) { 
     Chan *a = ARGN(0), *b = ARGN(1);
     int value = 0;
-    CHWRITE(a, &value, int);
-    int running = 1;
-    while (running) {
-        CHREAD(b, &value, int);
+    for(;;) {
         CHWRITE(a, &value, int);
+        CHREAD(b, &value, int);
     }
 }
-void fxn2(void) 
-{ 
-    printf("fxn2: start\n");
+void delta(void) { 
     Chan *a = ARGN(0), *c = ARGN(1), *d = ARGN(2);
     int value;
-    int running = 1;
-    while (running) {
+    for (;;) {
         CHREAD(a, &value, int);
         CHWRITE(d, &value, int);
         CHWRITE(c, &value, int);
     }
 }
 
-void fxn3(void)
-{
-    printf("fxn3: start\n");
+void successor(void) {
     Chan *b = ARGN(0), *c = ARGN(1);
     int value;
-    int running = 1;
-    while (running) {
+    for (;;) {
         CHREAD(c, &value, int);
         value++;
         CHWRITE(b, &value, int);
     }
 }
 
-void timerFxn(void)
-{
+void consumer(void) {
     Chan *d = ARGN(0);
-    int repeat = 100000;
-    int runs = 50;
+    int repeat = 20000;
+    int runs = 100;
     clock_t start, stop;
-    double time_spent, sum;
+    long time_diff = 0;
 
     printf("Repeat = %d, runs = %d\n", repeat, runs);
-    sum = 0;
     for (int j = 0; j < runs; j++) {
         start = clock();
 
@@ -62,12 +50,14 @@ void timerFxn(void)
             CHREAD(d, &x, int);
         }
         stop = clock();
-        time_spent = (double)(stop - start) / CLOCKS_PER_SEC * 1000.0;
-        sum += time_spent;
-        printf("\t%f\n", time_spent);
+        time_diff += (long)(stop - start);
+        //printf("\t%d: %fms\n", j, time_spent);
     }
+    long sum_ns = time_diff * 1000000000L / CLOCKS_PER_SEC;
 
-    printf("Average = %f ms/iteration\n", (sum) / (runs));
+    printf("Average = %.2fms / %d loops\n", (double)(sum_ns) / (1000.0 * 1000.0) / (runs), repeat);
+    printf("Average = %.2fns / loop\n", (double)(sum_ns) / (runs * repeat));
+    printf("Average = %.2fns / chan op\n", (double)(sum_ns) / (runs * repeat * 4));
 }
 
 void foofunc(void)
@@ -78,13 +68,13 @@ void foofunc(void)
     Chan *d = CHOPEN(int);
 
     GO(PAR(
-           PROC(fxn1, a, b),
-           PROC(fxn2, a, c, d),
-           PROC(fxn3, b, c)
+           PROC(prefix, a, b),
+           PROC(delta, a, c, d),
+           PROC(successor, b, c)
        )
     );
 
-    RUN( PROC(timerFxn, d) );
+    RUN( PROC(consumer, d) );
 
     CHCLOSE(a);
     CHCLOSE(b);

@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <time.h>
 
-#include "proxc.h"
+#include <proxc.h>
 
 void writer(void)
 {

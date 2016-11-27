@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <time.h>
 
-#include "proxc.h"
+#include <proxc.h>
 
 #define NUM_WRITERS 7
 #define NUM_READERS 3

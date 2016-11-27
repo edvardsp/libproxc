@@ -1,15 +1,14 @@
 
 #include <stdio.h>
 
-#include "proxc.h"
+#include <proxc.h>
 
 void generate(void)
 {
     Chan *chlong = ARGN(0);
 
-    int running = 1;
     long i = 2;
-    while (running) {
+    for (;;) {
         CHWRITE(chlong, &i, long);
         i++;
     }
@@ -21,9 +20,8 @@ void filter(void)
     Chan *out_chlong = ARGN(1);
     long prime = (long)(long *)ARGN(2);
     
-    int running = 1;
     long i;
-    while (running) {
+    for (;;) {
         CHREAD(in_chlong, &i, long);
         if (i % prime != 0) {
             CHWRITE(out_chlong, &i, long);
@@ -33,7 +31,7 @@ void filter(void)
 
 void proxc(void)
 {
-    enum { PRIME = 4000 };
+    enum { PRIME = 40 };
     
     Chan *chs[PRIME+1];
     chs[0] = CHOPEN(long);
