@@ -33,6 +33,19 @@ void chan_free(Chan *chan)
     free(chan);
 }
 
+#include <stdint.h>
+static inline
+void _chan_copydata(void *dst, void *src, size_t size)
+{
+    switch (size) {
+    case 1:   *(uint8_t *)dst =  *(uint8_t *)src; break;
+    case 2:  *(uint16_t *)dst = *(uint16_t *)src; break;
+    case 4:  *(uint32_t *)dst = *(uint32_t *)src; break;
+    case 8:  *(uint64_t *)dst = *(uint64_t *)src; break;
+    default: memcpy(dst, src, size); break;
+    }
+}
+
 int chan_write(Chan *chan, void *data, size_t size)
 {
     ASSERT_NOTNULL(chan);
@@ -50,7 +63,8 @@ int chan_write(Chan *chan, void *data, size_t size)
             
             // >> release lock >>
 
-            memcpy(first->data, data, size);
+            //memcpy(first->data, data, size);
+            _chan_copydata(first->data, data, size);
             scheduler_addready(first->proc);
             return 1;
         }
@@ -66,7 +80,8 @@ int chan_write(Chan *chan, void *data, size_t size)
         PDEBUG("CHAN write, reader found\n");
         
         /* copy over data */
-        memcpy(first->data, data, size);
+        //memcpy(first->data, data, size);
+        _chan_copydata(first->data, data, size);
 
         /* resume reader */
         scheduler_addready(first->proc);
@@ -116,7 +131,8 @@ int chan_read(Chan *chan, void *data, size_t size)
         PDEBUG("CHAN read, writer found\n");
         
         /* copy over data */
-        memcpy(data, first->data, size);
+        //memcpy(data, first->data, size);
+        _chan_copydata(data, first->data, size);
 
         /* resume writer */
         scheduler_addready(first->proc);
@@ -187,7 +203,8 @@ void chan_altread(Chan *chan, Guard *guard, size_t size)
 
     // >> release lock >>
 
-    memcpy(guard->data.ptr, first->data, chan->data_size);
+    //memcpy(guard->data.ptr, first->data, chan->data_size);
+    _chan_copydata(guard->data.ptr, first->data, chan->data_size);
 
     scheduler_addready(first->proc);
 }
