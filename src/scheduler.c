@@ -87,7 +87,6 @@ int scheduler_create(Scheduler **new_sched)
 
     TAILQ_INIT(&sched->totalQ);
     TAILQ_INIT(&sched->readyQ);
-    TAILQ_INIT(&sched->altQ);
     sched->sleep.num = 0;
     RB_INIT(&sched->sleep.RB);
     sched->altsleep.num = 0;
