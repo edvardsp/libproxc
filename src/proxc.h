@@ -43,10 +43,10 @@ int   proxc_chread(Chan *chan, void *data, size_t size);
 #   define ARGN(index)  proxc_argn(index)
 #   define YIELD()      proxc_yield()
 
-#   define SEC(sec)     MSEC(1000 * (sec))
-#   define MSEC(msec)   USEC(1000 * (msec))
-#   define USEC(usec)   (usec)
-#   define SLEEP(usec)  proxc_sleep(usec)
+#   define SEC(sec)     MSEC(1000ULL * (uint64_t)(sec))
+#   define MSEC(msec)   USEC(1000ULL * (uint64_t)(msec))
+#   define USEC(usec)   ((uint64)(usec))
+#   define SLEEP(usec)  proxc_sleep((uint64_t)(usec))
 
 #   define PROC(...)  proxc_proc(__VA_ARGS__, PROXC_NULL)
 #   define PAR(...)   proxc_par(0, __VA_ARGS__, PROXC_NULL)
