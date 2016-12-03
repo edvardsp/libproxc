@@ -29,7 +29,7 @@ ProXC aims to do this, and with no macro magic!
 
 ## Supports
 
-Currently only supports 32- and 64-bit linux.
+Currently only supports 32- and 64-bit x86 Linux.
 
 ## Compile and Install
 
@@ -37,12 +37,12 @@ Requires CMake 2.8+ for compiling.
 
 Run the following in your terminal. This installs both the static and shared library in /usr/local/lib. ldconfig must be called to register the shared library, as cmake does not do this automatically (for some reason).
 
-    git clone https://github.com/edvardsp/proxc.git
-    mkdir build && cd build
-    cmake ..
-    make
-    sudo make install
-    sudo ldconfig
+    $ git clone https://github.com/edvardsp/libproxc.git
+    $ mkdir libproxc/build && cd libproxc/build
+    $ cmake ..
+    $ make
+    $ sudo make install
+    $ sudo ldconfig
 
 ## Example
 
@@ -85,7 +85,6 @@ void foobar() {
         )
     );
     printf("foobar: stop\n");
-    exit(0);
 }
 
 int main() {
