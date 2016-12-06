@@ -192,7 +192,7 @@ void ctx_madvise(Proc *proc)
     size_t page_size = proc->sched->page_size;
 
     #define page_floor(x) ((x) & ~(page_size - 1))
-    if (page_floor(used_stack) < page_floor(proc->stack.used)) {
+    if (page_floor(used_stack) + page_size < page_floor(proc->stack.used)) {
         int ret = madvise(proc->stack.ptr, page_floor(unused_stack), MADV_DONTNEED);
         ASSERT_0(ret);
     }
