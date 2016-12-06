@@ -45,7 +45,7 @@ int   proxc_chread(Chan *chan, void *data, size_t size);
 
 #   define SEC(sec)     MSEC(1000ULL * (uint64_t)(sec))
 #   define MSEC(msec)   USEC(1000ULL * (uint64_t)(msec))
-#   define USEC(usec)   ((uint64)(usec))
+#   define USEC(usec)   ((uint64_t)(usec))
 #   define SLEEP(usec)  proxc_sleep((uint64_t)(usec))
 
 #   define PROC(...)  proxc_proc(__VA_ARGS__, PROXC_NULL)
