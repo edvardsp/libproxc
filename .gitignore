@@ -10,6 +10,9 @@ obj/
 *.out
 bin/
 
+# CMake folder
+build/
+
 # Profiling files
 callgrind.out.*
 
