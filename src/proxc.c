@@ -92,7 +92,7 @@ Builder* proxc_proc(ProcFxn fxn, ...)
     /* and ready scheduler for build */
     proc->proc_build = builder;
 
-    return (Builder *)builder;
+    return BUILDER_CAST(builder, Builder*);
 } 
 
 
@@ -119,7 +119,7 @@ Builder* proxc_par(int args_start, ...)
     va_list args;
     va_start(args, args_start);
     int ret;
-    ret = csp_insertchilds(&builder->num_childs, (Builder *)builder, 
+    ret = csp_insertchilds(&builder->num_childs, BUILDER_CAST(builder, Builder*), 
                            &builder->childQ, args);
     PDEBUG("PAR build, %zu childs\n", builder->num_childs);
     ASSERT_0(ret);
@@ -127,7 +127,7 @@ Builder* proxc_par(int args_start, ...)
 
     /* FIXME cleanup on NULL */
 
-    return (Builder *)builder;
+    return BUILDER_CAST(builder, Builder*);
 }
 
 /*
@@ -152,7 +152,7 @@ Builder* proxc_seq(int arg_start, ...)
     va_list args;
     va_start(args, arg_start);
     int ret;
-    ret = csp_insertchilds(&builder->num_childs, (Builder *)builder, 
+    ret = csp_insertchilds(&builder->num_childs, BUILDER_CAST(builder, Builder*), 
                            &builder->childQ, args);
     PDEBUG("SEQ build, %zu childs\n", builder->num_childs);
     ASSERT_0(ret);
@@ -161,7 +161,7 @@ Builder* proxc_seq(int arg_start, ...)
 
     /* FIXME cleanup on error */
 
-    return (Builder *)builder;
+    return BUILDER_CAST(builder, Builder*);
 }
 
 
@@ -169,7 +169,7 @@ int proxc_go(Builder *root)
 {
     ASSERT_NOTNULL(root);
 
-    Builder *build = (Builder *)root;
+    Builder *build = BUILDER_CAST(root, Builder*);
 
     /* this notifies scheduler when the bottom of the build is reached */
     build->header.is_root = 1;
@@ -184,7 +184,7 @@ int proxc_run(Builder *root)
 {
     ASSERT_NOTNULL(root);
 
-    Builder *build = (Builder *)root; 
+    Builder *build = BUILDER_CAST(root, Builder*); 
     Scheduler *sched = scheduler_self();
 
     /* this triggers rescheduling of this PROC when RUN tree is done */

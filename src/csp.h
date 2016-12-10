@@ -6,6 +6,9 @@
 
 #include "internal.h"
 
+#define BUILDER_CAST(x, destType) \
+    (((union {__typeof__(x) a; destType b;})x).b) 
+
 struct Header {
     enum BuildType  type;
     struct Builder  *parent;

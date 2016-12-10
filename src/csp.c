@@ -11,9 +11,21 @@
 void* csp_create(enum BuildType type) {
     Builder *builder = NULL;
     switch (type) {
-    case PROC_BUILD: builder = malloc(sizeof(ProcBuild)); break;
-    case PAR_BUILD:  builder = malloc(sizeof(ParBuild));  break;
-    case SEQ_BUILD:  builder = malloc(sizeof(SeqBuild));  break;
+    case PROC_BUILD: {
+        ProcBuild *pb = malloc(sizeof(ProcBuild));
+        builder = BUILDER_CAST(pb, Builder*);
+        break;
+    } 
+    case PAR_BUILD: {
+        SeqBuild *sb = malloc(sizeof(ParBuild));
+        builder = BUILDER_CAST(sb, Builder*);
+        break;
+    }
+    case SEQ_BUILD: {
+        ParBuild *pb = malloc(sizeof(SeqBuild)); 
+        builder = BUILDER_CAST(pb, Builder*);
+        break;
+    }
     }
     if (!builder) return NULL;
 
@@ -62,13 +74,13 @@ void csp_runbuild(Builder *build)
     switch (build->header.type) {
     case PROC_BUILD: {
         PDEBUG("PROC_BUILD started\n");
-        ProcBuild *proc_build = (ProcBuild *)build;
+        ProcBuild *proc_build = BUILDER_CAST(build, ProcBuild*);
         scheduler_addready(proc_build->proc);
         break;
     }
     case PAR_BUILD: {
         PDEBUG("PAR_BUILD started\n");
-        ParBuild *par_build = (ParBuild *)build;
+        ParBuild *par_build = BUILDER_CAST(build, ParBuild*);
         Builder *child;
         TAILQ_FOREACH(child, &par_build->childQ, header.node) {
             csp_runbuild(child);
@@ -77,7 +89,7 @@ void csp_runbuild(Builder *build)
     }
     case SEQ_BUILD: {
         PDEBUG("SEQ_BUILD started\n");
-        SeqBuild *seq_build = (SeqBuild *)build;
+        SeqBuild *seq_build = BUILDER_CAST(build, SeqBuild*);
         csp_runbuild(seq_build->curr_build);
         break;
     }
@@ -98,7 +110,7 @@ void csp_cleanupbuild(Builder *build)
     case PAR_BUILD: {
         PDEBUG("par_build cleanup\n");
         /* recursively free all childs */
-        ParBuild *par_build = (ParBuild *)build;
+        ParBuild *par_build = BUILDER_CAST(build, ParBuild*);
         while (!TAILQ_EMPTY(&par_build->childQ)) {
             child = TAILQ_FIRST(&par_build->childQ);
             TAILQ_REMOVE(&par_build->childQ, child, header.node);
@@ -108,7 +120,7 @@ void csp_cleanupbuild(Builder *build)
     }
     case SEQ_BUILD: {
         PDEBUG("seq_build cleanup\n");
-        SeqBuild *seq_build = (SeqBuild *)build;
+        SeqBuild *seq_build = BUILDER_CAST(build, SeqBuild*);
         while (!TAILQ_EMPTY(&seq_build->childQ)) {
             child = TAILQ_FIRST(&seq_build->childQ);
             TAILQ_REMOVE(&seq_build->childQ, child, header.node);
@@ -136,7 +148,7 @@ void csp_parsebuild(Builder *build)
         break;
     }
     case PAR_BUILD: {
-        ParBuild *par_build = (ParBuild *)build;
+        ParBuild *par_build = BUILDER_CAST(build, ParBuild*);
         /* if par_build has no more active childs, do cleanup */
         if (--par_build->num_childs == 0) {
             PDEBUG("par_build finished\n");
@@ -147,7 +159,7 @@ void csp_parsebuild(Builder *build)
         break;
     }
     case SEQ_BUILD: {
-        SeqBuild *seq_build = (SeqBuild *)build;
+        SeqBuild *seq_build = BUILDER_CAST(build, SeqBuild*);
         if (--seq_build->num_childs == 0) {
             PDEBUG("seq_build finished\n");
             build_done = 1;

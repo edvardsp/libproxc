@@ -88,7 +88,7 @@ void proc_free(Proc *proc)
     /* resolve ProcBuild */
     ProcBuild *build = proc->proc_build;
     if (build != NULL) {
-        csp_parsebuild((Builder *)build);
+        csp_parsebuild(BUILDER_CAST(build, Builder*));
     }
 
     free(proc->args.ptr);
