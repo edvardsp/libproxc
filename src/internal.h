@@ -12,7 +12,7 @@
 #include "context.h"
 
 #define PROXC_NULL  ((void *)-1)
-#define MAX_STACK_SIZE  (128 * 1024)
+#define MAX_STACK_SIZE  (8 * 1024)
 
 /* function prototype for PROC */
 typedef void (*ProcFxn)(void);
