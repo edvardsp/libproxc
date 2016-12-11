@@ -38,6 +38,7 @@ static inline
 void _chan_copydata(void *dst, void *src, size_t size)
 {
     switch (size) {
+    case 0:    /* do nothing */                   break;
     case 1:   *(uint8_t *)dst =  *(uint8_t *)src; break;
     case 2:  *(uint16_t *)dst = *(uint16_t *)src; break;
     case 4:  *(uint32_t *)dst = *(uint32_t *)src; break;
