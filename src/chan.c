@@ -1,5 +1,6 @@
 
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <errno.h>
 
@@ -33,7 +34,6 @@ void chan_free(Chan *chan)
     free(chan);
 }
 
-#include <stdint.h>
 static inline
 void _chan_copydata(void *dst, void *src, size_t size)
 {
