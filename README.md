@@ -1,4 +1,4 @@
-# ProXC - A CSP library for C 
+# ProXC - A CSP-inspired concurrency library for C 
 
 This is a library for C which enables Communicating Sequential Processes (CSP) like structuring of your code. 
 Programming languages such as Occam and XC utilizes and builds around this very paradigm, but sadly is hardware locked.
