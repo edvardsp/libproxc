@@ -6,6 +6,8 @@ project('proxc', 'cpp',
 add_global_arguments('-std=c++1y', language: 'cpp')
 
 thread_dep = dependency('threads')
+boost_dep = dependency('boost',
+    modules : ['system', 'coroutine'])
 
 inc = include_directories('include')
 
@@ -22,14 +24,14 @@ pkg_mod.generate(
     filebase : 'proxc',
     description : 'A concurrency library for C/C++.')
 
-dev_exe = executable('dev_exe', 'src/main.cpp',
-    include_directories : inc,
-    dependencies : boost_dep,
-    link_with : proxc,
-    build_by_default : true)
+#dev_exe = executable('dev_exe', 'src/main.cpp',
+#    include_directories : inc,
+#    dependencies : [boost_dep, thread_dep],
+#    link_with : proxc,
+#    build_by_default : true)
 
-run_target = custom_target('run_exe',
-    output : 'run',
-    input : [],
-    command : [dev_exe])
+#run_target = custom_target('run_exe',
+#    output : 'run',
+#    input : [],
+#    command : [dev_exe])
 

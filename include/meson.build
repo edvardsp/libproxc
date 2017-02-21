@@ -1,5 +1,7 @@
 
+install_headers('proxc.hpp')
 install_headers(
-    'proxc/proxc.hpp',
+    'proxc/config.hpp',
+    'proxc/version.hpp',
     subdir : 'proxc')
 
