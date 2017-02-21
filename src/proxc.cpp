@@ -1,12 +1,8 @@
 
-#include <string>
+#include <proxc.hpp>
 
-#include "proxc/main.hpp"
+PROXC_NAMESPACE_BEGIN
 
-static constexpr const char *NAME = "ProXC - A modern concurrency library";
 
-std::string get_name() 
-{
-    return NAME;
-}
+PROXC_NAMESPACE_END
 
