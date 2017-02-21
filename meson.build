@@ -1,7 +1,8 @@
 
 project('proxc', 'cpp',
     version : '2.0.0',
-    license : 'MIT')
+    license : 'MIT',
+    default_options : ['cpp_std=c++14'])
 add_global_arguments('-std=c++1y', language: 'cpp')
 
 thread_dep = dependency('threads')
@@ -20,4 +21,15 @@ pkg_mod.generate(
     name : 'libproxc',
     filebase : 'proxc',
     description : 'A concurrency library for C/C++.')
+
+dev_exe = executable('dev_exe', 'src/main.cpp',
+    include_directories : inc,
+    dependencies : boost_dep,
+    link_with : proxc,
+    build_by_default : true)
+
+run_target = custom_target('run_exe',
+    output : 'run',
+    input : [],
+    command : [dev_exe])
 
