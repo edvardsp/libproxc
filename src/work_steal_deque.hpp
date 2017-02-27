@@ -27,12 +27,12 @@ std::ptrdiff_t to_signed(std::size_t x)
 //
 // Correct and Efﬁcient Work-Stealing for Weak Memory Models
 // http://www.di.ens.fr/~zappa/readings/ppopp13.pdf
-template<typename T>
+template<typename T, unsigned int Cap = 32>
 class WorkStealDeque
 {
 public:
     using Ptr = std::unique_ptr<T>;
-    static const std::size_t default_capacity = 32;
+    static const std::size_t default_capacity = Cap;
 
 private:
     class CircularArray
@@ -76,10 +76,10 @@ private:
 
 public:
     WorkStealDeque()
-        : m_array(new CircularArray(default_capacity)), m_top(0), m_bottom(0) {}
-
-    WorkStealDeque(std::size_t capacity)
-        : m_array(new CircularArray(capacity)), m_top(0), m_bottom(0) {}
+        : m_array(new CircularArray(Cap)), m_top(0), m_bottom(0)
+    {
+        static_assert(Cap && !(Cap & (Cap - 1)), "Deque capacity must be a power of 2");
+    }
 
     ~WorkStealDeque()
     {
