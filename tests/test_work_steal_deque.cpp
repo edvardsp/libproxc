@@ -193,7 +193,7 @@ void worker_func(std::shared_ptr<MultiDeque> deque, std::promise<int>&& value)
 
 void test_work_steal_deque_multiple_threads()
 {
-    const std::size_t num_workers = 7;
+    const std::size_t num_workers = std::thread::hardware_concurrency() - 1;
     const std::size_t num_items = 1000000;
 
     // populate deque
