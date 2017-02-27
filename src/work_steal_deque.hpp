@@ -2,10 +2,11 @@
 #pragma once
 
 #include <proxc.hpp>
-#include <src/aligned_alloc.hpp>
 
 #include <memory>
 #include <atomic>
+
+#include "aligned_alloc.hpp"
 
 PROXC_NAMESPACE_BEGIN
 
