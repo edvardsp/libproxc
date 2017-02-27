@@ -3,12 +3,22 @@
 
 #include <proxc.hpp>
 
-#include <memory>
 #include <atomic>
+#include <memory>
 
 #include "aligned_alloc.hpp"
 
 PROXC_NAMESPACE_BEGIN
+
+std::ptrdiff_t to_signed(std::size_t x)
+{
+    static_assert(static_cast<std::size_t>(PTRDIFF_MAX) + 1 == static_cast<std::size_t>(PTRDIFF_MIN), "Wrong integer wrapping behaviour");
+    if (x > static_cast<std::size_t>(PTRDIFF_MAX)) {
+            return static_cast<std::ptrdiff_t>(x - static_cast<std::size_t>(PTRDIFF_MIN)) + PTRDIFF_MIN;
+    } else {
+        return static_cast<std::ptrdiff_t>(x);
+    }
+}
 
 // Chase-Lev work-steal deque
 //
@@ -20,8 +30,17 @@ PROXC_NAMESPACE_BEGIN
 template<typename T>
 class WorkStealDeque
 {
+public:
+    using Ptr = std::unique_ptr<T>;
+    static const std::size_t default_capacity = 32;
+
+private:
     class CircularArray
     {
+    private:
+        proxc::AlignedArray<Ptr, 64> m_items;
+        std::unique_ptr<CircularArray> m_prev;
+
     public:
         CircularArray(std::size_t n)
             : m_items(n) {}
@@ -31,14 +50,14 @@ class WorkStealDeque
             return m_items.size();
         }
 
-        T* get(std::size_t index)
+        Ptr get(std::size_t index)
         {
-            return m_items[index % (size() - 1)];
+            return std::move(m_items[index & (size() - 1)]);
         }
 
-        void put(std::size_t index, T* item)
+        void put(std::size_t index, Ptr item)
         {
-            m_items[index & (size() - 1)] = item;
+            m_items[index & (size() - 1)] = std::move(item);
         }
 
         CircularArray* grow(std::size_t top, std::size_t bottom)
@@ -50,25 +69,17 @@ class WorkStealDeque
             }
             return new_array;
         }
-
-    private:
-        proxc::AlignedArray<T*, 64> m_items;
-        std::unique_ptr<CircularArray> m_prev;
     };
 
-    static std::ptrdiff_t to_signed(std::size_t x)
-    {
-        static_assert(static_cast<std::size_t>(PTRDIFF_MAX) + 1 == static_cast<std::size_t>(PTRDIFF_MIN), "Wrong integer wrapping behaviour");
-        if (x > static_cast<std::size_t>(PTRDIFF_MAX)) {
-                return static_cast<std::ptrdiff_t>(x - static_cast<std::size_t>(PTRDIFF_MIN)) + PTRDIFF_MIN;
-        } else {
-            return static_cast<std::ptrdiff_t>(x);
-        }
-    }
+    std::atomic<CircularArray*> m_array;
+    std::atomic<std::size_t> m_top, m_bottom;
 
 public:
     WorkStealDeque()
-        : m_array(new CircularArray(32)), m_top(0), m_bottom(0) {}
+        : m_array(new CircularArray(default_capacity)), m_top(0), m_bottom(0) {}
+
+    WorkStealDeque(std::size_t capacity)
+        : m_array(new CircularArray(capacity)), m_top(0), m_bottom(0) {}
 
     ~WorkStealDeque()
     {
@@ -81,62 +92,69 @@ public:
         delete array;
     }
 
-    void push(T item)
+    std::size_t size() const
+    {
+        std::size_t bottom = m_bottom.load(std::memory_order_relaxed);
+        std::size_t top = m_top.load(std::memory_order_relaxed);
+        if (top <= bottom) {
+            return bottom - top;
+        } else {
+            return capacity() + bottom - top;
+        }
+    }
+
+    std::size_t capacity() const
+    {
+        CircularArray *array = m_array.load(std::memory_order_relaxed);
+        return array->size();
+    }
+
+    void push(Ptr item)
     {
         std::size_t bottom = m_bottom.load(std::memory_order_relaxed);
         std::size_t top = m_top.load(std::memory_order_acquire);
         CircularArray *array = m_array.load(std::memory_order_relaxed);
 
         // Grow array if full
-        if (to_signed(bottom - top) >= to_signed(array->size())) {
+        if (to_signed(bottom - top) > to_signed(array->size() - 1)) {
             array = array->grow(top, bottom);
             m_array.store(array, std::memory_order_release);
         }
 
-        array->put(bottom, item.as_ptr());
+        array->put(bottom, std::move(item));
         std::atomic_thread_fence(std::memory_order_release);
         m_bottom.store(bottom + 1, std::memory_order_relaxed);
     }
 
-    T pop()
+    Ptr pop()
     {
-        std::size_t bottom = m_bottom.load(std::memory_order_relaxed);
-        std::size_t top = m_top.load(std::memory_order_relaxed);
-
-        // Exit if deque is empty
-        if (to_signed(bottom - top) <= 0) {
-            return T();
-        }
-
-        bottom -= 1;
-
-        // Bottom must be stored before top is read
+        std::size_t bottom = m_bottom.load(std::memory_order_relaxed) - 1;
+        CircularArray *a = m_array.load(std::memory_order_relaxed);
         m_bottom.store(bottom, std::memory_order_relaxed);
         std::atomic_thread_fence(std::memory_order_seq_cst);
-        top = m_top.load(std::memory_order_relaxed);
+        std::size_t top = m_top.load(std::memory_order_relaxed);
 
-        // If deque is empty, restore bottom and exit
-        if (to_signed(bottom - top) < 0) {
-            m_bottom.store(bottom + 1, std::memory_order_relaxed);
-            return T();
-        }
-
-        // Fetch item from deque
-        CircularArray *array = m_array.load(std::memory_order_relaxed);
-        T *item = array->get(bottom);
-
-        // If this was the last item, check for races
-        if (bottom == top) {
-            if (!m_top.compare_exchange_strong(top, top + 1, std::memory_order_seq_cst, std::memory_order_relaxed)) {
+        if (to_signed(top - bottom) <= 0) { 
+            // non-empty queue
+            auto item = a->get(bottom);
+            if (top == bottom) { 
+                // last item in queue
+                if (!m_top.compare_exchange_strong(top, top + 1, std::memory_order_seq_cst, std::memory_order_relaxed)) {
+                    // failed race
+                    m_bottom.store(bottom + 1, std::memory_order_relaxed);
+                    return Ptr{};
+                }
                 m_bottom.store(bottom + 1, std::memory_order_relaxed);
-                return T();
             }
+            return item;
+        } else { 
+            // empty-queue
             m_bottom.store(bottom + 1, std::memory_order_relaxed);
+            return Ptr{};
         }
-        return T::from_ptr(item);
     }
 
-    T steal()
+    Ptr steal()
     {
         // Loop while CAS fails.
         while (true) {
@@ -147,23 +165,19 @@ public:
 
             // Exit if deque is empty
             if (to_signed(bottom - top) <= 0) {
-                return T();
+                return Ptr{};
             }
 
             // Fetch item from deque
             CircularArray *array = m_array.load(std::memory_order_consume);
-            T *item = array->get(top);
+            auto item = array->get(top);
 
             // Attempy to increment top
             if (m_top.compare_exchange_weak(top, top + 1, std::memory_order_seq_cst, std::memory_order_relaxed)) {
-                return T::from_ptr(item);
+                return std::move(item);
             }
         }
     }
-
-private:
-    std::atomic<CircularArray*> m_array;
-    std::atomic<std::size_t> m_top, m_bottom;
 };
 
 PROXC_NAMESPACE_END
