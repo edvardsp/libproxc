@@ -1,5 +1,5 @@
 
-#include <proxc/proxc.hpp>
+#include <proxc.hpp>
 
 int main()
 {
