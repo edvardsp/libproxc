@@ -66,7 +66,8 @@ public:
     AlignedArray(AlignedArray&& other) noexcept
         : m_length(other.m_length), m_ptr(other.m_ptr)
     {
-        
+        other.m_ptr = nullptr;
+        other.m_length = 0;
     }
 
     AlignedArray& operator=(std::nullptr_t)
