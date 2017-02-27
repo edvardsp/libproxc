@@ -94,8 +94,9 @@ public:
 
     std::size_t size() const
     {
-        std::size_t bottom = m_bottom.load(std::memory_order_relaxed);
-        std::size_t top = m_top.load(std::memory_order_relaxed);
+        std::size_t top = m_top.load(std::memory_order_acquire);
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+        std::size_t bottom = m_bottom.load(std::memory_order_acquire);
         if (top <= bottom) {
             return bottom - top;
         } else {
@@ -105,7 +106,7 @@ public:
 
     std::size_t capacity() const
     {
-        CircularArray *array = m_array.load(std::memory_order_relaxed);
+        CircularArray *array = m_array.load(std::memory_order_acquire);
         return array->size();
     }
 
@@ -129,14 +130,13 @@ public:
     Ptr pop()
     {
         std::size_t bottom = m_bottom.load(std::memory_order_relaxed) - 1;
-        CircularArray *a = m_array.load(std::memory_order_relaxed);
+        CircularArray * a = m_array.load(std::memory_order_relaxed);
         m_bottom.store(bottom, std::memory_order_relaxed);
         std::atomic_thread_fence(std::memory_order_seq_cst);
         std::size_t top = m_top.load(std::memory_order_relaxed);
 
         if (to_signed(top - bottom) <= 0) { 
             // non-empty queue
-            auto item = a->get(bottom);
             if (top == bottom) { 
                 // last item in queue
                 if (!m_top.compare_exchange_strong(top, top + 1, std::memory_order_seq_cst, std::memory_order_relaxed)) {
@@ -146,6 +146,9 @@ public:
                 }
                 m_bottom.store(bottom + 1, std::memory_order_relaxed);
             }
+            // Only fetch item when we know we got it.
+            // This is so we don't release the item when we didn't get it.
+            auto item = a->get(bottom);
             return item;
         } else { 
             // empty-queue
@@ -168,12 +171,13 @@ public:
                 return Ptr{};
             }
 
-            // Fetch item from deque
             CircularArray *array = m_array.load(std::memory_order_consume);
-            auto item = array->get(top);
 
             // Attempy to increment top
             if (m_top.compare_exchange_weak(top, top + 1, std::memory_order_seq_cst, std::memory_order_relaxed)) {
+                // Only fetch item when we know we got it.
+                // This is so we dont release the item when we didn't get it.
+                auto item = array->get(top);
                 return std::move(item);
             }
         }
