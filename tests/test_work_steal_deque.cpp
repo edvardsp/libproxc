@@ -193,7 +193,7 @@ int worker_func(std::shared_ptr<MultiDeque> deque)
 
 void test_work_steal_deque_multiple_threads()
 {
-    const std::size_t num_workers = 7;
+    const std::size_t num_workers = std::thread::hardware_concurrency() - 1;
     const std::size_t num_items = 1000000;
 
     // populate deque
@@ -201,7 +201,6 @@ void test_work_steal_deque_multiple_threads()
     for (std::size_t i = 0; i < num_items; i++) {
         deque.get()->push(std::make_unique<Object>(i));
     }
-
 
     // start workers
     std::vector<std::future<int>> values;
