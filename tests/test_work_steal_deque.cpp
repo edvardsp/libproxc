@@ -179,7 +179,7 @@ void test_work_steal_deque_single_thread()
 
 using MultiDeque = proxc::WorkStealDeque<Object, 1<<24>;
 
-void worker_func(std::shared_ptr<MultiDeque> deque, std::promise<int>&& value)
+int worker_func(std::shared_ptr<MultiDeque> deque)
 {
     int steals = 0;
     while (deque.get()->size() != 0) {
@@ -188,7 +188,7 @@ void worker_func(std::shared_ptr<MultiDeque> deque, std::promise<int>&& value)
             steals++;
         }
     }
-    value.set_value(steals);
+    return steals;
 }
 
 void test_work_steal_deque_multiple_threads()
@@ -202,14 +202,13 @@ void test_work_steal_deque_multiple_threads()
         deque.get()->push(std::make_unique<Object>(i));
     }
 
+
     // start workers
-    std::vector<std::thread> threads;
     std::vector<std::future<int>> values;
-    threads.reserve(num_workers);
     for (std::size_t i = 0; i < num_workers; ++i) {
-        std::promise<int> p;
-        values.push_back(p.get_future());
-        threads.emplace_back(std::thread(worker_func, deque, std::move(p)));
+        values.push_back(std::async(
+            std::launch::async,
+            &worker_func, deque));
     }
     
     // pop from deque while it is non-empty
@@ -221,11 +220,7 @@ void test_work_steal_deque_multiple_threads()
         }
     }
 
-    // when deque is empty, join all workers
-    for (auto& thread : threads) {
-        thread.join();
-    }
-    // and calculate the results from them
+    // get the results from the workers
     int total_steals = n_pops;
     for (auto& value : values) {
         auto n_steals = value.get();
