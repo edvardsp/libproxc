@@ -5,6 +5,9 @@
 
 #include <atomic>
 #include <memory>
+#include <utility>
+
+#include <boost/noncopyable.hpp>
 
 #include "aligned_alloc.hpp"
 
@@ -28,11 +31,118 @@ std::ptrdiff_t to_signed(std::size_t x)
 // Correct and Efﬁcient Work-Stealing for Weak Memory Models
 // http://www.di.ens.fr/~zappa/readings/ppopp13.pdf
 template<typename T, unsigned int Cap = 32>
-class WorkStealDeque
+class WorkStealDeque 
 {
 public:
+    class Popper;
+    class Stealer;
+
+    using PopperEnd = std::unique_ptr<Popper>;
+    using StealerEnd = std::shared_ptr<Stealer>;
+    using DequeEnds = std::pair<PopperEnd, StealerEnd>;
+
     using Ptr = std::unique_ptr<T>;
+
+private:
+    using Deque = std::shared_ptr<WorkStealDeque<T,Cap>>;
+
+public:
     static const std::size_t default_capacity = Cap;
+
+    static 
+    DequeEnds create()
+    {
+        auto deque   = std::make_shared<WorkStealDeque>();
+        auto popper  = std::make_unique<Popper>(deque);
+        auto stealer = std::make_shared<Stealer>(deque);
+        return std::move(DequeEnds({ 
+            std::move(popper),
+            std::move(stealer)
+        }));
+    }
+
+    WorkStealDeque()
+        : m_array(new CircularArray(Cap)), m_top(0), m_bottom(0)
+    {
+        static_assert(Cap && !(Cap & (Cap - 1)), "Deque capacity must be a power of 2");
+    }
+
+    ~WorkStealDeque()
+    {
+        std::size_t bottom = m_bottom.load(std::memory_order_relaxed);
+        std::size_t top = m_top.load(std::memory_order_relaxed);
+        CircularArray *array = m_array.load(std::memory_order_relaxed);
+        for (std::size_t i = top; i != bottom; ++i) {
+            // TODO free all residing tasks
+        }
+        delete array;
+    }
+
+    class Popper : boost::noncopyable
+    {
+    public:
+        Popper(Deque deque)
+            : m_deque(std::move(deque)) {}
+
+        Popper(Popper&&) = default;
+
+        inline
+        void push(Ptr&& item)
+        {
+            m_deque->push(std::forward<Ptr>(item));
+        }
+
+        inline
+        Ptr pop()
+        {
+            return m_deque->pop();
+        }
+
+        inline
+        std::size_t size()
+        {
+            return m_deque->size();
+        }
+
+        inline
+        std::size_t capacity()
+        {
+            return m_deque->capacity();
+        }
+
+    private:
+        Deque m_deque;
+    };
+
+    class Stealer : boost::noncopyable
+    {
+    public:
+        Stealer(Deque deque)
+            : m_deque(std::move(deque)) {}
+
+        Stealer(Stealer&&) = default;
+
+        inline
+        Ptr steal()
+        {
+            return m_deque->steal();
+        }
+
+        inline
+        std::size_t size()
+        {
+            return m_deque->size();
+        }
+
+        inline
+        std::size_t capacity()
+        {
+            return m_deque->size();
+        }
+
+    private:
+        Deque m_deque;
+    };
 
 private:
     class CircularArray
@@ -73,24 +183,6 @@ private:
 
     std::atomic<CircularArray*> m_array;
     std::atomic<std::size_t> m_top, m_bottom;
-
-public:
-    WorkStealDeque()
-        : m_array(new CircularArray(Cap)), m_top(0), m_bottom(0)
-    {
-        static_assert(Cap && !(Cap & (Cap - 1)), "Deque capacity must be a power of 2");
-    }
-
-    ~WorkStealDeque()
-    {
-        std::size_t bottom = m_bottom.load(std::memory_order_relaxed);
-        std::size_t top = m_top.load(std::memory_order_relaxed);
-        CircularArray *array = m_array.load(std::memory_order_relaxed);
-        for (std::size_t i = top; i != bottom; ++i) {
-            // TODO free all residing tasks
-        }
-        delete array;
-    }
 
     std::size_t size() const
     {
