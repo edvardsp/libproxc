@@ -5,6 +5,7 @@
 #include <chrono>
 #include <future>
 #include <thread>
+#include <tuple>
 #include <vector>
 
 #include "setup.hpp"
@@ -49,40 +50,42 @@ using Object = TestObject<std::size_t>;
 
 void test_work_steal_deque_growing()
 {
-    proxc::WorkStealDeque<Object, 1024> pop_deque{}, steal_deque{};
-    auto capacity = pop_deque.default_capacity;
+    auto only_pop   = proxc::WorkStealDeque<Object>::create();
+    auto only_steal = proxc::WorkStealDeque<Object>::create();
+
+    const auto capacity = proxc::WorkStealDeque<Object>::default_capacity;
     auto num_items = capacity * 2;
 
     for (std::size_t i = 0; i < capacity; ++i) {
-        pop_deque.push(std::make_unique<TestObject<std::size_t>>(i));
-        steal_deque.push(std::make_unique<TestObject<std::size_t>>(i));
+        only_pop.first->push(std::make_unique<TestObject<std::size_t>>(i));
+        only_steal.first->push(std::make_unique<TestObject<std::size_t>>(i));
 
-        throw_assert_eq(pop_deque.capacity(), capacity, "inconsistent capacity");
-        throw_assert_eq(pop_deque.size(),     i + 1,    "inconsistent sizes");
-        throw_assert_eq(steal_deque.capacity(), capacity, "inconsistent capacity");
-        throw_assert_eq(steal_deque.size(),     i + 1,    "inconsistent sizes");
+        throw_assert_eq(only_pop.first->capacity(),   capacity, "inconsistent capacity");
+        throw_assert_eq(only_pop.first->size(),       i + 1,    "inconsistent sizes");
+        throw_assert_eq(only_steal.first->capacity(), capacity, "inconsistent capacity");
+        throw_assert_eq(only_steal.first->size(),     i + 1,    "inconsistent sizes");
     }
     //  both deques contains (cap-1, cap-2, ..., 1, 0)
 
     for (std::size_t i = capacity; i < num_items; ++i) {
-        pop_deque.push(std::make_unique<TestObject<std::size_t>>(i));
-        steal_deque.push(std::make_unique<TestObject<std::size_t>>(i));
+        only_pop.first->push(std::make_unique<TestObject<std::size_t>>(i));
+        only_steal.first->push(std::make_unique<TestObject<std::size_t>>(i));
 
-        throw_assert_eq(pop_deque.capacity(), 2 * capacity, "inconsistent capacity");
-        throw_assert_eq(pop_deque.size(),     i + 1,        "inconsistent sizes");
-        throw_assert_eq(steal_deque.capacity(), 2 * capacity, "inconsistent capacity");
-        throw_assert_eq(steal_deque.size(),     i + 1,        "inconsistent sizes");
+        throw_assert_eq(only_pop.first->capacity(), 2 * capacity, "inconsistent capacity");
+        throw_assert_eq(only_pop.first->size(),     i + 1,        "inconsistent sizes");
+        throw_assert_eq(only_steal.first->capacity(), 2 * capacity, "inconsistent capacity");
+        throw_assert_eq(only_steal.first->size(),     i + 1,        "inconsistent sizes");
     }
     //  both deques contains (2*cap-1, 2*cap-2, ..., 1, 0)
 
     for (std::size_t i = 0; i < num_items; ++i) {
-        auto pop_item   = pop_deque.pop();
-        auto steal_item = steal_deque.steal();
+        auto pop_item   = only_pop.first->pop();
+        auto steal_item = only_steal.second->steal();
         throw_assert(pop_item != nullptr,   "item is nullptr, i = " << i);
         throw_assert(steal_item != nullptr, "item is nullptr, i = " << i);
 
-        auto pop_value   = pop_item.get()->get();
-        auto steal_value = steal_item.get()->get();
+        auto pop_value   = pop_item->get();
+        auto steal_value = steal_item->get();
         throw_assert_eq(pop_value,   2 * capacity - i - 1, "items does not match");
         throw_assert_eq(steal_value, i,                    "items does not match");
     }
@@ -90,35 +93,37 @@ void test_work_steal_deque_growing()
 
 void test_work_steal_deque_fill_and_deplete()
 {
-    proxc::WorkStealDeque<Object> pop_deque{}, steal_deque{};
-    const auto capacity  = pop_deque.default_capacity;
+    auto only_pop = proxc::WorkStealDeque<Object>::create();
+    auto only_steal = proxc::WorkStealDeque<Object>::create();
+
+    const auto capacity  = proxc::WorkStealDeque<Object>::default_capacity;
     const auto num_items = capacity;
 
     {
-        throw_assert_eq(pop_deque.capacity(), capacity, "inconsistent capacity");
-        throw_assert_eq(pop_deque.size(),     0u,       "inconsistent sizes");
-        throw_assert_eq(steal_deque.capacity(), capacity, "inconsistent capacity");
-        throw_assert_eq(steal_deque.size(),     0u,       "inconsistent sizes");
+        throw_assert_eq(only_pop.first->capacity(),   capacity, "inconsistent capacity");
+        throw_assert_eq(only_pop.first->size(),       0u,       "inconsistent sizes");
+        throw_assert_eq(only_steal.first->capacity(), capacity, "inconsistent capacity");
+        throw_assert_eq(only_steal.first->size(),     0u,       "inconsistent sizes");
     }
 
     for (std::size_t i = 0; i < num_items; ++i) {
-        pop_deque.push(std::make_unique<TestObject<std::size_t>>(i));
-        steal_deque.push(std::make_unique<TestObject<std::size_t>>(i));
+        only_pop.first->push(std::make_unique<TestObject<std::size_t>>(i));
+        only_steal.first->push(std::make_unique<TestObject<std::size_t>>(i));
 
-        throw_assert_eq(pop_deque.capacity(), capacity, "inconsistent capacity");
-        throw_assert_eq(pop_deque.size(),     i + 1,    "inconsistent capacity");
-        throw_assert_eq(steal_deque.capacity(), capacity, "inconsistent sizes");
-        throw_assert_eq(steal_deque.size(),     i + 1,    "inconsistent sizes");
+        throw_assert_eq(only_pop.first->capacity(),   capacity, "inconsistent capacity");
+        throw_assert_eq(only_pop.first->size(),       i + 1,    "inconsistent capacity");
+        throw_assert_eq(only_steal.first->capacity(), capacity, "inconsistent sizes");
+        throw_assert_eq(only_steal.first->size(),     i + 1,    "inconsistent sizes");
     }
 
     for (std::size_t i = 0; i < num_items; ++i) {
-        auto pop_item   = pop_deque.pop();
-        auto steal_item = steal_deque.steal();
+        auto pop_item   = only_pop.first->pop();
+        auto steal_item = only_steal.second->steal();
     
-        throw_assert_eq(pop_deque.capacity(), capacity,          "inconsistent capacity");
-        throw_assert_eq(pop_deque.size(),     num_items - i - 1, "inconsistent sizes");
-        throw_assert_eq(steal_deque.capacity(), capacity,          "inconsistent capacity");
-        throw_assert_eq(steal_deque.size(),     num_items - i - 1, "inconsistent sizes");
+        throw_assert_eq(only_pop.first->capacity(),   capacity,          "inconsistent capacity");
+        throw_assert_eq(only_pop.first->size(),       num_items - i - 1, "inconsistent sizes");
+        throw_assert_eq(only_steal.first->capacity(), capacity,          "inconsistent capacity");
+        throw_assert_eq(only_steal.first->size(),     num_items - i - 1, "inconsistent sizes");
 
         throw_assert(pop_item != nullptr,   "item is nullptr");
         throw_assert(steal_item != nullptr, "item is nullptr");
@@ -129,61 +134,59 @@ void test_work_steal_deque_fill_and_deplete()
     }
 
     {
-        throw_assert_eq(pop_deque.capacity(), capacity, "inconsistent capacity");
-        throw_assert_eq(pop_deque.size(),     0u,       "inconsistent sizes");
-        throw_assert_eq(steal_deque.capacity(), capacity, "inconsistent capacity");
-        throw_assert_eq(steal_deque.size(),     0u,       "inconsistent sizes");
+        throw_assert_eq(only_pop.first->capacity(),   capacity, "inconsistent capacity");
+        throw_assert_eq(only_pop.first->size(),       0u,       "inconsistent sizes");
+        throw_assert_eq(only_steal.first->capacity(), capacity, "inconsistent capacity");
+        throw_assert_eq(only_steal.first->size(),     0u,       "inconsistent sizes");
     }
 }
 
 void test_work_steal_deque_single_thread() 
 {
-    proxc::WorkStealDeque<Object> deque{};
+    auto deque = proxc::WorkStealDeque<Object>::create();
 
     {
-        throw_assert(deque.pop()   == nullptr, "empty deque does not return nullptr on pop");
-        throw_assert(deque.steal() == nullptr, "empty deque does not return nullptr on steal");
+        throw_assert(deque.first->pop()    == nullptr, "empty deque does not return nullptr on pop");
+        throw_assert(deque.second->steal() == nullptr, "empty deque does not return nullptr on steal");
     }
 
-    deque.push(std::make_unique<TestObject<std::size_t>>(1337)); // (1337)
-    deque.push(std::make_unique<TestObject<std::size_t>>(10));   // (10, 1337)
-    deque.push(std::make_unique<TestObject<std::size_t>>(42));   // (42, 10, 1337)
+    deque.first->push(std::make_unique<Object>(1337)); // (1337)
+    deque.first->push(std::make_unique<Object>(10));   // (10, 1337)
+    deque.first->push(std::make_unique<Object>(42));   // (42, 10, 1337)
 
     {
-        auto item = deque.pop();                            // (10, 1337)
+        auto item = deque.first->pop();                            // (10, 1337)
         throw_assert(item != nullptr, "non-empty deque returns nullptr on pop");
-        auto value = item.get()->get();
-        throw_assert(value == 42, "popped item `" << value << "` does not match content `" << 42 << "`");
+        auto value = item->get();
+        throw_assert_eq(value, 42u, "popped item does not match content");
     }
     
     {
-        auto item = deque.steal();                          // (10)
+        auto item = deque.second->steal();                          // (10)
         throw_assert(item != nullptr, "non-empty deque returns nullptr on steal");
-        auto value = item.get()->get();
-        throw_assert(value == 1337, "popped item `" << value << "` does not match content `" << 1337 << "`");
+        auto value = item->get();
+        throw_assert_eq(value, 1337u, "popped item does not match content");
     }
 
     {
-        auto item = deque.steal();                          // (*empty*)
+        auto item = deque.second->steal();                          // (*empty*)
         throw_assert(item != nullptr, "non-empty deque returns nullptr on steal");
-        auto value = item.get()->get();
-        throw_assert(value == 10, "popped item `" << value << "` does not match content `" << 10 << "`");
+        auto value = item->get();
+        throw_assert_eq(value, 10u, "popped item does not match content");
     }
 
     {
-        throw_assert(deque.pop()   == nullptr, "empty deque does not return nullptr on pop");
-        throw_assert(deque.steal() == nullptr, "empty deque does not return nullptr on steal");
+        throw_assert(deque.first->pop()    == nullptr, "empty deque does not return nullptr on pop");
+        throw_assert(deque.second->steal() == nullptr, "empty deque does not return nullptr on steal");
     }
 }
 
-
-using MultiDeque = proxc::WorkStealDeque<Object, 1<<24>;
-
-int worker_func(std::shared_ptr<MultiDeque> deque)
+template<typename T, unsigned int C>
+int worker_func(typename proxc::WorkStealDeque<T, C>::StealerEnd stealer)
 {
     int steals = 0;
-    while (deque.get()->size() != 0) {
-        auto item = deque.get()->steal();
+    while (stealer->size() != 0) {
+        auto item = stealer->steal();
         if (item != nullptr) {
             steals++;
         }
@@ -197,9 +200,10 @@ void test_work_steal_deque_multiple_threads()
     const std::size_t num_items = 1000000;
 
     // populate deque
-    auto deque = std::make_shared<MultiDeque>();
+    auto deque = proxc::WorkStealDeque<Object, 1 << 20>::create();
+    auto popper = std::move(deque.first);
     for (std::size_t i = 0; i < num_items; i++) {
-        deque.get()->push(std::make_unique<Object>(i));
+        popper->push(std::make_unique<Object>(i));
     }
 
     // start workers
@@ -207,13 +211,13 @@ void test_work_steal_deque_multiple_threads()
     for (std::size_t i = 0; i < num_workers; ++i) {
         values.push_back(std::async(
             std::launch::async,
-            &worker_func, deque));
+            &worker_func<Object, 1<<20>, deque.second));
     }
     
     // pop from deque while it is non-empty
     int n_pops = 0;
-    while (deque.get()->size() != 0) {
-        auto item = deque.get()->pop();
+    while (popper->size() != 0) {
+        auto item = popper->pop();
         if (item != nullptr) {
             n_pops += 1;
         }
