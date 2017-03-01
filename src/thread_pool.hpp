@@ -9,12 +9,9 @@
 #include <mutex>
 #include <random>
 #include <thread>
-#include <utility>
 #include <vector>
 
 #include <boost/noncopyable.hpp>
-
-#include <iostream>
 
 #include "work_steal_deque.hpp"
 
@@ -39,21 +36,44 @@ private:
     using Stealer = typename proxc::WorkStealDeque<Task>::StealerEnd;
     using Rng = std::default_random_engine;
 
-    struct WorkerData 
+    class Worker
     {
-        WorkerData(std::size_t id_, Popper popper_, std::vector<Stealer> victims_)
-            : id(id_)
-            , popper(std::move(popper_))
-            , victims(std::move(victims_))
-            //, rand(std::random_device{}())
-        {}
+    public:
+        Worker(std::size_t id, Popper popper, std::vector<Stealer> stealer)
+            : m_id(id)
+            , m_popper(std::move(popper))
+            , m_stealer(std::move(stealer))
+        {
+            m_handle = std::thread([=]() {
+                worker_thread();
+            });
+        }
 
-        WorkerData(WorkerData&&) = default;
+        Worker(Worker&&) = default;
 
-        std::size_t id;
-        Popper popper;
-        std::vector<Stealer> victims;
-        //Rng rand;
+        ~Worker()
+        {
+            m_handle.join();
+        }
+
+        void worker_thread()
+        {
+            for (;;) {
+                if (auto task = m_popper->pop()) {
+                    std::cout << *task << std::endl;
+                    continue;
+                }
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(500));
+        }
+
+    private:
+        std::size_t m_id;
+        Popper m_popper;
+        std::vector<Stealer> m_stealer;
+
+        std::thread m_handle;
     };
 
 public:
@@ -85,50 +105,18 @@ public:
             }
 
             // spawn worker thread with its worker data, and detach
-            auto worker_data = WorkerData{
-                id,
-                std::move(poppers[id]),
-                std::move(victims)
-            };
-            m_workers.emplace_back([this,&worker_data]() { 
-                worker_thread(std::move(worker_data)); 
-            });
-            //m_workers[id].detach();
+            m_workers.emplace_back(id, std::move(poppers[id]), std::move(victims));
         }
     }
 
-    ~ThreadPool() 
-    {
-        for (auto& worker : m_workers) {
-            worker.join();
-        }
-    }
+    ~ThreadPool() {}
 
 private:
     std::condition_variable m_cv;
     std::mutex m_mtx;
 
     std::size_t m_num_workers;
-    std::vector<std::thread> m_workers;
-
-    void worker_thread(WorkerData worker_data)
-    {
-        auto popper = std::move(worker_data.popper);
-        for (;;) {
-            if (auto task = popper->pop()) {
-                std::cout << *task << std::endl;
-                continue;
-            }
-            break;
-        }
-        std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(500));
-    }
-
-    void steal()
-    {
-        
-    }
-
+    std::vector<Worker> m_workers;
 };
 
 PROXC_NAMESPACE_END
