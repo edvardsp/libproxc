@@ -4,7 +4,9 @@
 #include <proxc.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <condition_variable>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <random>
@@ -31,6 +33,9 @@ std::size_t num_available_cores()
 template<typename Task>
 class ThreadPool : boost::noncopyable
 {
+public:
+    using Ptr = typename proxc::WorkStealDeque<Task>::Ptr;
+
 private:
     using Popper = typename proxc::WorkStealDeque<Task>::PopperEnd;
     using Stealer = typename proxc::WorkStealDeque<Task>::StealerEnd;
@@ -39,10 +44,12 @@ private:
     class Worker
     {
     public:
-        Worker(std::size_t id, Popper popper, std::vector<Stealer> stealer)
-            : m_id(id)
+        Worker(ThreadPool& tp, std::size_t id, Popper popper, std::vector<Stealer> victims)
+            : m_tp(tp)
+            , m_id(id)
             , m_popper(std::move(popper))
-            , m_stealer(std::move(stealer))
+            , m_victims(std::move(victims))
+            , m_rng(std::default_random_engine{std::random_device{}()})
         {
             m_handle = std::thread([=]() {
                 worker_thread();
@@ -58,26 +65,49 @@ private:
 
         void worker_thread()
         {
-            for (;;) {
+            const auto dispatcher = m_tp.m_dispatcher;
+            while (!m_tp.m_stop) {
                 if (auto task = m_popper->pop()) {
-                    std::cout << *task << std::endl;
+                    dispatcher(std::move(task));
                     continue;
                 }
-                break;
+
+                if (auto task = try_steal()) {
+                    dispatcher(std::move(task));
+                    continue;
+                }
             }
-            std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(500));
         }
 
     private:
+        const ThreadPool& m_tp;
+
         std::size_t m_id;
         Popper m_popper;
-        std::vector<Stealer> m_stealer;
+        std::vector<Stealer> m_victims;
 
         std::thread m_handle;
+        Rng m_rng;
+
+        Ptr try_steal()
+        {
+            // always yield once before stealing.
+            std::this_thread::yield();
+
+            std::shuffle(m_victims.begin(), m_victims.end(), m_rng);
+            for (auto& victim : m_victims) {
+                if (auto task = victim->steal()) {
+                    return std::move(task);
+                }
+            }
+            return Ptr{};
+        }
     };
 
 public:
-    ThreadPool(std::size_t num_workers)
+    ThreadPool(std::size_t num_workers, std::function<void(Ptr)> dispatcher)
+        : m_dispatcher(dispatcher)
+        , m_stop(false)
     {
         m_num_workers = std::min(num_available_cores(), num_workers);
 
@@ -105,13 +135,19 @@ public:
             }
 
             // spawn worker thread with its worker data, and detach
-            m_workers.emplace_back(id, std::move(poppers[id]), std::move(victims));
+            m_workers.emplace_back(*this, id, std::move(poppers[id]), std::move(victims));
         }
     }
 
-    ~ThreadPool() {}
+    ~ThreadPool()
+    {
+        m_stop.store(true, std::memory_order_relaxed);
+    }
 
 private:
+    std::function<void(Ptr)> m_dispatcher;
+
+    std::atomic_bool m_stop;
     std::condition_variable m_cv;
     std::mutex m_mtx;
 
