@@ -1,13 +1,20 @@
 
 #include <proxc.hpp>
 
-#include <iostream>
+#include <string>
 
 #include "setup.hpp"
 
 #include "thread_pool.hpp"
 
+using ThreadPool = proxc::ThreadPool<std::string>;
+
+void dispatcher(ThreadPool::Ptr)
+{
+}
+
 int main()
 {
-    proxc::ThreadPool<int> tp{4};
+    ThreadPool tp{8, dispatcher};
+    std::this_thread::sleep_for(std::chrono::seconds(5));
 }
