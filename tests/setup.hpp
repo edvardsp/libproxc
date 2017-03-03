@@ -2,10 +2,41 @@
 #pragma once
 
 #include <exception>
+#include <mutex>
 #include <string>
 #include <sstream>
 #include <iostream>
  
+// Thread-safe cout
+struct SafeCout
+{
+    template<typename... Args>
+    static void print(Args... args)
+    {
+        static std::mutex mtx;
+        std::lock_guard<std::mutex> lock(mtx);
+        print_aux(args...);
+        std::cout << std::endl;
+        std::cout.flush();
+    }
+
+private:
+    template<typename Arg>
+    static void print_aux(Arg arg)
+    {
+        std::cout << arg;
+    }
+
+    template<typename Arg, typename... Args>
+    static void print_aux(Arg arg, Args... args)
+    {
+        std::cout << arg;
+        print_aux(args...);
+    }
+};
+
+
+
 // Exception type for assertion failures
 class AssertionFailureException : public std::exception
 {
