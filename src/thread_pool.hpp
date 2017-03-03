@@ -15,6 +15,8 @@
 
 #include <boost/noncopyable.hpp>
 
+#include "setup.hpp"
+
 #include "work_steal_deque.hpp"
 
 PROXC_NAMESPACE_BEGIN
@@ -68,19 +70,45 @@ private:
             const auto dispatcher = m_tp.m_dispatcher;
             while (!m_tp.m_stop) {
                 if (auto task = m_popper->pop()) {
+                    SafeCout::print("Worker ", m_id, ", popped task");
                     dispatcher(std::move(task));
                     continue;
                 }
 
                 if (auto task = try_steal()) {
+                    SafeCout::print("Worker ", m_id, ", stole task");
                     dispatcher(std::move(task));
                     continue;
+                }
+
+                {
+                    std::unique_lock<std::mutex> lock(m_tp.m_mtx);
+                    SafeCout::print("Worker ", m_id, ", waiting");
+                    m_tp.m_cv.wait(lock, [this]{ 
+                        return this->m_tp.m_stop || 
+                               this->m_tp.m_num_ready_tasks.load(std::memory_order_relaxed) != 0; 
+                    });
+                    SafeCout::print("Worker ", m_id, ", woke up");
+                    if (m_tp.m_stop) {
+                        break;
+                    }
+                    // subtract number of ready tasks. if more than one ready tasks then notify one more
+                    if (m_tp.m_num_ready_tasks.fetch_sub(std::memory_order_relaxed) > 1) {
+                        lock.unlock();
+                        m_tp.m_cv.notify_one();
+                    }
                 }
             }
         }
 
+        void push(Ptr&& item)
+        {
+            SafeCout::print("Worker ", m_id, ", pushed item");
+            m_popper->push(std::forward<Ptr>(item));
+        }
+
     private:
-        const ThreadPool& m_tp;
+        ThreadPool& m_tp;
 
         std::size_t m_id;
         Popper m_popper;
@@ -108,6 +136,7 @@ public:
     ThreadPool(std::size_t num_workers, std::function<void(Ptr)> dispatcher)
         : m_dispatcher(dispatcher)
         , m_stop(false)
+        , m_num_ready_tasks(0)
     {
         m_num_workers = std::min(num_available_cores(), num_workers);
 
@@ -134,20 +163,36 @@ public:
                 }
             }
 
-            // spawn worker thread with its worker data, and detach
+            // spawn worker thread with its worker data
             m_workers.emplace_back(*this, id, std::move(poppers[id]), std::move(victims));
         }
     }
 
     ~ThreadPool()
     {
-        m_stop.store(true, std::memory_order_relaxed);
+        m_stop = true;
+        m_cv.notify_all();
+    }
+
+    void schedule(Ptr item)
+    {
+        std::default_random_engine gen(std::random_device{}());
+        auto start = m_workers.begin(), end = m_workers.end();
+        std::uniform_int_distribution<> dist(0, std::distance(start, end) - 1);
+        std::advance(start, dist(gen));
+        start->push(std::move(item));
+        {
+            std::unique_lock<std::mutex> lock(m_mtx);
+            m_num_ready_tasks.fetch_add(std::memory_order_relaxed);
+        }
+        m_cv.notify_one();
     }
 
 private:
     std::function<void(Ptr)> m_dispatcher;
 
     std::atomic_bool m_stop;
+    std::atomic<std::size_t> m_num_ready_tasks;
     std::condition_variable m_cv;
     std::mutex m_mtx;
 
