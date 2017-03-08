@@ -4,7 +4,7 @@ project('proxc', 'cpp',
     license : 'MIT',
     default_options : ['cpp_std=c++14'])
 add_global_arguments(
-    '-DBOOST_USE_EXECUTION_CONTEXT=1',
+    '-DBOOST_EXECUTION_CONTEXT=1',
     language: 'cpp')
 
 cxx = meson.get_compiler('cpp')
@@ -24,7 +24,8 @@ endif
 
 thread_dep = dependency('threads')
 boost_dep = dependency('boost',
-    modules : ['context'])
+    modules : ['context'],
+    version : '>=1.61')
 
 inc = include_directories('include')
 src = include_directories('src')
