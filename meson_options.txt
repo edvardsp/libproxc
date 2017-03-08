@@ -1,0 +1,4 @@
+option('enable-segmented-stacks',
+    type: 'boolean', value: false,
+    description: 'Enable segmented stacks for coroutines. This requires gcc 4.7+ or clang 3.4+, as well as boost.context built with segmented stack support.')
+

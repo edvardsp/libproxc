@@ -3,11 +3,28 @@ project('proxc', 'cpp',
     version : '2.0.0',
     license : 'MIT',
     default_options : ['cpp_std=c++14'])
-add_global_arguments('-std=c++1y', '-fcolor-diagnostics', language: 'cpp')
+add_global_arguments(
+    '-DBOOST_USE_EXECUTION_CONTEXT=1',
+    language: 'cpp')
+
+cxx = meson.get_compiler('cpp')
+if cxx.get_id() == 'clang++' or cxx.get_id() == 'g++'
+    add_global_arguments('-fcolor-diagnostics', language: 'cpp')
+endif
+
+enable_segmented_stacks = get_option('enable-segmented-stacks')
+if enable_segmented_stacks
+    if cxx.get_id() == 'clang++' or cxx.get_id() == 'g++'
+        add_global_arguments(
+            '-DBOOST_USE_SEGMENTED_STACKS',
+            '-fsplit-stack',
+            language: 'cpp')
+    endif
+endif
 
 thread_dep = dependency('threads')
 boost_dep = dependency('boost',
-    modules : ['system', 'coroutine'])
+    modules : ['context'])
 
 inc = include_directories('include')
 src = include_directories('src')
