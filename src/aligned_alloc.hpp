@@ -4,6 +4,7 @@
 #include <proxc.hpp>
 
 #include <stdlib.h> // posix_memalign
+#include <cstring> // for memset
 
 #include <new>
 #include <type_traits>
@@ -23,6 +24,7 @@ void* aligned_alloc(std::size_t size, std::size_t align)
     if (posix_memalign(&ptr, align, size)) {
         throw std::bad_alloc();
     }
+    std::memset(ptr, 0, size);
     return ptr;
 #endif
 }
