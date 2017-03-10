@@ -13,21 +13,25 @@ namespace policy {
 template<typename T>
 struct PolicyBase
 {
+    PolicyBase() {}
+
     PolicyBase(PolicyBase const &) = delete;
     PolicyBase(PolicyBase &&)      = delete;
 
     PolicyBase & operator=(PolicyBase const &) = delete;
     PolicyBase & operator=(PolicyBase &&)      = delete;
 
-    virtual ~PolicyBase() = 0;
+    virtual ~PolicyBase() {}
 
-    virtual T * pick_next() = 0;
+    virtual void enqueue(T *) noexcept = 0;
 
-    virtual bool is_ready() const = 0;
+    virtual T * pick_next() noexcept = 0;
 
-    virtual bool suspend_until(std::chrono::steady_clock::time_point const & time_point) = 0;
+    virtual bool is_ready() const noexcept = 0;
 
-    virtual void notify() = 0;
+    virtual void suspend_until(std::chrono::steady_clock::time_point const &) noexcept = 0;
+
+    virtual void notify() noexcept = 0;
 };
 
 } // namespace policy
