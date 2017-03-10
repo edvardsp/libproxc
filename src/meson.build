@@ -1,5 +1,8 @@
 
-proxc_sources = ['proxc.cpp']
+proxc_sources = [
+    'proxc.cpp',
+    'work_stealing_policy.cpp'
+]
 
 proxc = shared_library('proxc',
     proxc_sources,
