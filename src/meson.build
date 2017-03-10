@@ -7,4 +7,3 @@ proxc = shared_library('proxc',
     dependencies : [thread_dep, boost_dep],
     install : true)
 
-

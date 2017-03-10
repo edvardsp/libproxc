@@ -23,9 +23,10 @@ if enable_segmented_stacks
 endif
 
 thread_dep = dependency('threads')
-boost_dep = dependency('boost',
-    modules : ['context'],
-    version : '>=1.61')
+boost_dep = cxx.find_library('boost_context', required : true, dirs : '/usr/local/lib')
+# boost_dep = dependency('boost',
+#     modules : ['context'],
+#     version : '>=1.61')
 
 inc = include_directories('include')
 src = include_directories('src')
