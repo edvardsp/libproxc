@@ -1,7 +1,9 @@
 
 #pragma once
 
-#include <proxc.hpp>
+#include <proxc/config.hpp>
+
+#include <proxc/work_steal_deque.hpp>
 
 #include <algorithm>
 #include <atomic>
@@ -14,10 +16,6 @@
 #include <vector>
 
 #include <boost/noncopyable.hpp>
-
-#include "setup.hpp"
-
-#include "work_steal_deque.hpp"
 
 PROXC_NAMESPACE_BEGIN
 
@@ -70,25 +68,21 @@ private:
             const auto dispatcher = m_tp.m_dispatcher;
             while (!m_tp.m_stop) {
                 if (auto task = m_popper->pop()) {
-                    SafeCout::print("Worker ", m_id, ", popped task");
                     dispatcher(std::move(task));
                     continue;
                 }
 
                 if (auto task = try_steal()) {
-                    SafeCout::print("Worker ", m_id, ", stole task");
                     dispatcher(std::move(task));
                     continue;
                 }
 
                 {
                     std::unique_lock<std::mutex> lock(m_tp.m_mtx);
-                    SafeCout::print("Worker ", m_id, ", waiting");
                     m_tp.m_cv.wait(lock, [this]{ 
                         return this->m_tp.m_stop || 
                                this->m_tp.m_num_ready_tasks.load(std::memory_order_relaxed) != 0; 
                     });
-                    SafeCout::print("Worker ", m_id, ", woke up");
                     if (m_tp.m_stop) {
                         break;
                     }
@@ -103,7 +97,6 @@ private:
 
         void push(Ptr&& item)
         {
-            SafeCout::print("Worker ", m_id, ", pushed item");
             m_popper->push(std::forward<Ptr>(item));
         }
 
