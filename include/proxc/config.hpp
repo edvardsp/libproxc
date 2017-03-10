@@ -145,11 +145,13 @@
 
 #endif
 
-#else
+#endif // PROXC_ARCH
 
 static_assert(((PROXC_ARCH) == 32) || ((PROXC_ARCH) == 64), "Architecture specified by PROXC_ARCH only supports 32 or 64 value.");
 
-#endif // PROXC_ARCH
+// cache alignment and cachelines
+static constexpr std::size_t cache_alignment{ PROXC_ARCH };
+static constexpr std::size_t cacheline_length{ PROXC_ARCH };
 
 ////////////////////////////////////////////////////////////////////////////////
 // Namespace macros
