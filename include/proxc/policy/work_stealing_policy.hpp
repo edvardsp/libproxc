@@ -20,7 +20,7 @@ template<typename T>
 class WorkStealingPolicy : public PolicyBase<T>
 {
 private:
-    static std::size_t                          num_cpus_;
+    static std::size_t                          num_workers_;
     static std::vector<WorkStealingPolicy *>    work_stealers_;
 
     std::size_t                 id_;
@@ -29,10 +29,11 @@ private:
     std::condition_variable     cnd_;
     bool                        flag_{ false };
 
-    static void init_();
+    static void init_(std::size_t num_workers);
 
 public:
-    WorkStealingPolicy(std::size_t id);
+    // 0 == num_cores
+    WorkStealingPolicy(std::size_t num_workers = 0);
 
     WorkStealingPolicy(WorkStealingPolicy const &) = delete;
     WorkStealingPolicy(WorkStealingPolicy &&)      = delete;
@@ -42,8 +43,6 @@ public:
 
     // Added work stealing methods
     void reserve(std::size_t capacity) noexcept;
-
-    T * steal() noexcept;
 
     // Policy base interface methods
     void enqueue(T *) noexcept;
@@ -55,11 +54,14 @@ public:
     void suspend_until(std::chrono::steady_clock::time_point const &) noexcept;
 
     void notify() noexcept;
+
+private:
+    T * steal() noexcept;
 };
 
 } // namespace detail
 
-class Context;
+class Context {};
 
 using WorkStealing = detail::WorkStealingPolicy<Context>;
 

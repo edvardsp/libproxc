@@ -8,31 +8,37 @@
 #include <random>
 #include <thread>
 
+#include <boost/assert.hpp>
+
 PROXC_NAMESPACE_BEGIN
 
 namespace policy {
 
 template<>
-std::size_t WorkStealing::num_cpus_{ 0 };
+std::size_t WorkStealing::num_workers_{ 0 };
 
 template<>
 std::vector<WorkStealing *> WorkStealing::work_stealers_{};
 
 template<>
-void WorkStealing::init_()
+void WorkStealing::init_(std::size_t num_workers)
 {
-    num_cpus_ = std::thread::hardware_concurrency();
-    num_cpus_ = std::max(num_cpus_, std::size_t{ 1 });
-    work_stealers_.resize(num_cpus_);
+    num_workers_ = (num_workers == 0)
+        ? std::max(std::thread::hardware_concurrency(), 1u )
+        : num_workers;
+    work_stealers_.resize(num_workers_);
 }
 
 template<>
-WorkStealing::WorkStealingPolicy(std::size_t id)
-    : id_{ id }
+WorkStealing::WorkStealingPolicy(std::size_t num_workers)
 {
     static std::once_flag flag;
-    std::call_once(flag, & WorkStealing::init_);
-    work_stealers_[id] = this;
+    std::call_once(flag, & WorkStealing::init_, num_workers);
+    static std::atomic<std::size_t> n_id;
+    id_ = n_id.fetch_add(1, std::memory_order_relaxed);
+    work_stealers_[id_] = this;
+    BOOST_ASSERT((num_workers == 0) || (num_workers == num_workers_));
+    BOOST_ASSERT(id_ < num_workers_);
 }
 
 template<>
@@ -57,11 +63,11 @@ template<>
 Context * WorkStealing::pick_next() noexcept
 {
     auto ctx = deque_.pop();
-    if (ctx == nullptr) {
+    if (ctx == nullptr && num_workers_ > 1) {
         static thread_local std::minstd_rand rng;
         std::size_t id{};
         do {
-            id = std::uniform_int_distribution<std::size_t>{0, num_cpus_ - 1}(rng);
+            id = std::uniform_int_distribution<std::size_t>{0, num_workers_ - 1}(rng);
         } while (id == id_);
         ctx = work_stealers_[id]->steal();
     }
