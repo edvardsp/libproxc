@@ -22,7 +22,7 @@ template<>
 void WorkStealing::init_()
 {
     num_cpus_ = std::thread::hardware_concurrency();
-    num_cpus_ = std::min(num_cpus_, std::size_t{ 1 });
+    num_cpus_ = std::max(num_cpus_, std::size_t{ 1 });
     work_stealers_.resize(num_cpus_);
 }
 
