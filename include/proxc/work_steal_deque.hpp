@@ -89,13 +89,18 @@ private:
                     ->store(item, std::memory_order_relaxed);
         }
 
-        CircularArray* grow(std::size_t top, std::size_t bottom)
+        CircularArray* grow(std::size_t top, std::size_t bottom, std::size_t size)
         {
-            auto new_array = new CircularArray{ 2 * size_ };
+            auto new_array = new CircularArray{ size };
             for (std::size_t i = top; i != bottom; i++) {
                 new_array->put(i, get(i));
             }
             return new_array;
+        }
+
+        CircularArray* grow(std::size_t top, std::size_t bottom) 
+        {
+            return grow(top, bottom, size_ * 2);
         }
     };
 
@@ -128,6 +133,22 @@ public:
     {
         auto array = array_.load(std::memory_order_acquire);
         return array->size();
+    }
+
+    void reserve(std::size_t capacity) noexcept 
+    {
+        auto array = array_.load(std::memory_order_relaxed);
+        if (capacity < array->size()) {
+            return;
+        }
+
+        std::size_t bottom = bottom_.load(std::memory_order_relaxed);
+        std::size_t top = top_.load(std::memory_order_acquire);
+
+        auto new_array = array->grow(top, bottom, capacity);
+        std::swap(array, new_array);
+        array_.store(array, std::memory_order_release);
+        delete new_array;
     }
 
     void push(T * item)

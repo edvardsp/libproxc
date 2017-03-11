@@ -14,6 +14,7 @@
 PROXC_NAMESPACE_BEGIN
 
 namespace policy {
+namespace detail {
 
 template<typename T>
 class WorkStealingPolicy : public PolicyBase<T>
@@ -39,8 +40,12 @@ public:
     WorkStealingPolicy & operator=(WorkStealingPolicy const &) = delete;
     WorkStealingPolicy & operator=(WorkStealingPolicy &&)      = delete;
 
+    // Added work stealing methods
+    void reserve(std::size_t capacity) noexcept;
+
     T * steal() noexcept;
 
+    // Policy base interface methods
     void enqueue(T *) noexcept;
 
     T * pick_next() noexcept; 
@@ -51,6 +56,12 @@ public:
 
     void notify() noexcept;
 };
+
+} // namespace detail
+
+class Context;
+
+using WorkStealing = detail::WorkStealingPolicy<Context>;
 
 } // namespace policy
 

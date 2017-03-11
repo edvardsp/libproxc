@@ -12,10 +12,6 @@ PROXC_NAMESPACE_BEGIN
 
 namespace policy {
 
-class Context;
-
-using WorkStealing = WorkStealingPolicy<Context>;
-
 template<>
 std::size_t WorkStealing::num_cpus_{ 0 };
 
@@ -43,6 +39,12 @@ template<>
 Context * WorkStealing::steal() noexcept
 {
     return deque_.steal();
+}
+
+template<>
+void WorkStealing::reserve(std::size_t capacity) noexcept
+{
+    deque_.reserve(capacity);
 }
 
 template<>
