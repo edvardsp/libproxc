@@ -19,7 +19,7 @@ void test_to_signed()
     for (auto ptr : ptrs) {
         auto ptr_eq = static_cast<std::size_t>(ptr);
         auto ptr_to = proxc::detail::to_signed(ptr_eq);
-        throw_assert(ptr == ptr_to, "signed_to is not idempotent, `" << ptr << "` => `" << ptr_to << "`");
+        throw_assert_equ(ptr, ptr_to, "signed_to is not idempotent");
     }
 }
 
@@ -49,7 +49,22 @@ public:
 
 using Object = TestObject<std::size_t>;
 
-void test_work_steal_deque_growing()
+void test_reserve_capacity()
+{
+    proxc::WorkStealDeque<Object> deque;
+
+    throw_assert_equ(deque.capacity(), deque.default_capacity, "default capacity is wrong");
+    
+    deque.reserve(deque.default_capacity - 1);
+
+    throw_assert_equ(deque.capacity(), deque.default_capacity, "capacity should not have changed");
+
+    deque.reserve(deque.default_capacity * 10);
+
+    throw_assert_equ(deque.capacity(), deque.default_capacity * 10, "capacity does not match reserved capacity");
+}
+
+void test_deque_growing()
 {
     proxc::WorkStealDeque<Object> only_pop;
     proxc::WorkStealDeque<Object> only_steal;
@@ -61,8 +76,8 @@ void test_work_steal_deque_growing()
         only_pop.push(new Object{ i });
         only_steal.push(new Object{ i });
 
-        throw_assert_eq(only_pop.capacity(),   capacity, "inconsistent capacity");
-        throw_assert_eq(only_steal.capacity(), capacity, "inconsistent capacity");
+        throw_assert_equ(only_pop.capacity(),   capacity, "inconsistent capacity");
+        throw_assert_equ(only_steal.capacity(), capacity, "inconsistent capacity");
         throw_assert( ! only_pop.is_empty(),             "should not be empty");
         throw_assert( ! only_steal.is_empty(),           "should not be empty");
     }
@@ -72,8 +87,8 @@ void test_work_steal_deque_growing()
         only_pop.push(new Object{ i });
         only_steal.push(new Object{ i });
 
-        throw_assert_eq(only_pop.capacity(),   2 * capacity, "inconsistent capacity");
-        throw_assert_eq(only_steal.capacity(), 2 * capacity, "inconsistent capacity");
+        throw_assert_equ(only_pop.capacity(),   2 * capacity, "inconsistent capacity");
+        throw_assert_equ(only_steal.capacity(), 2 * capacity, "inconsistent capacity");
         throw_assert( ! only_pop.is_empty(),                 "should not be empty");
         throw_assert( ! only_steal.is_empty(),               "should not be empty");
     }
@@ -87,15 +102,15 @@ void test_work_steal_deque_growing()
 
         auto pop_value   = pop_item->get();
         auto steal_value = steal_item->get();
-        throw_assert_eq(pop_value,   2 * capacity - i - 1, "items does not match");
-        throw_assert_eq(steal_value, i,                    "items does not match");
+        throw_assert_equ(pop_value,   2 * capacity - i - 1, "items does not match");
+        throw_assert_equ(steal_value, i,                    "items does not match");
 
         delete pop_item;
         delete steal_item;
     }
 }
 
-void test_work_steal_deque_fill_and_deplete()
+void test_deque_fill_and_deplete()
 {
     proxc::WorkStealDeque<Object> only_pop;
     proxc::WorkStealDeque<Object> only_steal;
@@ -104,9 +119,9 @@ void test_work_steal_deque_fill_and_deplete()
     const auto num_items = capacity;
 
     {
-        throw_assert_eq(only_pop.capacity(),   capacity, "inconsistent capacity");
+        throw_assert_equ(only_pop.capacity(),   capacity, "inconsistent capacity");
         throw_assert(only_pop.is_empty(),                "should be empty");
-        throw_assert_eq(only_steal.capacity(), capacity, "inconsistent capacity");
+        throw_assert_equ(only_steal.capacity(), capacity, "inconsistent capacity");
         throw_assert(only_steal.is_empty(),              "should be empty");
     }
 
@@ -114,9 +129,9 @@ void test_work_steal_deque_fill_and_deplete()
         only_pop.push(new Object{ i });
         only_steal.push(new Object { i });
 
-        throw_assert_eq(only_pop.capacity(),   capacity, "inconsistent capacity");
+        throw_assert_equ(only_pop.capacity(),   capacity, "inconsistent capacity");
         throw_assert( ! only_pop.is_empty(),             "should not be empty");
-        throw_assert_eq(only_steal.capacity(), capacity, "inconsistent sizes");
+        throw_assert_equ(only_steal.capacity(), capacity, "inconsistent sizes");
         throw_assert( ! only_steal.is_empty(),           "should not be empty");
     }
 
@@ -127,8 +142,8 @@ void test_work_steal_deque_fill_and_deplete()
         auto pop_item   = only_pop.pop();
         auto steal_item = only_steal.steal();
     
-        throw_assert_eq(only_pop.capacity(),   capacity, "inconsistent capacity");
-        throw_assert_eq(only_steal.capacity(), capacity, "inconsistent capacity");
+        throw_assert_equ(only_pop.capacity(),   capacity, "inconsistent capacity");
+        throw_assert_equ(only_steal.capacity(), capacity, "inconsistent capacity");
 
         throw_assert(pop_item   != nullptr, "item is nullptr");
         throw_assert(steal_item != nullptr, "item is nullptr");
@@ -136,22 +151,22 @@ void test_work_steal_deque_fill_and_deplete()
         auto pop_value   = pop_item->get();
         auto steal_value = steal_item->get();
 
-        throw_assert_eq(pop_value,   num_items - i - 1, "items does not match");
-        throw_assert_eq(steal_value, i,                 "items does not match");
+        throw_assert_equ(pop_value,   num_items - i - 1, "items does not match");
+        throw_assert_equ(steal_value, i,                 "items does not match");
 
         delete pop_item;
         delete steal_item;
     }
 
     {
-        throw_assert_eq(only_pop.capacity(),   capacity, "inconsistent capacity");
-        throw_assert_eq(only_steal.capacity(), capacity, "inconsistent capacity");
+        throw_assert_equ(only_pop.capacity(),   capacity, "inconsistent capacity");
+        throw_assert_equ(only_steal.capacity(), capacity, "inconsistent capacity");
         throw_assert(only_pop.is_empty(),                "should be empty");
         throw_assert(only_steal.is_empty(),              "should be empty");
     }
 }
 
-void test_work_steal_deque_single_thread() 
+void test_single_deque_single_thread() 
 {
     proxc::WorkStealDeque<Object> deque;
 
@@ -172,7 +187,7 @@ void test_work_steal_deque_single_thread()
         auto item = deque.pop();                           
         throw_assert(item != nullptr, "non-empty deque returns nullptr on pop");
         auto item_value = item->get();
-        throw_assert_eq(item_value, value, "popped item does not match content");
+        throw_assert_equ(item_value, value, "popped item does not match content");
         delete item;
     }
 
@@ -197,13 +212,14 @@ int worker_func(typename proxc::WorkStealDeque<T> * deque)
     return steals;
 }
 
-void test_work_steal_deque_multiple_threads()
+void test_single_deque_multiple_threads()
 {
     const std::size_t num_workers = std::thread::hardware_concurrency() - 1;
     const std::size_t num_items = 1000000;
 
     // populate deque
     proxc::WorkStealDeque<Object> deque;
+    deque.reserve(num_items);
     for (std::size_t i = 0; i < num_items; i++) {
         deque.push(new Object{ i });
     }
@@ -232,15 +248,16 @@ void test_work_steal_deque_multiple_threads()
         auto n_steals = value.get();
         total_steals += n_steals;
     }
-    throw_assert_eq(total_steals, static_cast<int>(num_items), "total steals does not equal total items");
+    throw_assert_equ(total_steals, static_cast<int>(num_items), "total steals does not equal total items");
 }
 
 int main()
 {
     test_to_signed();
-    test_work_steal_deque_growing();
-    test_work_steal_deque_fill_and_deplete();
-    test_work_steal_deque_single_thread();
-    test_work_steal_deque_multiple_threads();
+    test_reserve_capacity();
+    test_deque_growing();
+    test_deque_fill_and_deplete();
+    test_single_deque_single_thread();
+    test_single_deque_multiple_threads();
 }
 
