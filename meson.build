@@ -22,6 +22,13 @@ if enable_segmented_stacks
     endif
 endif
 
+enable_valgrind = get_option('enable-valgrind')
+if enable_valgrind
+    add_global_arguments(
+        '-DBOOST_USE_VALGRIND',
+        language: 'cpp')
+endif
+
 thread_dep = dependency('threads')
 boost_dep = cxx.find_library('boost_context', required : true, dirs : '/usr/local/lib')
 # boost_dep = dependency('boost',
