@@ -1,7 +1,10 @@
 
 proxc_sources = [
     'proxc.cpp',
-    'work_stealing_policy.cpp'
+    'scheduler.cpp',
+    'context.cpp',
+    'scheduling_policy/round_robin.cpp',
+    'scheduling_policy/work_stealing.cpp'
 ]
 
 proxc = shared_library('proxc',

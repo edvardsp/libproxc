@@ -1,12 +1,13 @@
 
-#include <proxc/policy/work_stealing_policy.hpp>
+#include <proxc/context.hpp>
+#include <proxc/scheduling_policy/work_stealing.hpp>
 
 #include <chrono>
 
 #include "setup.hpp"
 
-using PolicyType = proxc::policy::WorkStealing;
-using WorkType = proxc::policy::Context;
+using PolicyType = proxc::scheduling_policy::WorkStealing;
+using WorkType = proxc::Context;
 using ClockType = std::chrono::steady_clock;
 
 void test_enqueuing_and_pick_next(PolicyType & policy)
@@ -22,7 +23,7 @@ void test_enqueuing_and_pick_next(PolicyType & policy)
     
     policy.reserve(num_work);
     for (std::size_t i = 0; i < num_work; ++i) {
-        policy.enqueue(new WorkType);
+        policy.enqueue(new WorkType(WorkType::main_context));
     }
 
     throw_assert(policy.is_ready(), "policy should be ready");
@@ -61,7 +62,7 @@ void test_suspend_until(PolicyType & policy)
 
 int main()
 {
-    proxc::policy::WorkStealing policy{ 1 };
+    proxc::scheduling_policy::WorkStealing policy{ 1 };
 
     test_enqueuing_and_pick_next(policy);
     test_suspend_until(policy);

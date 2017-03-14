@@ -3,8 +3,9 @@
 
 #include <proxc/config.hpp>
 
-#include <proxc/policy/policy_base.hpp>
+#include <proxc/context.hpp>
 #include <proxc/work_steal_deque.hpp>
+#include <proxc/scheduling_policy/policy_base.hpp>
 
 #include <chrono>
 #include <condition_variable>
@@ -13,7 +14,7 @@
 
 PROXC_NAMESPACE_BEGIN
 
-namespace policy {
+namespace scheduling_policy {
 namespace detail {
 
 template<typename T>
@@ -61,11 +62,9 @@ private:
 
 } // namespace detail
 
-class Context {};
-
 using WorkStealing = detail::WorkStealingPolicy<Context>;
 
-} // namespace policy
+} // namespace scheduling_policy
 
 PROXC_NAMESPACE_END
 

@@ -3,7 +3,8 @@ tests = [
     ['simple',               ['simple.cpp']],
     ['work_steal_deque',     ['test_work_steal_deque.cpp']],
     ['thread_pool',          ['test_thread_pool.cpp']],
-    ['work_stealing_policy', ['test_work_stealing_policy.cpp']]
+    ['work_stealing_policy', ['test_work_stealing_policy.cpp']],
+    ['context',              ['test_context.cpp']]
 ]
 
 foreach t : tests

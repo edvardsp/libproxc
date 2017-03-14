@@ -1,7 +1,7 @@
 
 #include <proxc/config.hpp>
 
-#include <proxc/policy/work_stealing_policy.hpp>
+#include <proxc/scheduling_policy/work_stealing.hpp>
 
 #include <algorithm>
 #include <mutex>
@@ -12,7 +12,7 @@
 
 PROXC_NAMESPACE_BEGIN
 
-namespace policy {
+namespace scheduling_policy {
 
 template<>
 std::size_t WorkStealing::num_workers_{ 0 };
@@ -98,8 +98,7 @@ void WorkStealing::notify() noexcept
     cnd_.notify_all();
 }
 
-} // namespace policy
-
+} // namespace scheduling_policy
 
 PROXC_NAMESPACE_END
 

@@ -4,11 +4,10 @@
 #include <proxc/config.hpp>
 
 #include <chrono>
-#include <memory>
 
 PROXC_NAMESPACE_BEGIN
 
-namespace policy {
+namespace scheduling_policy {
 
 template<typename T>
 struct PolicyBase
@@ -34,7 +33,7 @@ struct PolicyBase
     virtual void notify() noexcept = 0;
 };
 
-} // namespace policy
+} // namespace scheduling_policy
 
 PROXC_NAMESPACE_END
 
