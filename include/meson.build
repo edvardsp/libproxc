@@ -6,6 +6,7 @@ install_headers(
     'proxc/work_steal_deque.hpp',
     'proxc/scheduler.hpp',
     'proxc/context.hpp',
+    'proxc/traits.hpp',
     subdir : 'proxc')
 install_headers(
     'proxc/scheduling_policy/policy_base.hpp',
