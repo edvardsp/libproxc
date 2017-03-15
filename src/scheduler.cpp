@@ -14,6 +14,50 @@
 
 PROXC_NAMESPACE_BEGIN
 
+namespace detail {
+
+struct SchedulerInitializer 
+{
+    thread_local static Scheduler * self_;
+    thread_local static std::size_t counter_;
+
+    SchedulerInitializer()
+    {
+        if (counter_++ == 0) { return; }
+
+        // allocating main_context, scheduler_context and scheduler next to each other
+        //   *cp      <--- mem_size --->
+        //    |
+        //    V
+        //    [scheduler][scheduler context][main context]
+        constexpr std::size_t mem_size = 2 * sizeof(Context) + sizeof(Scheduler);
+        char * cp = new char[mem_size];
+        // TODO
+        auto main_ctx      = new(cp + sizeof(Scheduler) + sizeof(Context)) Context{ context::main_type };
+        auto scheduler_ctx = new(cp + sizeof(Scheduler))                   Context{ context::scheduler_type };
+        auto scheduler     = new(cp)                                       Scheduler{ scheduler_ctx };
+
+        scheduler->attach_main_context(main_ctx);
+        self_ = scheduler;
+    }
+
+    ~SchedulerInitializer()
+    {
+        if (--counter_ == 0) { return; }
+
+        auto scheduler     = self_;
+        char * cp = reinterpret_cast< char * >(scheduler);
+        // ~Scheduler() cleans up scheduler_ctx and main_ctx
+        scheduler->~Scheduler();
+        delete [] cp;
+    }
+};
+
+thread_local Scheduler * SchedulerInitializer::self_{ nullptr };
+thread_local std::size_t SchedulerInitializer::counter_{ 0 };
+
+} // namespace detail
+
 Scheduler::Scheduler()
     : policy_{ std::unique_ptr<scheduling_policy::RoundRobin>(new scheduling_policy::RoundRobin) }
 {

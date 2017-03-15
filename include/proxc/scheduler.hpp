@@ -13,9 +13,16 @@
 
 #include <boost/intrusive/list.hpp>
 
+PROXC_NAMESPACE_BEGIN
+
 namespace intrusive = boost::intrusive;
 
-PROXC_NAMESPACE_BEGIN
+namespace detail {
+
+// Schwarz counter
+struct SchedulerInitializer;
+
+} // detail
 
 class Context;
 
@@ -26,7 +33,6 @@ class Scheduler
 public:
     using ReadyQueue = detail::queue::ListQueue< Context, detail::hook::Ready, & Context::ready_ >;
 
-private:
     struct time_point_comp 
     {
         bool operator()(Context const & left, Context const & right) const noexcept 
@@ -42,19 +48,21 @@ private:
     Context *    main_ctx_{ nullptr };
     Context *    scheduler_ctx_{ nullptr };
 
+    Context *    running_{ nullptr };
+
     WorkQueue    work_queue_{};
 
     bool    exit_{ false };
 
 public:
+    static Scheduler * self() noexcept;
+    static Context * running() noexcept;
+
     Scheduler();
+    Scheduler(Context * scheduler_ctx);
     ~Scheduler();
 
-    void attach_main_context(Context *) noexcept;
-    void attach_scheduler_context(Context *) noexcept;
-    void attach_work_context(Context *) noexcept;
-
-    void run() noexcept;
+    void run(void *) noexcept;
 
     void terminate(Context *) noexcept;
     void schedule(Context *) noexcept;
