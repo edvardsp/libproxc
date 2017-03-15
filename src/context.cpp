@@ -1,4 +1,6 @@
 
+#include <functional>
+
 #include <proxc/config.hpp>
 
 #include <proxc/context.hpp>
@@ -8,140 +10,60 @@
 
 PROXC_NAMESPACE_BEGIN
 
-namespace detail {
-
-struct ContextInitializer 
+Context::Context(context::MainType)
+    : ctx_{ boost::context::execution_context::current() }
 {
-    thread_local static Context * running_;
-    thread_local static std::size_t counter_;
+}
 
-    ContextInitializer()
-    {
-        if (counter_++ == 0) {
-            // allocating main_context and scheduler next to each other
-            //   *cp
-            //    |
-            //    V
-            //    [main_context][scheduler]
-            constexpr std::size_t mem_size = sizeof(Context) + sizeof(Scheduler);
-            char * cp = new char[mem_size];
-            auto main_context = new(cp) Context{ Context::main_context };
-            auto scheduler = new(cp + sizeof(Context)) Scheduler{};
-            auto scheduler_context = Context::make_scheduler_context(scheduler);
-
-            main_context->set_scheduler(scheduler);
-            scheduler->attach_main_context(main_context);
-            scheduler->attach_scheduler_context(scheduler_context);
-            running_ = main_context;
-        }
-
-    }
-
-    ~ContextInitializer()
-    {
-        if (--counter_ == 0) {
-            auto main_context = running_;
-            auto scheduler = main_context->get_scheduler();
-            // TODO add assert for this actually being main_context?
-
-            scheduler->~Scheduler();
-            main_context->~Context();
-            char * cp = reinterpret_cast<char *>(main_context);
-            delete cp;
+Context::Context(context::SchedulerType, SchedulerFuncType && fn)
+    : ctx_{ [fn = traits::decay_copy( std::forward< SchedulerFuncType >(fn) )]
+            (void * vp) 
+        {
+            fn(vp);
+            BOOST_ASSERT_MSG(false, "unreachable: should not return from context_func");
         }
     }
-};
-
-thread_local Context * ContextInitializer::running_;
-thread_local std::size_t ContextInitializer::counter_;
-
-} // namespace detail
-
-const Context::MainContext Context::main_context{};
-const Context::WorkContext Context::work_context{};
-
-Context * Context::running() noexcept
-{
-    //thread_local static boost::context::detail::activation_record_initializer execution_context_initializer__;
-    thread_local static detail::ContextInitializer context_initializer__;
-    return detail::ContextInitializer::running_;
-}
-
-void Context::reset_running() noexcept
-{
-    detail::ContextInitializer::running_ = nullptr;
-}
-
-Context * Context::make_scheduler_context(Scheduler * scheduler)
-{
-    BOOST_ASSERT(scheduler != nullptr);
-    return new Context{
-        scheduler_context,
-        scheduler
-    };
-
-}
-
-Context::Context(MainContext)
-    : ctx_{ boost::context::execution_context::current()  }
 {
 }
 
-Context::Context(SchedulerContext, Scheduler * scheduler)
-    : ctx_{ [this,scheduler](void * vp) {
-        BOOST_ASSERT(scheduler != nullptr);
-        Context * context = static_cast<Context *>(vp);
-        if (context != nullptr) {
-            running()->schedule(context);
+Context::Context(context::WorkType, EntryFuncType && fn)
+    : ctx_{ [this, 
+             fn = traits::decay_copy( std::forward< EntryFuncType >(fn) )]
+            (void * vp)
+        {
+            entry_func_(std::move(fn), vp);
+            BOOST_ASSERT_MSG(false, "unreachable: should not return from entry_func_().");
         }
-        scheduler->run();
-        BOOST_ASSERT_MSG(false, "scheduler context already terminated");
-    } }
+    }
 {
 }
 
-Context::~Context()
+Context::~Context() noexcept
 {
-}
-
-Scheduler * Context::get_scheduler() noexcept
-{
-    return scheduler_;
-}
-
-void Context::set_scheduler(Scheduler * scheduler) noexcept
-{
-    scheduler_ = scheduler;
+    BOOST_ASSERT( ! is_linked< hook::Ready >() );
+    BOOST_ASSERT( ! is_linked< hook::Wait >() );
+    BOOST_ASSERT( ! is_linked< hook::Sleep >() );
 }
 
 void Context::terminate() noexcept
 {
-
-    // cleanup context
-    scheduler_->terminate(this);
+    state_ = State::Terminated;
+    Scheduler::self()->terminate(this);
+    
+    BOOST_ASSERT_MSG(false, "unreachable: Context should not return after terminated.");
 }
 
-void Context::resume() noexcept
+void Context::entry_func_(EntryFuncType fn, void * vp) noexcept
 {
-    Context * previous = this;
-    std::swap(detail::ContextInitializer::running_, previous);
-    auto response_ctx = static_cast<Context *>( ctx_(nullptr) );
-    if (response_ctx != nullptr) {
-        running()->schedule(response_ctx);
+    {
+        // TODO do anythin from vp
+        (void)vp;
+        EntryFuncType func = std::move(fn);
+        func();
     }
     
-}
-
-void Context::resume(Context * ctx) noexcept
-{
-    BOOST_ASSERT(ctx != nullptr);
-    Context * previous = this;
-    std::swap(detail::ContextInitializer::running_, previous);
-    auto response_ctx = static_cast<Context *>( ctx_(ctx) );
-    if (response_ctx != nullptr) {
-        running()->schedule(response_ctx);
-    }
-    
+    terminate();
+    BOOST_ASSERT_MSG(false, "unreachable: Context should not return after terminating.");
 }
 
 template<> detail::hook::Ready & Context::get_hook_() noexcept { return ready_; }
