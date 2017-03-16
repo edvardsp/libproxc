@@ -58,8 +58,8 @@ class Context
 
     using ContextType = boost::context::execution_context;
 
-    using SchedulerFuncType = std::function< void(void *) >;
-    using EntryFuncType     = std::function< void(void) >;
+    using SchedulerFn = std::function< void(void *) >;
+    using EntryFn     = std::function< void(void *) >;
 
 private:
 
@@ -80,28 +80,27 @@ public:
     std::chrono::steady_clock::time_point time_point_{ (std::chrono::steady_clock::time_point::max)() };
     
 public:
-    // static methods
-    template<typename Fn, typename ... Args>
-    static Context * make_work_context(Fn && fn, Args && ... args);
-
     // constructors and destructor
     explicit Context(context::MainType);
-    explicit Context(context::SchedulerType, SchedulerFuncType &&);
-    explicit Context(context::WorkType, EntryFuncType &&);
+    explicit Context(context::SchedulerType, SchedulerFn &&);
+    explicit Context(context::WorkType, EntryFn &&);
 
     ~Context() noexcept;
 
-    // make not copy-able
+    // make non copy-able
     Context(Context const &)             = delete;
     Context & operator=(Context const &) = delete;
 
     // general methods
+    void * resume(void * vp = nullptr) noexcept;
     [[noreturn]]
     void terminate() noexcept;
     
 private:
+    /* [[noreturn]] */
+    /* static void entry_func_(SchedulerFn, void *) noexcept; */
     [[noreturn]]
-    void entry_func_(EntryFuncType, void *) noexcept;
+    static void entry_func_(EntryFn, void *) noexcept;
 
     // Intrusive hook methods
 private:
@@ -118,26 +117,6 @@ public:
     template<typename Hook>
     void unlink() noexcept;
 };
-
-template<typename Fn, typename ... Args>
-Context * Context::make_work_context(Fn && fn, Args && ... args)
-{
-    static_assert(traits::is_callable< Fn, Args ... >::value, "Function is not well defined with given arguments.");
-    auto tpl = std::make_tuple( std::forward< Args >(args) ... );
-    using Tpl = decltype(tpl);
-    auto func = [fn = traits::decay_copy( std::forward< Fn >(fn) ),
-                       tpl = std::move(tpl)]
-                      () noexcept
-        {
-            typename std::decay< Fn >::type fn_ = std::forward< Fn >(fn);
-            typename std::decay< Tpl >::type tpl_ = std::forward< Tpl >(tpl);
-            boost::context::detail::apply(std::move(fn_), std::move(tpl_));
-        };
-    return new Context{ 
-        context::work_type, 
-        std::move(func)
-    };
-}
 
 // Intrusive list methods.
 template<typename Hook>
