@@ -23,7 +23,7 @@ void test_enqueuing_and_pick_next(PolicyType & policy)
     
     policy.reserve(num_work);
     for (std::size_t i = 0; i < num_work; ++i) {
-        policy.enqueue(new WorkType(WorkType::main_context));
+        policy.enqueue(new WorkType(proxc::context::work_type, [](void *){  }));
     }
 
     throw_assert(policy.is_ready(), "policy should be ready");
