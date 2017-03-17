@@ -12,6 +12,7 @@
 #include <proxc/detail/hook.hpp>
 
 #include <boost/assert.hpp>
+#include <boost/intrusive_ptr.hpp>
 #include <boost/context/execution_context_v1.hpp>
 #include <boost/context/detail/apply.hpp>
 
@@ -63,7 +64,6 @@ class Context
     using EntryFn     = std::function< void(void *) >;
 
 private:
-
     Type     type_;
     State    state_;
 
@@ -71,6 +71,11 @@ private:
     ContextType    ctx_;
 
     Context *    next_{ nullptr };
+
+    // intrusive_ptr friend methods and counter
+    friend void intrusive_ptr_add_ref(Context * ctx) noexcept;
+    friend void intrusive_ptr_release(Context * ctx) noexcept;
+    std::size_t    use_count_{ 0 };
 
 public:
     // Intrusive hooks
@@ -99,8 +104,6 @@ public:
     void terminate() noexcept;
     
 private:
-    /* [[noreturn]] */
-    /* static void entry_func_(SchedulerFn, void *) noexcept; */
     [[noreturn]]
     void trampoline_(void *) noexcept;
 

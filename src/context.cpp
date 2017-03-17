@@ -11,6 +11,24 @@
 
 PROXC_NAMESPACE_BEGIN
 
+// intrusive_ptr friend methods
+void intrusive_ptr_add_ref(Context * ctx) noexcept
+{
+    BOOST_ASSERT(ctx != nullptr);
+    ++ctx->use_count_;
+}
+
+void intrusive_ptr_release(Context * ctx) noexcept
+{
+    BOOST_ASSERT(ctx != nullptr);
+    if (--ctx->use_count_ != 0) { return; }
+
+    // If context new allocated => delete
+    delete ctx;
+    // if context new placement allocated => call destructor
+}
+
+// Context methods
 Context::Context(context::MainType)
     : type_{ Type::Main }
     , state_{ State::Running }

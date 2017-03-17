@@ -12,6 +12,7 @@
 
 #include <boost/assert.hpp>
 #include <boost/bind.hpp>
+#include <boost/intrusive_ptr.hpp>
 
 PROXC_NAMESPACE_BEGIN
 
@@ -46,42 +47,41 @@ thread_local std::size_t SchedulerInitializer::counter_{ 0 };
 
 Scheduler * Scheduler::self() noexcept
 {
-    //thread_local static boost::context::detail::activation_record_initializer ac_rec_initializer;
-    thread_local static detail::SchedulerInitializer scheduler_initializer;
+    //thread_local static boost::context::detail::activation_record_initializer ac_rec_init;
+    thread_local static detail::SchedulerInitializer sched_init;
     return detail::SchedulerInitializer::self_;
 }
 
 Context * Scheduler::running() noexcept
 {
     BOOST_ASSERT(Scheduler::self() != nullptr);
-    return Scheduler::self()->running();
+    return Scheduler::self()->running_;
 }
 
 Scheduler::Scheduler()
     : policy_{ new scheduling_policy::RoundRobin{} }
     , main_ctx_{ new Context{ context::main_type } }
-    , scheduler_ctx_{ new Context{ context::scheduler_type, boost::bind(&Scheduler::run, this, _1) } }
+    , scheduler_ctx_{ new Context{ context::scheduler_type, 
+        [this](void * vp) { run_(vp); } } }
 {
-    running_ = main_ctx_;
+    running_ = main_ctx_.get();
 }
 
 Scheduler::~Scheduler()
 {
-    BOOST_ASSERT(main_ctx_ != nullptr);
-    BOOST_ASSERT(scheduler_ctx_ != nullptr);
-    BOOST_ASSERT(running_ == main_ctx_);
-    //exit_ = true;
-    delete main_ctx_;
-    delete scheduler_ctx_;
-}
+    BOOST_ASSERT(main_ctx_.get() != nullptr);
+    BOOST_ASSERT(scheduler_ctx_.get() != nullptr);
+    BOOST_ASSERT(running_ == main_ctx_.get());
 
-void Scheduler::run(void *) noexcept
-{
-    for (;;) {
-        break;
-    }    
-    resume(main_ctx_);
-    BOOST_ASSERT_MSG(false, "unreachable: should not return after scheduler run.");
+    for (auto et = work_queue_.begin(); et != work_queue_.end(); ) {
+        auto ctx = &( *et );
+        et = work_queue_.erase(et);
+        delete ctx;
+    }
+    //exit_ = true;
+    /* main_ctx_.reset(); */
+    /* scheduler_ctx_.reset(); */
+    running_ = nullptr;
 }
 
 void Scheduler::resume(Context * ctx) noexcept
@@ -107,11 +107,15 @@ void Scheduler::schedule(Context * ctx) noexcept
     policy_->enqueue(ctx);
 }
 
-void Scheduler::trampoline(TrampolineFn fn) noexcept
+
+// Scheduler context loop
+void Scheduler::run_(void *) noexcept
 {
-    fn();
-    Scheduler::self()->terminate( Scheduler::running() );
-    BOOST_ASSERT_MSG(false, "unreachable: should not return from scheduler trampoline().");
+    for (;;) {
+        break;
+    }    
+    resume(main_ctx_.get());
+    BOOST_ASSERT_MSG(false, "unreachable: should not return after scheduler run.");
 }
 
 PROXC_NAMESPACE_END
