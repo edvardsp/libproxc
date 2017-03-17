@@ -8,17 +8,24 @@ add_global_arguments(
     language: 'cpp')
 
 cxx = meson.get_compiler('cpp')
-if cxx.get_id() == 'clang++' or cxx.get_id() == 'g++'
+if cxx.get_id() == 'clang' or cxx.get_id() == 'gcc'
     add_global_arguments('-fcolor-diagnostics', language: 'cpp')
 endif
 
 enable_segmented_stacks = get_option('enable-segmented-stacks')
 if enable_segmented_stacks
-    if cxx.get_id() == 'clang++' or cxx.get_id() == 'g++'
+    v = cxx.version().split('.')
+    v2 = '.'.join([v[0], v[1]])
+    clang_support = cxx.get_id() == 'clang' and v2.version_compare('>=3.4')
+    gcc_support = cxx.get_id() == 'gcc' and v2.version_compare('>=4.7')
+    if clang_support or gcc_support
         add_global_arguments(
             '-DBOOST_USE_SEGMENTED_STACKS',
+            '-DPROXC_USE_SEGMENTED_STACKS',
             '-fsplit-stack',
             language: 'cpp')
+    else
+        error('Segmented stacks are only supported by Clang 3.4+ or GCC 4.7+.')
     endif
 endif
 
@@ -26,6 +33,7 @@ enable_valgrind = get_option('enable-valgrind')
 if enable_valgrind
     add_global_arguments(
         '-DBOOST_USE_VALGRIND',
+        '-DPROXC_USE_VALGRIND',
         language: 'cpp')
 endif
 
@@ -38,7 +46,6 @@ boost_dep = cxx.find_library('boost_context', required : true, dirs : '/usr/loca
 inc = include_directories('include')
 src = include_directories('src')
 tst = include_directories('tests')
-
 
 subdir('include')
 subdir('src')
