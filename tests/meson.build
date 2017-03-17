@@ -4,7 +4,8 @@ tests = [
     ['work_steal_deque',     ['test_work_steal_deque.cpp']],
     ['thread_pool',          ['test_thread_pool.cpp']],
     ['work_stealing_policy', ['test_work_stealing_policy.cpp']],
-    ['context',              ['test_context.cpp']]
+    ['context',              ['test_context.cpp']],
+    ['scheduler',            ['test_scheduler.cpp']]
 ]
 
 foreach t : tests
