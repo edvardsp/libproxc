@@ -10,51 +10,74 @@
 
 using Context = proxc::Context;
 
-void test_context()
+void test_back_and_forth()
 {
-    std::vector<std::size_t> ints;
-    std::size_t num_items = 100;
-    std::size_t index = 0;
+    const std::string before = "Before context jump";
+    const std::string after = "After context jump";
+    std::string msg = before;
 
     Context m_ctx{ proxc::context::main_type };
 
-    Context even_ctx{ proxc::context::work_type,
-        [&m_ctx,&ints,&index,&num_items] (void * vp) {
-            Context * odd = static_cast< Context * >(vp);
+    Context other_ctx{ proxc::context::work_type,
+        [&](void *) {
+            msg = after;
             m_ctx.resume();
-            while (index < num_items) {
-                ints.push_back(2 * index);
-                odd->resume();
+        }
+    };
+
+    throw_assert_equ(msg.compare(before), 0, "msg is not correct before context jump.");
+    other_ctx.resume();
+    throw_assert_equ(msg.compare(after), 0, "msg is not correct after context jump.");
+}
+
+void test_ping_pong()
+{
+    std::size_t num_items = 1000;
+    std::size_t index = 0;
+    std::vector<std::size_t> ints;
+    ints.reserve(num_items);
+
+    Context m_ctx{ proxc::context::main_type };
+
+    Context ping_ctx{ proxc::context::work_type,
+        [&] (void * vp) {
+            Context * pong = static_cast< Context * >(vp);
+            m_ctx.resume();
+            while (index++ < num_items) {
+                ints.push_back(0);
+                pong->resume();
             }
             m_ctx.resume();
         }
     };
 
-    Context odd_ctx{ proxc::context::work_type,
-        [&m_ctx,&ints,&index,&num_items] (void * vp) {
-            Context * even = static_cast< Context * >(vp);
+    Context pong_ctx{ proxc::context::work_type,
+        [&] (void * vp) {
+            Context * ping = static_cast< Context * >(vp);
             m_ctx.resume();
-            while (index < num_items) {
-                ints.push_back(2 * index++ + 1);
-                even->resume();
+            while (index++ < num_items) {
+                ints.push_back(1);
+                ping->resume();
             }
             m_ctx.resume();
         }
     };
 
-    odd_ctx.resume(&even_ctx);
-    even_ctx.resume(&odd_ctx);
-    even_ctx.resume();
+    pong_ctx.resume(&ping_ctx);
+    ping_ctx.resume(&pong_ctx);
+    ping_ctx.resume();
 
-    for (std::size_t i = 0; i < num_items; ++i) {
-        throw_assert_equ(ints[i], i, "items should be equal");
+    std::size_t j = 1;
+    for (auto i : ints) {
+        throw_assert_equ(i, j ^= std::size_t{ 1 }, "items should be equal");
     }
     std::cout << "main: done" << std::endl;
 }
 
 int main()
 {
-    test_context();
+    test_back_and_forth();
+    test_ping_pong();
 
     return 0;
 }
