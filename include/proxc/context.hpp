@@ -50,6 +50,7 @@ class Context
     };
 
     enum class State {
+        Running,
         Ready,
         Wait,
         Sleep,
@@ -63,10 +64,13 @@ class Context
 
 private:
 
-    State    state_{ State::Ready };
     Type     type_;
+    State    state_;
 
+    EntryFn        entry_fn_{ nullptr };
     ContextType    ctx_;
+
+    Context *    next_{ nullptr };
 
 public:
     // Intrusive hooks
@@ -75,14 +79,12 @@ public:
     hook::Wait     wait_{};
     hook::Sleep    sleep_{};
 
-    Context *    next_{ nullptr };
-
     std::chrono::steady_clock::time_point time_point_{ (std::chrono::steady_clock::time_point::max)() };
     
 public:
     // constructors and destructor
     explicit Context(context::MainType);
-    explicit Context(context::SchedulerType, SchedulerFn &&);
+    explicit Context(context::SchedulerType, EntryFn &&);
     explicit Context(context::WorkType, EntryFn &&);
 
     ~Context() noexcept;
@@ -100,7 +102,7 @@ private:
     /* [[noreturn]] */
     /* static void entry_func_(SchedulerFn, void *) noexcept; */
     [[noreturn]]
-    static void entry_func_(EntryFn, void *) noexcept;
+    void trampoline_(void *) noexcept;
 
     // Intrusive hook methods
 private:

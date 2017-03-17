@@ -12,17 +12,25 @@
 PROXC_NAMESPACE_BEGIN
 
 Context::Context(context::MainType)
-    : ctx_{ boost::context::execution_context::current() }
+    : type_{ Type::Main }
+    , state_{ State::Running }
+    , ctx_{ boost::context::execution_context::current() }
 {
 }
 
-Context::Context(context::SchedulerType, SchedulerFn && fn)
-    : ctx_{ std::forward< SchedulerFn >(fn) }
+Context::Context(context::SchedulerType, EntryFn && fn)
+    : type_{ Type::Scheduler }
+    , state_{ State::Ready }
+    , entry_fn_{ std::forward< EntryFn >(fn) }
+    , ctx_{ [this](void * vp) { trampoline_(vp); } }
 {
 }
 
 Context::Context(context::WorkType, EntryFn && fn)
-    : ctx_{ std::forward< EntryFn >(fn) }
+    : type_{ Type::Work }
+    , state_{ State::Ready }
+    , entry_fn_{ std::forward< EntryFn >(fn) }
+    , ctx_{ [this](void * vp) { trampoline_(vp); } }
 {
 }
 
@@ -46,9 +54,10 @@ void Context::terminate() noexcept
     BOOST_ASSERT_MSG(false, "unreachable: Context should not return after terminated.");
 }
 
-void Context::entry_func_(EntryFn fn, void * vp) noexcept
+void Context::trampoline_(void * vp) noexcept
 {
-    fn(vp);
+    BOOST_ASSERT(entry_fn_ != nullptr);
+    entry_fn_(vp);
     BOOST_ASSERT_MSG(false, "unreachable: Context should not return from entry_func_().");
 }
 
