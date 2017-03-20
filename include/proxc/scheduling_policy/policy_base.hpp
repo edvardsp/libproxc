@@ -12,6 +12,9 @@ namespace scheduling_policy {
 template<typename T>
 struct PolicyBase
 {
+    using ClockType = std::chrono::steady_clock;
+    using TimePointType = ClockType::time_point;
+
     PolicyBase() {}
 
     PolicyBase(PolicyBase const &) = delete;
@@ -28,7 +31,7 @@ struct PolicyBase
 
     virtual bool is_ready() const noexcept = 0;
 
-    virtual void suspend_until(std::chrono::steady_clock::time_point const &) noexcept = 0;
+    virtual void suspend_until(TimePointType const &) noexcept = 0;
 
     virtual void notify() noexcept = 0;
 };
