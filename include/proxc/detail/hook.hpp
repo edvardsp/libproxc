@@ -41,11 +41,13 @@ struct ReadyTag;
 struct WorkTag;
 struct WaitTag;
 struct SleepTag;
+struct TerminatedTag;
 
 using Ready = ListHook< ReadyTag >::Type;
 using Work  = ListHook< WorkTag >::Type;
 using Wait  = ListHook< WaitTag >::Type;
 using Sleep = SetHook< SleepTag >::Type;
+using Terminated = ListHook< TerminatedTag >::Type;
 
 } // namespace hook
 } // namespace detail
