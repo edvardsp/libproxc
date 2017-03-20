@@ -45,9 +45,12 @@ class Context
     friend class Scheduler;
 
     enum class Type {
-        Main,
-        Scheduler,
-        Work,
+        None      = 1 << 0,
+        Main      = 1 << 1,
+        Scheduler = 1 << 2,
+        Work      = 1 << 3,
+        Static    = Main | Scheduler, // cannot migrate from a scheduler
+        Dynamic   = Work              // can migrate between schedulers
     };
 
     enum class State {
@@ -58,7 +61,35 @@ class Context
         Terminated,
     };
 
+    class Id
+    {
+    private:
+        Context *    ptr_{ nullptr };
+
+    public:
+        Id(Context * ctx) noexcept : ptr_{ ctx } {}
+
+        bool operator == (Id const & other) const noexcept { return ptr_ == other.ptr_; }
+        bool operator != (Id const & other) const noexcept { return ptr_ != other.ptr_; }
+        bool operator <= (Id const & other) const noexcept { return ptr_ <= other.ptr_; }
+        bool operator >= (Id const & other) const noexcept { return ptr_ >= other.ptr_; }
+        bool operator <  (Id const & other) const noexcept { return ptr_ < other.ptr_; }
+        bool operator >  (Id const & other) const noexcept { return ptr_ > other.ptr_; }
+        
+        explicit operator bool() const noexcept { return ptr_ != nullptr; }
+        bool operator ! () const noexcept { return ptr_ == nullptr; }
+
+        template<typename CharT, typename TraitsT>
+        friend std::basic_ostream< CharT, TraitsT > &
+        operator << (std::basic_ostream< CharT, TraitsT > & os, Id const & id)
+        {
+            if (id) { return os << id.ptr_; } 
+            else    { return os << "invalid id"; }
+        }
+    };
+
     using ContextType = boost::context::execution_context;
+    using TimePointType = std::chrono::steady_clock::time_point;
 
     using SchedulerFn = std::function< void(void *) >;
     using EntryFn     = std::function< void(void *) >;
@@ -79,12 +110,13 @@ private:
 
 public:
     // Intrusive hooks
-    hook::Ready    ready_{};
-    hook::Work     work_{};
-    hook::Wait     wait_{};
-    hook::Sleep    sleep_{};
+    hook::Ready         ready_{};
+    hook::Work          work_{};
+    hook::Wait          wait_{};
+    hook::Sleep         sleep_{};
+    hook::Terminated    terminated_{};
 
-    std::chrono::steady_clock::time_point time_point_{ (std::chrono::steady_clock::time_point::max)() };
+    TimePointType time_point_{ TimePointType::max() };
     
 public:
     // constructors and destructor
@@ -99,9 +131,12 @@ public:
     Context & operator=(Context const &) = delete;
 
     // general methods
+    Id get_id() const noexcept;
     void * resume(void * vp = nullptr) noexcept;
-    [[noreturn]]
     void terminate() noexcept;
+
+    bool is_type(Type) const noexcept;
+    bool in_state(State) const noexcept;
     
 private:
     [[noreturn]]

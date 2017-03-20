@@ -59,6 +59,11 @@ Context::~Context() noexcept
     BOOST_ASSERT( ! is_linked< hook::Sleep >() );
 }
 
+Context::Id Context::get_id() const noexcept
+{
+    return Id{ const_cast< Context * >(this) };
+}
+
 void * Context::resume(void * vp) noexcept
 {
     return ctx_(vp);
@@ -66,10 +71,18 @@ void * Context::resume(void * vp) noexcept
 
 void Context::terminate() noexcept
 {
+    BOOST_ASSERT(state_ != State::Terminated);
     state_ = State::Terminated;
-    Scheduler::self()->terminate(this);
-    
-    BOOST_ASSERT_MSG(false, "unreachable: Context should not return after terminated.");
+}
+
+bool Context::is_type(Type type) const noexcept
+{
+    return (static_cast<int>(type) & static_cast<int>(type_)) != 0;
+}
+
+bool Context::in_state(State state) const noexcept
+{
+    return state == state_;
 }
 
 void Context::trampoline_(void * vp) noexcept
@@ -83,6 +96,7 @@ template<> detail::hook::Ready & Context::get_hook_() noexcept { return ready_; 
 template<> detail::hook::Work &  Context::get_hook_() noexcept { return work_; }
 template<> detail::hook::Wait &  Context::get_hook_() noexcept { return wait_; }
 template<> detail::hook::Sleep & Context::get_hook_() noexcept { return sleep_; }
+template<> detail::hook::Terminated & Context::get_hook_() noexcept { return terminated_; }
 
 PROXC_NAMESPACE_END
 
