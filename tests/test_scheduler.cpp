@@ -13,6 +13,11 @@ void printer(std::string msg)
     std::cout << msg << std::endl;
 }
     
+void printer2(std::string msg, int x)
+{
+    std::cout << msg << ": " << x << std::endl;
+}
+    
 void test_scheduler_self()
 {
     auto self = proxc::Scheduler::self();
@@ -25,6 +30,8 @@ void test_make_work()
 {
     auto self = proxc::Scheduler::self();
     self->make_work( & printer, "Hello World!" );
+    self->make_work( & printer, "Hello Other World!" );
+    self->make_work( & printer2, "Hello This World!", 6 );
 }
 
 int main()
