@@ -9,10 +9,12 @@
 
 #if defined(_MSC_VER) && !defined(__clang__) // MSVC
 
+#   define PROXC_COMP_MSVC
 #   pragma message("Warning: the native Microsoft compiler is not supported due to lack of proper C++14 support.")
 
 #elif defined(__clang__) && defined(_MSC_VER) // Clang-cl (Clang for Windows)
 
+#   define PROXC_COMP_CLANG
 #   define PROXC_CONFIG_CLANG PROXC_CONFIG_VERSION( \
         __clang_major__, __clang_minor__, __clang_patchlevel__)
 
@@ -22,6 +24,7 @@
 
 #elif defined(__clang__) && defined(__apple_build_version__) // Apple's Clang
 
+#   define PROXC_COMP_CLANG
 #   if __apple_build_version__ >= 6000051
 #       define PROXC_CONFIG_CLANG PROXC_CONFIG_VERSION(3, 6, 0)
 #   else
@@ -30,6 +33,7 @@
 
 #elif defined(__clang__) // Genuine Clang
 
+#   define PROXC_COMP_CLANG
 #   define PROXC_CONFIG_CLANG PROXC_CONFIG_VERSION( \
         __clang_major__, __clang_minor__, __clang_patchlevel__)
 
@@ -39,6 +43,7 @@
 
 #elif defined(__GNUC__) // GCC
 
+#   define PROXC_COMP_GCC
 #   define PROXC_CONFIC_GCC PROXC_CONFIG_VERSION(\
         __GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__)
 
