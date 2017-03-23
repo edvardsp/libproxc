@@ -36,20 +36,18 @@ using TimePointType = PolicyType::TimePointType;
 
 class Scheduler
 {
-    using TrampolineFn = std::function< void(void) >;
-
 public:
     using ReadyQueue = detail::queue::ListQueue< Context, detail::hook::Ready, & Context::ready_ >;
 
 private:
-    struct time_point_comp
+    struct time_point_cmp_
     {
         bool operator()(Context const & left, Context const & right) const noexcept
         { return left.time_point_ < right.time_point_; }
     };
 
     using WorkQueue  = detail::queue::ListQueue< Context, detail::hook::Work, & Context::work_ >;
-    using SleepQueue = detail::queue::SetQueue< Context, detail::hook::Sleep, & Context::sleep_, time_point_comp>;
+    using SleepQueue = detail::queue::SetQueue< Context, detail::hook::Sleep, & Context::sleep_, time_point_cmp_ >;
     using TerminatedQueue = detail::queue::ListQueue< Context, detail::hook::Terminated, & Context::terminated_ >;
 
     std::unique_ptr< PolicyType >    policy_;

@@ -57,7 +57,8 @@ Scheduler * Scheduler::self() noexcept
 
 Context * Scheduler::running() noexcept
 {
-    BOOST_ASSERT(Scheduler::self() != nullptr);
+    BOOST_ASSERT( Scheduler::self() != nullptr );
+    BOOST_ASSERT( Scheduler::self()->running_ != nullptr );
     return Scheduler::self()->running_;
 }
 
@@ -68,14 +69,14 @@ Scheduler::Scheduler()
         [this](void * vp) { run_(vp); } } }
 {
     running_ = main_ctx_.get();
-    schedule(scheduler_ctx_.get());
+    schedule( scheduler_ctx_.get() );
 }
 
 Scheduler::~Scheduler()
 {
-    BOOST_ASSERT(main_ctx_.get() != nullptr);
-    BOOST_ASSERT(scheduler_ctx_.get() != nullptr);
-    BOOST_ASSERT(running_ == main_ctx_.get());
+    BOOST_ASSERT( main_ctx_.get() != nullptr );
+    BOOST_ASSERT( scheduler_ctx_.get() != nullptr );
+    BOOST_ASSERT( running_ == main_ctx_.get() );
 
     exit_ = true;
     join( scheduler_ctx_.get() );
@@ -86,11 +87,10 @@ Scheduler::~Scheduler()
     scheduler_ctx_.reset();
     main_ctx_.reset();
 
-
     for (auto et = work_queue_.begin(); et != work_queue_.end(); ) {
         auto ctx = &( *et );
         et = work_queue_.erase(et);
-        delete ctx;
+        intrusive_ptr_release( ctx );
     }
     running_ = nullptr;
 
@@ -160,6 +160,7 @@ void Scheduler::schedule(Context * ctx) noexcept
 void Scheduler::attach(Context * ctx) noexcept
 {
     BOOST_ASSERT(   ctx != nullptr );
+    // FIXME: is_type(Dynamic) instead?
     BOOST_ASSERT(   ctx->is_type( Context::Type::Work ) );
     BOOST_ASSERT( ! ctx->is_linked< hook::Work >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
@@ -173,6 +174,7 @@ void Scheduler::attach(Context * ctx) noexcept
 void Scheduler::detach(Context * ctx) noexcept
 {
     BOOST_ASSERT(ctx != nullptr);
+    // FIXME: is_type(Dynamic) instead?
     BOOST_ASSERT(   ctx->is_type( Context::Type::Work ) );
     BOOST_ASSERT(   ctx->is_linked< hook::Work >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
@@ -185,7 +187,15 @@ void Scheduler::detach(Context * ctx) noexcept
 
 void Scheduler::commit(Context * ctx) noexcept
 {
-    BOOST_ASSERT( ctx != nullptr );
+    BOOST_ASSERT(   ctx != nullptr );
+    // FIXME: is_type(Dynamic) instead?
+    BOOST_ASSERT(   ctx->is_type( Context::Type::Work ) );
+    BOOST_ASSERT( ! ctx->is_linked< hook::Work >() );
+    BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
+    BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
+    BOOST_ASSERT( ! ctx->is_linked< hook::Sleep >() );
+    BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
+
     attach( ctx );
     schedule( ctx );
 }
@@ -204,12 +214,14 @@ void Scheduler::yield() noexcept
     if (next != nullptr) {
         schedule( ctx );
         resume( next );
+        BOOST_ASSERT( ctx == running_ );
     }
 }
 
 void Scheduler::join(Context * ctx) noexcept
 {
-    BOOST_ASSERT(ctx != nullptr);
+    BOOST_ASSERT( ctx != nullptr );
+
     Context * running_ctx = running_;
     // FIXME: this might need rework
     if ( ! ctx->has_terminated() ) {
@@ -228,11 +240,13 @@ void Scheduler::sleep_until(TimePointType const & time_point) noexcept
     BOOST_ASSERT( ! running_->is_linked< hook::Sleep >() );
     BOOST_ASSERT( ! running_->is_linked< hook::Terminated >() );
 
-    running_->time_point_ = time_point;
-    running_->link( sleep_queue_ );
-    resume();
+    if (ClockType::now() < time_point) {
+        running_->time_point_ = time_point;
+        running_->link( sleep_queue_ );
+        resume();
+    }
     // FIXME: is this check guaranteed?
-    BOOST_ASSERT( ClockType::now() > time_point );
+    BOOST_ASSERT( ClockType::now() >= time_point );
 }
 
 void Scheduler::wakeup_sleep() noexcept
@@ -260,13 +274,18 @@ void Scheduler::wakeup_sleep() noexcept
 void Scheduler::wakeup_waiting_on(Context * ctx) noexcept
 {
     BOOST_ASSERT(   ctx != nullptr );
+    BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
+    BOOST_ASSERT( ! ctx->is_linked< hook::Sleep >() );
+    BOOST_ASSERT(   ctx->has_terminated() );
 
     while ( ! ctx->wait_queue_.empty() ) {
         auto waiting_ctx = & ctx->wait_queue_.front();
         ctx->wait_queue_.pop_front();
         schedule( waiting_ctx );
     }
+
+    BOOST_ASSERT( ctx->wait_queue_.empty() );
 }
 
 void Scheduler::cleanup_terminated() noexcept
@@ -276,16 +295,14 @@ void Scheduler::cleanup_terminated() noexcept
         terminated_queue_.pop_front();
 
         // FIXME: is_type(Dynamic) instead?
-        BOOST_ASSERT(   ctx->is_type(Context::Type::Work) );
-        BOOST_ASSERT( ! ctx->is_type(Context::Type::Static) );
+        BOOST_ASSERT(   ctx->is_type( Context::Type::Work ) );
+        BOOST_ASSERT( ! ctx->is_type( Context::Type::Static ) );
         BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
         BOOST_ASSERT( ! ctx->is_linked< hook::Work >() );
         BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
         BOOST_ASSERT( ! ctx->is_linked< hook::Sleep >() );
 
         // FIXME: might do a more reliable cleanup here.
-        // work contexts might not necessarily be new-allocated,
-        // allthough it is now, eg. intrusive_ptr/shared_ptr
         intrusive_ptr_release( ctx );
     }
 }
@@ -312,7 +329,7 @@ void Scheduler::print_debug() noexcept
 // Scheduler context loop
 void Scheduler::run_(void *) noexcept
 {
-    BOOST_ASSERT(Scheduler::running() == scheduler_ctx_.get());
+    BOOST_ASSERT( running_ == scheduler_ctx_.get() );
     for (;;) {
         if (exit_) {
             policy_->notify();
@@ -337,9 +354,11 @@ void Scheduler::run_(void *) noexcept
             policy_->suspend_until( suspend_time );
         }
     }
-
     cleanup_terminated();
+
+    scheduler_ctx_->has_terminated_ = true;
     wakeup_waiting_on( scheduler_ctx_.get() );
+
     main_ctx_->unlink< hook::Ready >();
     resume( main_ctx_.get() );
     BOOST_ASSERT_MSG(false, "unreachable: should not return after scheduler run.");
