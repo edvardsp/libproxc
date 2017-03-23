@@ -10,6 +10,7 @@
 
 #include <proxc/traits.hpp>
 #include <proxc/detail/hook.hpp>
+#include <proxc/detail/queue.hpp>
 
 #include <boost/assert.hpp>
 #include <boost/intrusive_ptr.hpp>
@@ -42,6 +43,7 @@ const WorkType work_type{};
 
 class Context
 {
+public:
     friend class Scheduler;
 
     enum class Type {
@@ -50,15 +52,8 @@ class Context
         Scheduler = 1 << 2,
         Work      = 1 << 3,
         Static    = Main | Scheduler, // cannot migrate from a scheduler
-        Dynamic   = Work              // can migrate between schedulers
-    };
-
-    enum class State {
-        Running,
-        Ready,
-        Wait,
-        Sleep,
-        Terminated,
+        Dynamic   = Work,             // can migrate between schedulers
+        Process   = Main | Dynamic    // contexts which are not a scheduler
     };
 
     class Id
@@ -95,13 +90,11 @@ class Context
     using EntryFn     = std::function< void(void *) >;
 
 private:
-    Type     type_;
-    State    state_;
+    Type    type_;
+    bool    has_terminated_{ false };
 
     EntryFn        entry_fn_{ nullptr };
     ContextType    ctx_;
-
-    Context *    next_{ nullptr };
 
     // intrusive_ptr friend methods and counter
     friend void intrusive_ptr_add_ref(Context * ctx) noexcept;
@@ -109,14 +102,19 @@ private:
     std::size_t    use_count_{ 0 };
 
 public:
+    TimePointType time_point_{ TimePointType::max() };
+
     // Intrusive hooks
     hook::Ready         ready_{};
     hook::Work          work_{};
-    hook::Wait          wait_{};
     hook::Sleep         sleep_{};
     hook::Terminated    terminated_{};
 
-    TimePointType time_point_{ TimePointType::max() };
+    // Wait queue must be context specific, as this differs from 
+    // from context to context
+    hook::Wait    wait_{};
+    using WaitQueue = detail::queue::ListQueue< Context, detail::hook::Wait, & Context::wait_ >;
+    WaitQueue     wait_queue_{};
     
 public:
     // constructors and destructor
@@ -133,11 +131,12 @@ public:
     // general methods
     Id get_id() const noexcept;
     void * resume(void * vp = nullptr) noexcept;
-    void terminate() noexcept;
 
     bool is_type(Type) const noexcept;
-    bool in_state(State) const noexcept;
+    bool has_terminated() noexcept;
     
+    void print_debug() noexcept;
+
 private:
     [[noreturn]]
     void trampoline_(void *) noexcept;
@@ -156,6 +155,7 @@ public:
     void link(boost::intrusive::multiset< Ts ... > & set) noexcept;
     template<typename Hook>
     void unlink() noexcept;
+    void wait_for(Context *) noexcept;
 };
 
 // Intrusive list methods.
