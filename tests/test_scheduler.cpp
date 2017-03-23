@@ -1,37 +1,61 @@
 
+#include <chrono>
 #include <iostream>
+#include <initializer_list>
 #include <string>
 
 #include <proxc/config.hpp>
 
 #include <proxc/scheduler.hpp>
 
+#include <boost/intrusive_ptr.hpp>
+
 #include "setup.hpp"
 
-void printer(std::string msg)
+using ms = std::chrono::milliseconds;
+using Clock = proxc::ClockType;
+
+using namespace proxc;
+
+template<typename Arg>
+void printer(Arg && arg)
 {
-    std::cout << msg << std::endl;
+    std::cout << arg << std::endl;
 }
-    
-void printer2(std::string msg, int x)
+
+template<typename Arg, typename ... Args>
+void printer(Arg && arg, Args && ... args)
 {
-    std::cout << msg << ": " << x << std::endl;
+    std::cout << arg;
+    printer( std::forward< Args >(args)... );
 }
-    
+
 void test_scheduler_self()
 {
-    auto self = proxc::Scheduler::self();
-    BOOST_ASSERT(self != nullptr);
-    auto main_ctx = self->running();
-    BOOST_ASSERT(main_ctx != nullptr);
+    auto self = Scheduler::self();
+    throw_assert( self != nullptr, "scheduler should not be nullptr" );
 }
 
 void test_make_work()
 {
-    auto self = proxc::Scheduler::self();
-    self->make_work( & printer, "Hello World!" );
-    self->make_work( & printer, "Hello Other World!" );
-    self->make_work( & printer2, "Hello This World!", 6 );
+    auto func = [](std::string msg, ms milli) {
+        printer("Printing msg `", msg, "`, now sleeping ", milli.count(), "ms.");
+        Scheduler::self()->sleep_until( Clock::now() + milli );
+        printer("Printing msg `", msg, "`, after sleeping.");
+    };
+    auto p0 = Scheduler::make_work( func, "ctx0", ms(0) );
+    auto p1 = Scheduler::make_work( func, "ctx1", ms(100) );
+    auto p2 = Scheduler::make_work( func, "ctx2", ms(200) );
+    auto p3 = Scheduler::make_work( func, "ctx3", ms(300) );
+    auto self = Scheduler::self();
+    self->commit( p0.get() );
+    self->commit( p1.get() );
+    self->commit( p2.get() );
+    self->commit( p3.get() );
+    self->join( p3.get() );
+    self->join( p2.get() );
+    self->join( p1.get() );
+    self->join( p0.get() );
 }
 
 int main()

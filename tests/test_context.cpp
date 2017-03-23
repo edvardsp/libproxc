@@ -10,6 +10,20 @@
 
 using Context = proxc::Context;
 
+void test_context_id()
+{
+    Context m_ctx{ proxc::context::main_type };
+    Context p1_ctx{ proxc::context::scheduler_type, [](void *){} };
+    Context p2_ctx{ proxc::context::work_type, [](void *){} };
+
+    throw_assert_equ(m_ctx.get_id(),  m_ctx.get_id(),  "id should be equal");
+    throw_assert_equ(p1_ctx.get_id(), p1_ctx.get_id(), "id should be equal");
+    throw_assert_equ(p2_ctx.get_id(), p2_ctx.get_id(), "id should be equal");
+    throw_assert_neq(m_ctx.get_id(),  p1_ctx.get_id(), "id should not be equal");
+    throw_assert_neq(m_ctx.get_id(),  p2_ctx.get_id(), "id should not be equal");
+    throw_assert_neq(p1_ctx.get_id(), p2_ctx.get_id(), "id should not be equal");
+}
+
 void test_back_and_forth()
 {
     const std::string before = "Before context jump";
@@ -22,8 +36,7 @@ void test_back_and_forth()
         [&](void *) {
             msg = after;
             m_ctx.resume();
-        }
-    };
+        } };
 
     throw_assert_equ(msg.compare(before), 0, "msg is not correct before context jump.");
     other_ctx.resume();
@@ -76,6 +89,7 @@ void test_ping_pong()
 
 int main()
 {
+    test_context_id();
     test_back_and_forth();
     test_ping_pong();
 
