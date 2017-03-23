@@ -105,52 +105,55 @@
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
-// Detect 32- or 64-bit architecture
+// Detect architecture and architecture word size
 ////////////////////////////////////////////////////////////////////////////////
-
-#ifndef PROXC_ARCH
 
 #if defined(__powerpc__) || defined(__ppc__) || defined(__PPC__) /* PowerPC */
 
+#   define PROXC_ARCH_PPC
+
 #   if defined(__powerpc64__) || defined(__ppc64__) || defined(__PPC64__) || \
        defined(__64BIT__)     || defined(_LP64)     || defined(__LP64__) /* PowerPC 64-bit */
-
 #       define PROXC_ARCH 64
-
 #   else /* PowerPC 32-bit */
-
 #       define PROXC_ARCH 32
-
 #   endif
 
 #elif defined(__x86_64__) || defined(_M_X64) /* x86 64-bit */
 
+#   define PROXC_ARCH_X86
 #   define PROXC_ARCH 64
 
 #elif defined(__i386) || defined(_M_IX86) /* x86 32-bit */
 
+#   define PROXC_ARCH_X86
 #   define PROXC_ARCH 32
 
 #elif defined(_WIN32) || defined(_WIN64) /* Windows */
 
+#   define PROXC_ARCH_WIN
 #   if defined(_WIN64) /* Windows 64-bit */
-
 #       define PROXC_ARCH 64
-
 #   else /* Windows 32-bit */
-
 #       define PROXC_ARCH 32
-
 #   endif
+
+#elif defined(__arm__) || defined(__arm)
+
+#   define PROXC_ARCH_ARM
+#   define PROXC_ARCH 64
+
+#elif defined(__mips__) || defined(mips) || defined(__mips)
+
+#   define PROXC_ARCH_MIPS
+#   define PROXC_ARCH 64
 
 #else /* Unknown architecture */
 
 #   define PROXC_ARCH 64
-#   warning "Architecture was neither correctly determined nor specified. Defaults to 64-bit. This can be set with -DPROXC_ARCH={32/64}, for 32-bit or 64-bit respectively."
+#   warning "Architecture was not correctly determined. Defaults to 64-bit."
 
 #endif
-
-#endif // PROXC_ARCH
 
 static_assert(((PROXC_ARCH) == 32) || ((PROXC_ARCH) == 64), "Architecture specified by PROXC_ARCH only supports 32 or 64 value.");
 
