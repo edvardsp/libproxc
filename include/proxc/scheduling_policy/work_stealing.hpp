@@ -50,7 +50,7 @@ public:
     // Policy base interface methods
     void enqueue(T *) noexcept;
 
-    T * pick_next() noexcept; 
+    T * pick_next() noexcept;
 
     bool is_ready() const noexcept;
 

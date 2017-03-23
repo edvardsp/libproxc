@@ -70,7 +70,7 @@ public:
         bool operator >= (Id const & other) const noexcept { return ptr_ >= other.ptr_; }
         bool operator <  (Id const & other) const noexcept { return ptr_ < other.ptr_; }
         bool operator >  (Id const & other) const noexcept { return ptr_ > other.ptr_; }
-        
+
         explicit operator bool() const noexcept { return ptr_ != nullptr; }
         bool operator ! () const noexcept { return ptr_ == nullptr; }
 
@@ -78,7 +78,7 @@ public:
         friend std::basic_ostream< CharT, TraitsT > &
         operator << (std::basic_ostream< CharT, TraitsT > & os, Id const & id)
         {
-            if (id) { return os << id.ptr_; } 
+            if (id) { return os << id.ptr_; }
             else    { return os << "invalid id"; }
         }
     };
@@ -110,12 +110,12 @@ public:
     hook::Sleep         sleep_{};
     hook::Terminated    terminated_{};
 
-    // Wait queue must be context specific, as this differs from 
+    // Wait queue must be context specific, as this differs from
     // from context to context
     hook::Wait    wait_{};
     using WaitQueue = detail::queue::ListQueue< Context, detail::hook::Wait, & Context::wait_ >;
     WaitQueue     wait_queue_{};
-    
+
 public:
     // constructors and destructor
     explicit Context(context::MainType);
@@ -134,7 +134,7 @@ public:
 
     bool is_type(Type) const noexcept;
     bool has_terminated() noexcept;
-    
+
     void print_debug() noexcept;
 
 private:

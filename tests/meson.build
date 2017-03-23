@@ -13,6 +13,6 @@ foreach t : tests
         include_directories : [inc, src, tst],
         dependencies : [boost_dep, thread_dep],
         link_with : proxc)
-    test('test ' + t[0], exe) 
+    test('test ' + t[0], exe)
 endforeach
 

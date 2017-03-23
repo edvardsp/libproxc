@@ -17,7 +17,7 @@ namespace scheduling_policy {
 namespace detail {
 
 template<typename T>
-class RoundRobinPolicy : public PolicyBase<T> 
+class RoundRobinPolicy : public PolicyBase<T>
 {
 private:
     Scheduler::ReadyQueue      ready_queue_{};
