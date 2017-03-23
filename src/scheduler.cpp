@@ -20,7 +20,7 @@ namespace hook = detail::hook;
 
 namespace detail {
 
-struct SchedulerInitializer 
+struct SchedulerInitializer
 {
     thread_local static Scheduler * self_;
     thread_local static std::size_t counter_;
@@ -37,6 +37,7 @@ struct SchedulerInitializer
     {
         if (--counter_ != 0) { return; }
 
+        BOOST_ASSERT( Scheduler::running()->is_type( Context::Type::Main ) );
         auto scheduler = self_;
         delete scheduler;
     }
@@ -63,7 +64,7 @@ Context * Scheduler::running() noexcept
 Scheduler::Scheduler()
     : policy_{ new scheduling_policy::RoundRobin{} }
     , main_ctx_{ new Context{ context::main_type } }
-    , scheduler_ctx_{ new Context{ context::scheduler_type, 
+    , scheduler_ctx_{ new Context{ context::scheduler_type,
         [this](void * vp) { run_(vp); } } }
 {
     running_ = main_ctx_.get();
@@ -77,7 +78,14 @@ Scheduler::~Scheduler()
     BOOST_ASSERT(running_ == main_ctx_.get());
 
     exit_ = true;
-    join(scheduler_ctx_.get());
+    join( scheduler_ctx_.get() );
+
+    BOOST_ASSERT( main_ctx_->wait_queue_.empty() );
+    BOOST_ASSERT( scheduler_ctx_->wait_queue_.empty() );
+
+    scheduler_ctx_.reset();
+    main_ctx_.reset();
+
 
     for (auto et = work_queue_.begin(); et != work_queue_.end(); ) {
         auto ctx = &( *et );
@@ -85,14 +93,35 @@ Scheduler::~Scheduler()
         delete ctx;
     }
     running_ = nullptr;
+
+    BOOST_ASSERT( work_queue_.empty() );
+    BOOST_ASSERT( sleep_queue_.empty() );
+    BOOST_ASSERT( terminated_queue_.empty() );
 }
 
-void Scheduler::resume(Context * ctx) noexcept
+void Scheduler::resume_(Context * to_ctx, void * vp) noexcept
 {
-    BOOST_ASSERT( ctx != nullptr );
-    BOOST_ASSERT( running_ != nullptr );
-    std::swap(ctx, running_);
-    running_->resume();
+    BOOST_ASSERT(   to_ctx != nullptr );
+    BOOST_ASSERT(   running_ != nullptr );
+    BOOST_ASSERT( ! to_ctx->is_linked< hook::Ready >() );
+    BOOST_ASSERT( ! to_ctx->is_linked< hook::Wait >() );
+    BOOST_ASSERT( ! to_ctx->is_linked< hook::Sleep >() );
+    BOOST_ASSERT( ! to_ctx->is_linked< hook::Terminated >() );
+
+    std::swap( to_ctx, running_ );
+
+    // context switch
+    running_->resume( vp );
+}
+
+void Scheduler::resume() noexcept
+{
+    resume( policy_->pick_next() );
+}
+
+void Scheduler::resume(Context * to_ctx) noexcept
+{
+    resume_( to_ctx );
 }
 
 void Scheduler::terminate(Context * ctx) noexcept
@@ -100,109 +129,155 @@ void Scheduler::terminate(Context * ctx) noexcept
     BOOST_ASSERT( ctx != nullptr );
     BOOST_ASSERT( running_ == ctx );
 
-    ctx->terminate();
-
     // FIXME: is_type(Dynamic) instead?
-    BOOST_ASSERT(   ctx->is_type(Context::Type::Work) );
-    BOOST_ASSERT( ! ctx->is_type(Context::Type::Static) );
-    BOOST_ASSERT(   ctx->in_state(Context::State::Terminated) );
+    BOOST_ASSERT(   ctx->is_type( Context::Type::Work ) );
     BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Sleep >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
 
-    ctx->link(terminated_queue_);
+    ctx->has_terminated_ = true;
+    ctx->link( terminated_queue_ );
     ctx->unlink< hook::Work >();
-    resume(policy_->pick_next());
+
+    wakeup_waiting_on( ctx );
+
+    resume();
     BOOST_ASSERT_MSG(false, "unreachable: should not return from scheduler terminate().");
 }
 
 void Scheduler::schedule(Context * ctx) noexcept
 {
-    BOOST_ASSERT(ctx != nullptr);
+    BOOST_ASSERT(   ctx != nullptr );
     BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
+    BOOST_ASSERT( ! ctx->is_linked< hook::Sleep >() );
+    BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
 
-    if (ctx->is_linked< hook::Sleep >()) {
-        ctx->unlink< hook::Sleep >();
-    }
-    policy_->enqueue(ctx);
+    policy_->enqueue( ctx );
 }
 
 void Scheduler::attach(Context * ctx) noexcept
 {
-    BOOST_ASSERT(ctx != nullptr);
-    BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
+    BOOST_ASSERT(   ctx != nullptr );
+    BOOST_ASSERT(   ctx->is_type( Context::Type::Work ) );
     BOOST_ASSERT( ! ctx->is_linked< hook::Work >() );
+    BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Sleep >() );
+    BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
 
-    ctx->link(work_queue_);
+    ctx->link( work_queue_ );
 }
 
 void Scheduler::detach(Context * ctx) noexcept
 {
     BOOST_ASSERT(ctx != nullptr);
+    BOOST_ASSERT(   ctx->is_type( Context::Type::Work ) );
+    BOOST_ASSERT(   ctx->is_linked< hook::Work >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
-    BOOST_ASSERT( ! ctx->is_linked< hook::Work >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Sleep >() );
+    BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
 
     ctx->unlink< hook::Work >();
+}
+
+void Scheduler::commit(Context * ctx) noexcept
+{
+    BOOST_ASSERT( ctx != nullptr );
+    attach( ctx );
+    schedule( ctx );
+}
+
+void Scheduler::yield() noexcept
+{
+    auto ctx = running_;
+    BOOST_ASSERT(   ctx != nullptr );
+    BOOST_ASSERT(   ctx->is_type( Context::Type::Process ) );
+    BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
+    BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
+    BOOST_ASSERT( ! ctx->is_linked< hook::Sleep >() );
+    BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
+
+    auto next = policy_->pick_next();
+    if (next != nullptr) {
+        schedule( ctx );
+        resume( next );
+    }
 }
 
 void Scheduler::join(Context * ctx) noexcept
 {
     BOOST_ASSERT(ctx != nullptr);
     Context * running_ctx = running_;
-    if ( ! ctx->in_state(Context::State::Terminated)) {
-        running_ctx->link(wait_queue_);
-        suspend_running();
-        BOOST_ASSERT(running_ == running_ctx);
+    // FIXME: this might need rework
+    if ( ! ctx->has_terminated() ) {
+        running_ctx->link( ctx->wait_queue_ );
+        resume();
+        BOOST_ASSERT( running_ == running_ctx );
     }
 }
 
-void Scheduler::suspend_running() noexcept
+void Scheduler::sleep_until(TimePointType const & time_point) noexcept
 {
-    resume(policy_->pick_next());
+    BOOST_ASSERT(   running_ != nullptr );
+    BOOST_ASSERT(   running_->is_type( Context::Type::Process ) );
+    BOOST_ASSERT( ! running_->is_linked< hook::Ready >() );
+    BOOST_ASSERT( ! running_->is_linked< hook::Wait >() );
+    BOOST_ASSERT( ! running_->is_linked< hook::Sleep >() );
+    BOOST_ASSERT( ! running_->is_linked< hook::Terminated >() );
+
+    running_->time_point_ = time_point;
+    running_->link( sleep_queue_ );
+    resume();
+    // FIXME: is this check guaranteed?
+    BOOST_ASSERT( ClockType::now() > time_point );
 }
 
-void Scheduler::transition_sleep() noexcept
+void Scheduler::wakeup_sleep() noexcept
 {
     auto now = ClockType::now();
     auto end = sleep_queue_.end();
     for (auto it  = sleep_queue_.begin(); it != end; ) {
         auto ctx = &( *it );
 
-        BOOST_ASSERT( ! ctx->is_type(Context::Type::Scheduler) );
-        BOOST_ASSERT( ctx == main_ctx_.get() || ctx->is_linked< hook::Work >() );
-        BOOST_ASSERT( ! ctx->in_state(Context::State::Terminated) );
+        BOOST_ASSERT(   ctx->is_type( Context::Type::Process ) );
         BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
         BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
 
-        // Keep advancing the queue if deadline is reached, 
+        // Keep advancing the queue if deadline is reached,
         // break if not.
-        if (ctx->time_point_ <= now) {
-            it = sleep_queue_.erase(it);
-            ctx->time_point_ = (TimePointType::max)();
-            schedule(ctx);
-        } else {
+        if (ctx->time_point_ > now) {
             break;
         }
+        it = sleep_queue_.erase( it );
+        ctx->time_point_ = (TimePointType::max)();
+        schedule( ctx );
+    }
+}
+
+void Scheduler::wakeup_waiting_on(Context * ctx) noexcept
+{
+    BOOST_ASSERT(   ctx != nullptr );
+    BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
+
+    while ( ! ctx->wait_queue_.empty() ) {
+        auto waiting_ctx = & ctx->wait_queue_.front();
+        ctx->wait_queue_.pop_front();
+        schedule( waiting_ctx );
     }
 }
 
 void Scheduler::cleanup_terminated() noexcept
 {
-    auto end = terminated_queue_.end();
-    for (auto it = terminated_queue_.begin(); it != end; ) {
-        auto ctx = &( *it );
-        it = terminated_queue_.erase(it);
+    while ( ! terminated_queue_.empty() ) {
+        auto ctx = & terminated_queue_.front();
+        terminated_queue_.pop_front();
 
-        // FIXME: is_type(Static) instead?
+        // FIXME: is_type(Dynamic) instead?
         BOOST_ASSERT(   ctx->is_type(Context::Type::Work) );
         BOOST_ASSERT( ! ctx->is_type(Context::Type::Static) );
-        BOOST_ASSERT(   ctx->in_state(Context::State::Terminated) );
         BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
         BOOST_ASSERT( ! ctx->is_linked< hook::Work >() );
         BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
@@ -211,7 +286,26 @@ void Scheduler::cleanup_terminated() noexcept
         // FIXME: might do a more reliable cleanup here.
         // work contexts might not necessarily be new-allocated,
         // allthough it is now, eg. intrusive_ptr/shared_ptr
-        delete ctx;
+        intrusive_ptr_release( ctx );
+    }
+}
+
+void Scheduler::print_debug() noexcept
+{
+    std::cout << "Scheduler: " << std::endl;
+    std::cout << "  Scheduler Ctx: " << std::endl;
+    scheduler_ctx_->print_debug();
+    std::cout << "  Main Ctx: " << std::endl;
+    main_ctx_->print_debug();
+    std::cout << "  Running: " << std::endl;
+    running_->print_debug();
+    std::cout << "  Work Queue:" << std::endl;
+    for (auto& ctx : work_queue_) {
+        ctx.print_debug();
+    }
+    std::cout << "  Terminated Queue:" << std::endl;
+    for (auto& ctx : terminated_queue_) {
+        ctx.print_debug();
     }
 }
 
@@ -228,24 +322,26 @@ void Scheduler::run_(void *) noexcept
         }
 
         cleanup_terminated();
-        transition_sleep();
+        wakeup_sleep();
 
         auto ctx = policy_->pick_next();
         if (ctx != nullptr) {
-            schedule(scheduler_ctx_.get());
-            resume(ctx);
-            BOOST_ASSERT(running_ == scheduler_ctx_.get());
+            schedule( scheduler_ctx_.get() );
+            resume( ctx );
+            BOOST_ASSERT( running_ == scheduler_ctx_.get() );
         } else {
             auto sleep_it = sleep_queue_.begin();
             auto suspend_time = (sleep_it != sleep_queue_.end())
                 ? sleep_it->time_point_
                 : (PolicyType::TimePointType::max)();
-            policy_->suspend_until(suspend_time);
+            policy_->suspend_until( suspend_time );
         }
-    }    
+    }
 
     cleanup_terminated();
-    resume(main_ctx_.get());
+    wakeup_waiting_on( scheduler_ctx_.get() );
+    main_ctx_->unlink< hook::Ready >();
+    resume( main_ctx_.get() );
     BOOST_ASSERT_MSG(false, "unreachable: should not return after scheduler run.");
 }
 

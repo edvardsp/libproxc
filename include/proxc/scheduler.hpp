@@ -9,6 +9,7 @@
 #include <proxc/config.hpp>
 
 #include <proxc/context.hpp>
+#include <proxc/traits.hpp>
 #include <proxc/scheduling_policy/policy_base.hpp>
 #include <proxc/detail/hook.hpp>
 #include <proxc/detail/queue.hpp>
@@ -41,14 +42,13 @@ public:
     using ReadyQueue = detail::queue::ListQueue< Context, detail::hook::Ready, & Context::ready_ >;
 
 private:
-    struct time_point_comp 
+    struct time_point_comp
     {
-        bool operator()(Context const & left, Context const & right) const noexcept 
+        bool operator()(Context const & left, Context const & right) const noexcept
         { return left.time_point_ < right.time_point_; }
     };
 
     using WorkQueue  = detail::queue::ListQueue< Context, detail::hook::Work, & Context::work_ >;
-    using WaitQueue  = detail::queue::ListQueue< Context, detail::hook::Wait, & Context::wait_ >;
     using SleepQueue = detail::queue::SetQueue< Context, detail::hook::Sleep, & Context::sleep_, time_point_comp>;
     using TerminatedQueue = detail::queue::ListQueue< Context, detail::hook::Terminated, & Context::terminated_ >;
 
@@ -60,12 +60,10 @@ private:
     Context *    running_{ nullptr };
 
     WorkQueue          work_queue_{};
-    WaitQueue          wait_queue_{};
     SleepQueue         sleep_queue_{};
     TerminatedQueue    terminated_queue_{};
 
     bool    exit_{ false };
-    char padding_[cacheline_length];
 
 public:
     // static methods
@@ -84,8 +82,9 @@ public:
 
     // general methods
     template<typename Fn, typename ... Args>
-    void make_work(Fn && fn, Args && ... args) noexcept;
+    static boost::intrusive_ptr< Context > make_work(Fn && fn, Args && ... args) noexcept;
 
+    void resume() noexcept;
     void resume(Context *) noexcept;
     [[noreturn]]
     void terminate(Context *) noexcept;
@@ -93,14 +92,22 @@ public:
 
     void attach(Context *) noexcept;
     void detach(Context *) noexcept;
+    void commit(Context *) noexcept;
 
+    void yield() noexcept;
     void join(Context *) noexcept;
-    void suspend_running() noexcept;
 
-    void transition_sleep() noexcept;
+    void sleep_until(TimePointType const &) noexcept;
+
+    void wakeup_sleep() noexcept;
+    void wakeup_waiting_on(Context *) noexcept;
     void cleanup_terminated() noexcept;
 
+    void print_debug() noexcept;
+
 private:
+    // actual context switch
+    void resume_(Context *, void * vp = nullptr) noexcept;
     // scheduler context loop
     [[noreturn]]
     void run_(void *) noexcept;
@@ -111,15 +118,15 @@ private:
 };
 
 template<typename Fn, typename ... Args>
-void Scheduler::make_work(Fn && fn, Args && ... args) noexcept
+boost::intrusive_ptr< Context > Scheduler::make_work(Fn && fn, Args && ... args) noexcept
 {
+    static_assert(traits::is_callable< Fn, Args ... >::value, "function is not callable with given arguments");
     auto tpl = std::make_tuple( std::forward< Args >(args) ... );
     auto func = [fn = traits::decay_copy( std::forward< Fn >(fn) ),
                  tpl = std::move(tpl)]
                 (void * vp) { trampoline(std::move(fn), std::move(tpl), vp); };
-    auto ctx = new Context{ context::work_type, std::move(func) };
-    attach(ctx);
-    schedule(ctx);
+    return boost::intrusive_ptr< Context >{
+        new Context{ context::work_type, std::move(func) } };
 }
 
 template<typename Fn, typename Tpl>
