@@ -140,7 +140,7 @@ public:
 
 private:
     [[noreturn]]
-    void trampoline_(void *) noexcept;
+    void trampoline_(void *);
 
     // Intrusive hook methods
 private:
@@ -169,16 +169,14 @@ bool Context::is_linked() noexcept
 template<typename ... Ts>
 void Context::link(boost::intrusive::list< Ts ... > & list) noexcept
 {
-    using Hook = typename boost::intrusive::list< Ts ... >::value_traits::hook_type;
-    BOOST_ASSERT( ! is_linked< Hook >() );
+    BOOST_ASSERT( ! is_linked< typename boost::intrusive::list< Ts ... >::value_traits::hook_type >() );
     list.push_back( *this);
 }
 
 template<typename ... Ts>
 void Context::link(boost::intrusive::multiset< Ts ... > & list) noexcept
 {
-    using Hook = typename boost::intrusive::multiset< Ts ... >::value_traits::hook_type;
-    BOOST_ASSERT( ! is_linked< Hook >() );
+    BOOST_ASSERT( ! is_linked< typename boost::intrusive::multiset< Ts ... >::value_traits::hook_type >() );
     list.insert( *this);
 }
 

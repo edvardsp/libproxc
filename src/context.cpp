@@ -5,6 +5,7 @@
 #include <proxc/config.hpp>
 
 #include <proxc/context.hpp>
+#include <proxc/exceptions.hpp>
 #include <proxc/scheduler.hpp>
 
 #include <boost/bind.hpp>
@@ -100,11 +101,12 @@ void Context::print_debug() noexcept
     }
 }
 
-void Context::trampoline_(void * vp) noexcept
+void Context::trampoline_(void * vp)
 {
     BOOST_ASSERT(entry_fn_ != nullptr);
     entry_fn_(vp);
     BOOST_ASSERT_MSG(false, "unreachable: Context should not return from entry_func_().");
+    throw UnreachableError{ std::make_error_code( std::errc::state_not_recoverable ), "unreachable" };
 }
 
 void Context::wait_for(Context * ctx) noexcept
