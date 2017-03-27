@@ -28,6 +28,13 @@ class SyncChannel
 public:
     using ItemType = T;
 
+    enum class Result {
+        Ok,
+        Timeout,
+        Closed,
+        Error,
+    };
+
 private:
     struct alignas(cache_alignment) Rendezvous {
         ItemType     item;
@@ -75,8 +82,8 @@ public:
     ItemType recv();
 
 private:
-    OpResult send_(Rendezvous const &) noexcept;
-    OpResult recv_(ItemType &) noexcept;
+    OpResult send_impl_(Rendezvous &) noexcept;
+    OpResult recv_impl_(ItemType &) noexcept;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -92,7 +99,7 @@ bool SyncChannel< T >::has_sender_() const noexcept
 template<typename T>
 bool SyncChannel< T >::has_receiver_() const noexcept
 {
-    return receiver_.load( std::memory_order_acquire ) == nullptr;
+    return receiver_.load( std::memory_order_acquire ) != nullptr;
 }
 
 template<typename T>
@@ -130,7 +137,7 @@ void SyncChannel< T >::push_receiver_(Context * ctx) noexcept
 template<typename T>
 Context * SyncChannel< T >::try_pop_receiver_() noexcept
 {
-    return sender_.exchange(
+    return receiver_.exchange(
         nullptr,                    // desired
         std::memory_order_acq_rel   // order
     );
@@ -144,15 +151,6 @@ template<typename T>
 SyncChannel< T >::~SyncChannel< T >()
 {
     close();
-    auto sender = try_pop_sender_();
-    if (sender != nullptr) {
-        BOOST_ASSERT( sender->ctx != nullptr );
-        Scheduler::self()->schedule( sender->ctx );
-    }
-    auto receiver = try_pop_receiver_();
-    if (receiver != nullptr) {
-        Scheduler::self()->schedule( receiver );
-    }
 
     BOOST_ASSERT( ! has_sender_() );
     BOOST_ASSERT( ! has_receiver_() );
@@ -168,6 +166,15 @@ template<typename T>
 void SyncChannel< T >::close() noexcept
 {
     closed_.store( true, std::memory_order_release );
+    auto sender = try_pop_sender_();
+    if (sender != nullptr) {
+        BOOST_ASSERT( sender->ctx != nullptr );
+        Scheduler::self()->schedule( sender->ctx );
+    }
+    auto receiver = try_pop_receiver_();
+    if (receiver != nullptr) {
+        Scheduler::self()->schedule( receiver );
+    }
 }
 
 template<typename T>
@@ -175,7 +182,7 @@ OpResult SyncChannel< T >::send(ItemType const & item) noexcept
 {
     auto running_ctx = Scheduler::running();
     Rendezvous rendezvous{ item, running_ctx };
-    return send_( rendezvous );
+    return send_impl_( rendezvous );
 }
 
 template<typename T>
@@ -183,23 +190,23 @@ OpResult SyncChannel< T >::send(ItemType && item) noexcept
 {
     auto running_ctx = Scheduler::running();
     Rendezvous rendezvous{ std::forward< ItemType >(item), running_ctx };
-    return send_( rendezvous );
+    return send_impl_( rendezvous );
 }
 
 template<typename T>
-OpResult SyncChannel< T >::send_(Rendezvous const & rendezvous) noexcept
+OpResult SyncChannel< T >::send_impl_(Rendezvous & rendezvous) noexcept
 {
     BOOST_ASSERT( ! has_sender_() );
 
-    std::unique_lock< Spinlock > lk{ splk_ };
     // FIXME: implement synchronous unlocking of spinlocks
     // across Contexts when suspending current running context
+    std::unique_lock< Spinlock > lk{ splk_ };
     if ( is_closed() ) {
         return OpResult::Closed;
     }
 
     // Setup rendezvous
-    push_sender_( & rendezvous );
+    push_sender_( std::addressof( rendezvous ) );
 
     auto self = Scheduler::self();
     auto receiver = try_pop_receiver_();
@@ -213,6 +220,7 @@ OpResult SyncChannel< T >::send_(Rendezvous const & rendezvous) noexcept
     // Receiver consumes item
     self->resume();
     // Resumed
+    lk.lock();
 
     BOOST_ASSERT( ! has_sender_() );
 
@@ -228,7 +236,7 @@ OpResult SyncChannel< T >::send_(Rendezvous const & rendezvous) noexcept
 template<typename T>
 OpResult SyncChannel< T >::recv(ItemType & item) noexcept
 {
-    return recv_( item );
+    return recv_impl_( item );
 }
 
 template<typename T>
@@ -236,7 +244,7 @@ typename SyncChannel< T >::ItemType
 SyncChannel< T >::recv()
 {
     ItemType item;
-    auto op_result = recv_( item );
+    auto op_result = recv_impl_( item );
     if (op_result != OpResult::Ok) {
         throw std::system_error();
     }
@@ -244,56 +252,39 @@ SyncChannel< T >::recv()
 }
 
 template<typename T>
-OpResult SyncChannel< T >::recv_(ItemType & item) noexcept
+OpResult SyncChannel< T >::recv_impl_(ItemType & item) noexcept
 {
     BOOST_ASSERT( ! has_receiver_() );
 
+    auto running_ctx = Scheduler::running();
     std::unique_lock< Spinlock > lk{ splk_ };
-    // FIXME: implement synchronous unlocking of spinlocks
-    // across Contexts when suspending current running context
-    if ( is_closed() ) {
-        return OpResult::Closed;
-    }
-
-    auto self = Scheduler::self();
-    auto sender = try_pop_receiver_();
-
-    if ( sender == nullptr ) {
-        push_receiver_( self->running() );
-
-        lk.unlock(); // FIXME: sync unlocking
-        self->resume();
-        lk.lock(); // FIXME: sync locking
-
+    Rendezvous * r = nullptr;
+    for (;;) {
         if ( is_closed() ) {
             return OpResult::Closed;
         }
 
-        sender = try_pop_receiver_();
-        BOOST_ASSERT( sender != nullptr );
+        r = try_pop_sender_();
+        if ( r != nullptr ) {
+            lk.unlock();
+            item = std::move( r->item );
+            Scheduler::self()->schedule( r->ctx );
+            return OpResult::Ok;
+
+        } else {
+            push_receiver_( running_ctx );
+            lk.unlock(); // FIXME: sync unlocking
+            Scheduler::self()->resume();
+            lk.lock();
+        }
+
     }
-
-    item = std::move( sender->item );
-    self->schedule( sender->ctx );
-
-    BOOST_ASSERT( ! has_receiver_() );
-    return OpResult::Ok;
 }
 
 } // namespace detail
 
 template<typename T> class Tx;
 template<typename T> class Rx;
-
-template<typename T>
-std::tuple< std::unique_ptr< Tx< T > >,
-            std::unique_ptr< Rx< T > > >
-create() noexcept
-{
-    auto channel = std::make_shared< detail::SyncChannel< T > >();
-    return std::make_tuple( Tx< T >{ channel },
-                            Rx< T >{ channel } );
-}
 
 template<typename T>
 class Tx
@@ -305,21 +296,44 @@ private:
     ChannelPtr    chan_{ nullptr };
 
 public:
-    Tx();
-    ~Tx();
+    Tx() = default;
+    ~Tx() 
+    {
+        if ( chan_ ) {
+            chan_->close();
+        }
+    }
 
     // make non-copyable
     Tx(Tx const &)               = delete;
     Tx & operator = (Tx const &) = delete;
 
-    OpResult send(ItemType const &) noexcept;
+    // make movable
+    Tx(Tx &&) = default;
+    Tx & operator = (Tx &&) = default;
+
+    bool is_closed() const noexcept
+    {
+        return chan_->is_closed();
+    }
+
+    void close() noexcept
+    {
+        chan_->close();
+    }
+
+    OpResult send(ItemType const & item) noexcept
+    {
+        return chan_->send( item );
+    }
 
 private:
-    Tx(ChannelPtr ptr);
+    Tx(ChannelPtr ptr)
+        : chan_{ ptr } 
+    {}
 
-    friend
-    std::tuple< std::unique_ptr< Tx< T > >,
-                std::unique_ptr< Rx< T > > >
+    template<typename U>
+    friend std::tuple< Tx< U >, Rx< U > >
     create() noexcept;
 };
 
@@ -333,25 +347,59 @@ private:
     ChannelPtr    chan_{ nullptr };
 
 public:
-    Rx();
-    ~Rx();
+    Rx() = default;
+    ~Rx()
+    {
+        if ( chan_ ) {
+            chan_->close();
+        }
+    }
 
     // make non-copyable
     Rx(Rx const &)               = delete;
     Rx & operator = (Rx const &) = delete;
 
-    OpResult recv(ItemType &) noexcept;
-    ItemType recv() noexcept;
+    // make movable
+    Rx(Rx &&) = default;
+    Rx & operator = (Rx &&) = default;
+
+    bool is_closed() const noexcept
+    {
+        return chan_->is_closed();
+    }
+
+    void close() noexcept
+    {
+        chan_->close();
+    }
+
+    OpResult recv(ItemType & item) noexcept
+    {
+        return chan_->recv( item );
+    }
+
+    ItemType recv() noexcept
+    {
+        return chan_->recv();
+    }
 
 private:
-    Rx(ChannelPtr ptr);
+    Rx(ChannelPtr ptr)
+        : chan_{ ptr }
+    {}
 
-
-    friend
-    std::tuple< std::unique_ptr< Tx< T > >,
-                std::unique_ptr< Rx< T > > >
+    template<typename U>
+    friend std::tuple< Tx< U >, Rx< U > >
     create() noexcept;
 };
+
+template<typename T>
+std::tuple< Tx< T >, Rx< T > >
+create() noexcept
+{
+    auto channel = std::make_shared< detail::SyncChannel< T > >();
+    return std::make_tuple( Tx< T >{ channel }, Rx< T >{ channel } );
+}
 
 } // namespace sync
 } // namespace channel
