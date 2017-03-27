@@ -18,7 +18,7 @@ void test_channel_sync_works()
 
     auto ch = channel::sync::create< int >();
     auto p1 = Scheduler::make_work(
-        [&answer](auto tx){
+        [&answer](channel::sync::Tx< int > tx){
             for (auto& i : answer) {
                 tx.send( i );
             }
@@ -26,13 +26,9 @@ void test_channel_sync_works()
         std::move( std::get<0>( ch ) )
     );
     auto p2 = Scheduler::make_work(
-        [&ints](auto rx){
-            while ( ! rx.is_closed() ) {
-                int item;
-                auto res = rx.recv( item );
-                if ( res == channel::OpResult::Ok ) {
-                    ints.push_back( item );
-                }
+        [&ints](channel::sync::Rx< int > rx){
+            for (auto item : rx) {
+                ints.push_back( item );
             }
         },
         std::move( std::get<1>( ch ) )

@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <tuple>
@@ -297,12 +298,8 @@ private:
 
 public:
     Tx() = default;
-    ~Tx() 
-    {
-        if ( chan_ ) {
-            chan_->close();
-        }
-    }
+    ~Tx()
+    { if ( chan_ ) { chan_->close(); } }
 
     // make non-copyable
     Tx(Tx const &)               = delete;
@@ -313,23 +310,17 @@ public:
     Tx & operator = (Tx &&) = default;
 
     bool is_closed() const noexcept
-    {
-        return chan_->is_closed();
-    }
+    { return chan_->is_closed(); }
 
     void close() noexcept
-    {
-        chan_->close();
-    }
+    { chan_->close(); }
 
     OpResult send(ItemType const & item) noexcept
-    {
-        return chan_->send( item );
-    }
+    { return chan_->send( item ); }
 
 private:
     Tx(ChannelPtr ptr)
-        : chan_{ ptr } 
+        : chan_{ ptr }
     {}
 
     template<typename U>
@@ -349,11 +340,7 @@ private:
 public:
     Rx() = default;
     ~Rx()
-    {
-        if ( chan_ ) {
-            chan_->close();
-        }
-    }
+    { if ( chan_ ) { chan_->close(); } }
 
     // make non-copyable
     Rx(Rx const &)               = delete;
@@ -364,24 +351,16 @@ public:
     Rx & operator = (Rx &&) = default;
 
     bool is_closed() const noexcept
-    {
-        return chan_->is_closed();
-    }
+    { return chan_->is_closed(); }
 
     void close() noexcept
-    {
-        chan_->close();
-    }
+    { chan_->close(); }
 
     OpResult recv(ItemType & item) noexcept
-    {
-        return chan_->recv( item );
-    }
+    { return chan_->recv( item ); }
 
     ItemType recv() noexcept
-    {
-        return chan_->recv();
-    }
+    { return chan_->recv(); }
 
 private:
     Rx(ChannelPtr ptr)
@@ -391,7 +370,87 @@ private:
     template<typename U>
     friend std::tuple< Tx< U >, Rx< U > >
     create() noexcept;
+
+public:
+    class Iterator : public std::iterator< std::input_iterator_tag, typename std::remove_reference< ItemType >::type >
+    {
+    private:
+        using StorageType = typename std::aligned_storage< sizeof(ItemType), alignof(ItemType) >::type;
+
+        Rx< T > *      rx_{ nullptr };
+        StorageType    storage_;
+
+        void increment() noexcept
+        {
+            BOOST_ASSERT( rx_ != nullptr );
+            ItemType item;
+            auto res = rx_->recv( item );
+            if ( res == OpResult::Ok ) {
+                new (static_cast< void * >( std::addressof( storage_ ) ))
+                    ItemType{ std::move( item ) };
+            } else {
+                rx_ = nullptr;
+            }
+        }
+
+    public:
+        using Ptr = typename Iterator::pointer;
+        using Ref = typename Iterator::reference;
+
+        Iterator() noexcept = default;
+
+        explicit Iterator(Rx< T > * rx) noexcept
+            : rx_{ rx }
+        { increment(); }
+
+        Iterator(Iterator const & other) noexcept
+            : rx_{ other.rx_ }
+        {}
+
+        Iterator & operator = (Iterator const & other) noexcept
+        {
+            if ( this == & other ) {
+                return *this;
+            }
+            rx_ = other.rx_;
+            return *this;
+        }
+
+        bool operator == (Iterator const & other) const noexcept
+        { return rx_ == other.rx_; }
+
+        bool operator != (Iterator const & other) const noexcept
+        { return rx_ != other.rx_; }
+
+        Iterator & operator ++ () noexcept
+        {
+            increment();
+            return *this;
+        }
+
+        Iterator operator ++ (int) = delete;
+
+        Ref operator * () noexcept
+        { return * reinterpret_cast< ItemType * >( std::addressof( storage_ ) ); }
+
+        Ptr operator -> () noexcept
+        { return reinterpret_cast< ItemType * >( std::addressof( storage_ ) ); }
+    };
 };
+
+template<typename T>
+typename Rx< T >::Iterator
+begin(Rx< T > & chan)
+{
+    return typename Rx< T >::Iterator( & chan );
+}
+
+template<typename T>
+typename Rx< T >::Iterator
+end(Rx< T > &)
+{
+    return typename Rx< T >::Iterator();
+}
 
 template<typename T>
 std::tuple< Tx< T >, Rx< T > >
