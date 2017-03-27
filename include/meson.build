@@ -16,6 +16,7 @@ install_headers(
     subdir : 'proxc/scheduling_policy')
 install_headers(
     'proxc/detail/cpu_relax.hpp',
+    'proxc/detail/delegate.hpp',
     'proxc/detail/hook.hpp',
     'proxc/detail/queue.hpp',
     subdir : 'proxc/detail')
