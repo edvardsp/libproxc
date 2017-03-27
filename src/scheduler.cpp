@@ -31,6 +31,7 @@ struct SchedulerInitializer
 
         auto scheduler = new Scheduler{};
         self_ = scheduler;
+        BOOST_ASSERT( Scheduler::running()->is_type( Context::Type::Main ) );
     }
 
     ~SchedulerInitializer()
