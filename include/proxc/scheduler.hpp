@@ -117,10 +117,10 @@ private:
 template<typename Fn, typename ... Args>
 boost::intrusive_ptr< Context > Scheduler::make_work(Fn && fn, Args && ... args) noexcept
 {
-    static_assert(traits::is_callable< Fn, Args ... >::value, "function is not callable with given arguments");
+    static_assert(traits::is_callable< Fn(Args ...) >::value, "function is not callable with given arguments");
     auto func = [fn = std::move(fn),
                  tpl = std::make_tuple( std::forward< Args >(args) ... )]
-                (void * vp) mutable 
+                (void * vp) mutable
                 { trampoline( std::move(fn), std::move(tpl), vp ); };
     return boost::intrusive_ptr< Context >{
         new Context{ context::work_type, std::move(func) } };
