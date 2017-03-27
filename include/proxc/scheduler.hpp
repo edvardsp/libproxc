@@ -9,6 +9,7 @@
 #include <proxc/config.hpp>
 
 #include <proxc/context.hpp>
+#include <proxc/exceptions.hpp>
 #include <proxc/traits.hpp>
 #include <proxc/scheduling_policy/policy_base.hpp>
 #include <proxc/detail/hook.hpp>
@@ -84,7 +85,6 @@ public:
 
     void resume() noexcept;
     void resume(Context *) noexcept;
-    [[noreturn]]
     void terminate(Context *) noexcept;
     void schedule(Context *) noexcept;
 
@@ -107,12 +107,11 @@ private:
     // actual context switch
     void resume_(Context *, void * vp = nullptr) noexcept;
     // scheduler context loop
-    [[noreturn]]
     void run_(void *) noexcept;
 
     template<typename Fn, typename Tpl>
     [[noreturn]]
-    static void trampoline(Fn &&, Tpl &&, void *) noexcept;
+    static void trampoline(Fn &&, Tpl &&, void *);
 };
 
 template<typename Fn, typename ... Args>
@@ -128,7 +127,7 @@ boost::intrusive_ptr< Context > Scheduler::make_work(Fn && fn, Args && ... args)
 }
 
 template<typename Fn, typename Tpl>
-void Scheduler::trampoline(Fn && fn_, Tpl && tpl_, void * vp) noexcept
+void Scheduler::trampoline(Fn && fn_, Tpl && tpl_, void * vp)
 {
     {
         Fn fn{ std::move( fn_ ) };
@@ -140,6 +139,7 @@ void Scheduler::trampoline(Fn && fn_, Tpl && tpl_, void * vp) noexcept
     auto self = Scheduler::self();
     self->terminate(self->running_);
     BOOST_ASSERT_MSG(false, "unreachable: should not return from scheduler trampoline().");
+    throw UnreachableError{ std::make_error_code( std::errc::state_not_recoverable ), "unreachable" };
 }
 
 PROXC_NAMESPACE_END

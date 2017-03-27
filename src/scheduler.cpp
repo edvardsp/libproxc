@@ -4,8 +4,8 @@
 
 #include <proxc/config.hpp>
 
-#include <proxc/scheduler.hpp>
 #include <proxc/context.hpp>
+#include <proxc/scheduler.hpp>
 
 #include <proxc/scheduling_policy/policy_base.hpp>
 #include <proxc/scheduling_policy/round_robin.hpp>
@@ -144,7 +144,6 @@ void Scheduler::terminate(Context * ctx) noexcept
     wakeup_waiting_on( ctx );
 
     resume();
-    BOOST_ASSERT_MSG(false, "unreachable: should not return from scheduler terminate().");
 }
 
 void Scheduler::schedule(Context * ctx) noexcept
@@ -362,7 +361,6 @@ void Scheduler::run_(void *) noexcept
 
     main_ctx_->unlink< hook::Ready >();
     resume( main_ctx_.get() );
-    BOOST_ASSERT_MSG(false, "unreachable: should not return after scheduler run.");
 }
 
 PROXC_NAMESPACE_END
