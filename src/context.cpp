@@ -38,14 +38,14 @@ Context::Context(context::MainType)
 
 Context::Context(context::SchedulerType, EntryFn && fn)
     : type_{ Type::Scheduler }
-    , entry_fn_{ std::forward< EntryFn >(fn) }
+    , entry_fn_{ std::move( fn ) }
     , ctx_{ [this](void * vp) { trampoline_(vp); } }
 {
 }
 
 Context::Context(context::WorkType, EntryFn && fn)
     : type_{ Type::Work }
-    , entry_fn_{ std::forward< EntryFn >(fn) }
+    , entry_fn_{ std::move( fn ) }
     , ctx_{ [this](void * vp) { trampoline_(vp); } }
     , use_count_{ 1 }
 {

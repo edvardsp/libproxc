@@ -119,10 +119,10 @@ template<typename Fn, typename ... Args>
 boost::intrusive_ptr< Context > Scheduler::make_work(Fn && fn, Args && ... args) noexcept
 {
     static_assert(traits::is_callable< Fn, Args ... >::value, "function is not callable with given arguments");
-    auto tpl = std::make_tuple( std::forward< Args >(args) ... );
-    auto func = [fn = traits::decay_copy( std::forward< Fn >(fn) ),
-                 tpl = std::move(tpl)]
-                (void * vp) { trampoline(std::move(fn), std::move(tpl), vp); };
+    auto func = [fn = std::move(fn),
+                 tpl = std::make_tuple( std::forward< Args >(args) ... )]
+                (void * vp) mutable 
+                { trampoline( std::move(fn), std::move(tpl), vp ); };
     return boost::intrusive_ptr< Context >{
         new Context{ context::work_type, std::move(func) } };
 }
@@ -131,8 +131,8 @@ template<typename Fn, typename Tpl>
 void Scheduler::trampoline(Fn && fn_, Tpl && tpl_, void * vp) noexcept
 {
     {
-        typename std::decay< Fn >::type fn = std::forward< Fn >(fn_);
-        typename std::decay< Tpl >::type tpl = std::forward< Tpl >(tpl_);
+        Fn fn{ std::move( fn_ ) };
+        Tpl tpl{ std::move( tpl_ ) };
         // TODO do anything with vp?
         (void)vp;
         boost::context::detail::apply( std::move(fn), std::move(tpl) );

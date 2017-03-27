@@ -9,6 +9,7 @@
 #include <proxc/config.hpp>
 
 #include <proxc/traits.hpp>
+#include <proxc/detail/delegate.hpp>
 #include <proxc/detail/hook.hpp>
 #include <proxc/detail/queue.hpp>
 
@@ -87,7 +88,7 @@ public:
     using TimePointType = std::chrono::steady_clock::time_point;
 
     using SchedulerFn = std::function< void(void *) >;
-    using EntryFn     = std::function< void(void *) >;
+    using EntryFn     = detail::delegate< void(void *) >;
 
 private:
     Type    type_;
