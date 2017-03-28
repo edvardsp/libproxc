@@ -41,12 +41,12 @@ private:
         ItemType     item;
         Context *    ctx;
 
-        Rendezvous(ItemType const & item_, Context * ctx_)
+        Rendezvous( ItemType const & item_, Context * ctx_ )
             : item{ item_ }
             , ctx{ ctx_ }
         {}
 
-        Rendezvous(ItemType && item_, Context * ctx_)
+        Rendezvous( ItemType && item_, Context * ctx_ )
             : item{ std::forward< ItemType >( item_ ) }
             , ctx{ ctx_ }
         {}
@@ -67,7 +67,7 @@ private:
 
 public:
     SyncChannel() = default;
-    ~SyncChannel();
+    ~SyncChannel() noexcept;
 
     // make non-copyable
     SyncChannel(SyncChannel const &)               = delete;
@@ -104,14 +104,11 @@ bool SyncChannel< T >::has_receiver_() const noexcept
 }
 
 template<typename T>
-void SyncChannel< T >::push_sender_(Rendezvous * rendezvous) noexcept
+void SyncChannel< T >::push_sender_( Rendezvous * rendezvous ) noexcept
 {
     BOOST_ASSERT( rendezvous != nullptr );
     BOOST_ASSERT( ! has_sender_() );
-    return sender_.store(
-        rendezvous,
-        std::memory_order_release
-    );
+    sender_.store( rendezvous, std::memory_order_release );
 }
 
 template<typename T>
@@ -125,14 +122,11 @@ SyncChannel< T >::try_pop_sender_() noexcept
 }
 
 template<typename T>
-void SyncChannel< T >::push_receiver_(Context * ctx) noexcept
+void SyncChannel< T >::push_receiver_( Context * ctx ) noexcept
 {
     BOOST_ASSERT( ctx != nullptr );
     BOOST_ASSERT( ! has_receiver_() );
-    return receiver_.store(
-        ctx,
-        std::memory_order_release
-    );
+    receiver_.store( ctx, std::memory_order_release );
 }
 
 template<typename T>
@@ -149,7 +143,7 @@ Context * SyncChannel< T >::try_pop_receiver_() noexcept
 ////////////////////////////////////////////////////////////////////////////////
 
 template<typename T>
-SyncChannel< T >::~SyncChannel< T >()
+SyncChannel< T >::~SyncChannel< T >() noexcept
 {
     close();
 
@@ -168,18 +162,18 @@ void SyncChannel< T >::close() noexcept
 {
     closed_.store( true, std::memory_order_release );
     auto sender = try_pop_sender_();
-    if (sender != nullptr) {
+    if ( sender != nullptr ) {
         BOOST_ASSERT( sender->ctx != nullptr );
         Scheduler::self()->schedule( sender->ctx );
     }
     auto receiver = try_pop_receiver_();
-    if (receiver != nullptr) {
+    if ( receiver != nullptr ) {
         Scheduler::self()->schedule( receiver );
     }
 }
 
 template<typename T>
-OpResult SyncChannel< T >::send(ItemType const & item) noexcept
+OpResult SyncChannel< T >::send( ItemType const & item ) noexcept
 {
     auto running_ctx = Scheduler::running();
     Rendezvous rendezvous{ item, running_ctx };
@@ -187,15 +181,15 @@ OpResult SyncChannel< T >::send(ItemType const & item) noexcept
 }
 
 template<typename T>
-OpResult SyncChannel< T >::send(ItemType && item) noexcept
+OpResult SyncChannel< T >::send( ItemType && item ) noexcept
 {
     auto running_ctx = Scheduler::running();
-    Rendezvous rendezvous{ std::forward< ItemType >(item), running_ctx };
+    Rendezvous rendezvous{ std::forward< ItemType >( item ), running_ctx };
     return send_impl_( rendezvous );
 }
 
 template<typename T>
-OpResult SyncChannel< T >::send_impl_(Rendezvous & rendezvous) noexcept
+OpResult SyncChannel< T >::send_impl_( Rendezvous & rendezvous ) noexcept
 {
     BOOST_ASSERT( ! has_sender_() );
 
@@ -235,7 +229,7 @@ OpResult SyncChannel< T >::send_impl_(Rendezvous & rendezvous) noexcept
 }
 
 template<typename T>
-OpResult SyncChannel< T >::recv(ItemType & item) noexcept
+OpResult SyncChannel< T >::recv( ItemType & item ) noexcept
 {
     return recv_impl_( item );
 }
@@ -246,14 +240,14 @@ SyncChannel< T >::recv()
 {
     ItemType item;
     auto op_result = recv_impl_( item );
-    if (op_result != OpResult::Ok) {
+    if ( op_result != OpResult::Ok ) {
         throw std::system_error();
     }
     return std::move( item );
 }
 
 template<typename T>
-OpResult SyncChannel< T >::recv_impl_(ItemType & item) noexcept
+OpResult SyncChannel< T >::recv_impl_( ItemType & item ) noexcept
 {
     BOOST_ASSERT( ! has_receiver_() );
 
@@ -292,7 +286,7 @@ class Tx
 {
 private:
     using ItemType = T;
-    using ChannelPtr = std::shared_ptr< detail::SyncChannel< T > >;
+    using ChannelPtr = std::shared_ptr< detail::SyncChannel< ItemType > >;
 
     ChannelPtr    chan_{ nullptr };
 
@@ -302,24 +296,30 @@ public:
     { if ( chan_ ) { chan_->close(); } }
 
     // make non-copyable
-    Tx(Tx const &)               = delete;
-    Tx & operator = (Tx const &) = delete;
+    Tx( Tx const & )               = delete;
+    Tx & operator = ( Tx const & ) = delete;
 
     // make movable
-    Tx(Tx &&) = default;
-    Tx & operator = (Tx &&) = default;
+    Tx( Tx && ) = default;
+    Tx & operator = ( Tx && ) = default;
 
     bool is_closed() const noexcept
     { return chan_->is_closed(); }
 
     void close() noexcept
-    { chan_->close(); }
+    {
+        chan_->close();
+        chan_.reset();
+    }
 
-    OpResult send(ItemType const & item) noexcept
+    OpResult send( ItemType const & item ) noexcept
     { return chan_->send( item ); }
 
+    OpResult send( ItemType && item ) noexcept
+    { return chan_->send( std::forward< ItemType>( item ) ); }
+
 private:
-    Tx(ChannelPtr ptr)
+    Tx( ChannelPtr ptr )
         : chan_{ ptr }
     {}
 
@@ -343,27 +343,30 @@ public:
     { if ( chan_ ) { chan_->close(); } }
 
     // make non-copyable
-    Rx(Rx const &)               = delete;
-    Rx & operator = (Rx const &) = delete;
+    Rx( Rx const & )               = delete;
+    Rx & operator = ( Rx const & ) = delete;
 
     // make movable
-    Rx(Rx &&) = default;
-    Rx & operator = (Rx &&) = default;
+    Rx( Rx && )               = default;
+    Rx & operator = ( Rx && ) = default;
 
     bool is_closed() const noexcept
     { return chan_->is_closed(); }
 
     void close() noexcept
-    { chan_->close(); }
+    {
+        chan_->close();
+        chan_.reset();
+    }
 
-    OpResult recv(ItemType & item) noexcept
+    OpResult recv( ItemType & item ) noexcept
     { return chan_->recv( item ); }
 
     ItemType recv() noexcept
-    { return chan_->recv(); }
+    { return std::move( chan_->recv() ); }
 
 private:
-    Rx(ChannelPtr ptr)
+    Rx( ChannelPtr ptr )
         : chan_{ ptr }
     {}
 
@@ -372,10 +375,16 @@ private:
     create() noexcept;
 
 public:
-    class Iterator : public std::iterator< std::input_iterator_tag, typename std::remove_reference< ItemType >::type >
+    class Iterator
+        : public std::iterator<
+            std::input_iterator_tag,
+            typename std::remove_reference< ItemType >::type
+          >
     {
     private:
-        using StorageType = typename std::aligned_storage< sizeof(ItemType), alignof(ItemType) >::type;
+        using StorageType = typename std::aligned_storage<
+            sizeof(ItemType), alignof(ItemType)
+        >::type;
 
         Rx< T > *      rx_{ nullptr };
         StorageType    storage_;
@@ -399,15 +408,15 @@ public:
 
         Iterator() noexcept = default;
 
-        explicit Iterator(Rx< T > * rx) noexcept
+        explicit Iterator( Rx< T > * rx ) noexcept
             : rx_{ rx }
         { increment(); }
 
-        Iterator(Iterator const & other) noexcept
+        Iterator( Iterator const & other ) noexcept
             : rx_{ other.rx_ }
         {}
 
-        Iterator & operator = (Iterator const & other) noexcept
+        Iterator & operator = ( Iterator const & other ) noexcept
         {
             if ( this == & other ) {
                 return *this;
@@ -416,10 +425,10 @@ public:
             return *this;
         }
 
-        bool operator == (Iterator const & other) const noexcept
+        bool operator == ( Iterator const & other ) const noexcept
         { return rx_ == other.rx_; }
 
-        bool operator != (Iterator const & other) const noexcept
+        bool operator != ( Iterator const & other ) const noexcept
         { return rx_ != other.rx_; }
 
         Iterator & operator ++ () noexcept
@@ -428,7 +437,7 @@ public:
             return *this;
         }
 
-        Iterator operator ++ (int) = delete;
+        Iterator operator ++ ( int ) = delete;
 
         Ref operator * () noexcept
         { return * reinterpret_cast< ItemType * >( std::addressof( storage_ ) ); }
@@ -440,14 +449,14 @@ public:
 
 template<typename T>
 typename Rx< T >::Iterator
-begin(Rx< T > & chan)
+begin( Rx< T > & chan )
 {
     return typename Rx< T >::Iterator( & chan );
 }
 
 template<typename T>
 typename Rx< T >::Iterator
-end(Rx< T > &)
+end( Rx< T > & )
 {
     return typename Rx< T >::Iterator();
 }
