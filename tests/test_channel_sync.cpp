@@ -37,6 +37,7 @@ void test_channel_sync_works()
     Scheduler::self()->commit( p1.get() );
     Scheduler::self()->commit( p2.get() );
 
+    Scheduler::self()->join( p1.get() );
     Scheduler::self()->join( p2.get() );
 
     throw_assert_equ( ints.size(), answer.size(), "both vectors should have equal size" );
