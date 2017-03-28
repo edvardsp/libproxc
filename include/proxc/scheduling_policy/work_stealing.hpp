@@ -21,14 +21,14 @@ template<typename T>
 class WorkStealingPolicy : public PolicyBase<T>
 {
 private:
-    static std::size_t                          num_workers_;
-    static std::vector<WorkStealingPolicy *>    work_stealers_;
+    static std::size_t                            num_workers_;
+    static std::vector< WorkStealingPolicy * >    work_stealers_;
 
-    std::size_t                 id_;
-    proxc::WorkStealDeque<T>    deque_{};
-    std::mutex                  mtx_;
-    std::condition_variable     cnd_;
-    bool                        flag_{ false };
+    std::size_t                   id_;
+    proxc::WorkStealDeque< T >    deque_{};
+    std::mutex                    mtx_;
+    std::condition_variable       cnd_;
+    bool                          flag_{ false };
 
     static void init_(std::size_t num_workers);
 
