@@ -80,9 +80,13 @@ void CircularArray< T >::put( std::size_t index, ItemType item ) noexcept
 }
 
 template<typename T>
-CircularArray< T > * 
+CircularArray< T > *
 CircularArray< T >::grow( std::size_t top, std::size_t bottom, std::size_t size )
 {
+    if ( size < size_ ) {
+        return this;
+    }
+
     auto new_array = new CircularArray{ size };
     for ( std::size_t i = top; i != bottom; i++ ) {
         new_array->put( i, std::move( get( i ) ) );
@@ -91,7 +95,7 @@ CircularArray< T >::grow( std::size_t top, std::size_t bottom, std::size_t size 
 }
 
 template<typename T>
-CircularArray< T > * 
+CircularArray< T > *
 CircularArray< T >::grow( std::size_t top, std::size_t bottom )
 {
     return grow( top, bottom, size_ * 2 );
