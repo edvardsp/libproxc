@@ -7,7 +7,8 @@ tests = [
     ['context',              ['test_context.cpp']],
     ['scheduler',            ['test_scheduler.cpp']],
     ['channel_sync',         ['test_channel_sync.cpp']],
-    ['channel_async',        ['test_channel_async.cpp']]
+    ['channel_async',        ['test_channel_async.cpp']],
+    ['circular_array',       ['test_circular_array.cpp']]
 ]
 
 foreach t : tests
