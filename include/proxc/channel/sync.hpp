@@ -395,8 +395,8 @@ public:
             ItemType item;
             auto res = rx_->recv( item );
             if ( res == OpResult::Ok ) {
-                new (static_cast< void * >( std::addressof( storage_ ) ))
-                    ItemType{ std::move( item ) };
+                auto addr = static_cast< void * >( std::addressof( storage_ ) );
+                ::new (addr) ItemType{ std::move( item ) };
             } else {
                 rx_ = nullptr;
             }
