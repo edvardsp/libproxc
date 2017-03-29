@@ -12,6 +12,7 @@
 #include <proxc/exceptions.hpp>
 #include <proxc/traits.hpp>
 #include <proxc/scheduling_policy/policy_base.hpp>
+#include <proxc/detail/apply.hpp>
 #include <proxc/detail/hook.hpp>
 #include <proxc/detail/queue.hpp>
 
@@ -134,7 +135,7 @@ void Scheduler::trampoline(Fn && fn_, Tpl && tpl_, void * vp)
         Tpl tpl{ std::move( tpl_ ) };
         // TODO do anything with vp?
         (void)vp;
-        boost::context::detail::apply( std::move(fn), std::move(tpl) );
+        detail::apply( std::move(fn), std::move(tpl) );
     }
     auto self = Scheduler::self();
     self->terminate(self->running_);

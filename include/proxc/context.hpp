@@ -16,7 +16,6 @@
 #include <boost/assert.hpp>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/context/execution_context_v1.hpp>
-#include <boost/context/detail/apply.hpp>
 
 PROXC_NAMESPACE_BEGIN
 
