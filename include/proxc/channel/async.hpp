@@ -15,7 +15,7 @@
 #include <proxc/scheduler.hpp>
 #include <proxc/spinlock.hpp>
 #include <proxc/channel/op_result.hpp>
-#include <proxc/detail/circular_array.hpp>
+#include <proxc/detail/spsc_queue.hpp>
 
 #include <boost/assert.hpp>
 
@@ -48,18 +48,14 @@ class AsyncChannel
 public:
     using ItemType = T;
 
-    static constexpr std::size_t default_capacity = 64;
-
 private:
-    using ArrayType = proxc::detail::CircularArray< ItemType >;
+    using BufferType = proxc::detail::SpscQueue< ItemType >;
 
     enum {
         NICE_LEVEL_CAP = 10, // number of tx which will cause a yield
     };
 
-    alignas(cache_alignment) std::atomic< std::size_t >    top_{ 0 };
-    alignas(cache_alignment) std::atomic< std::size_t >    bottom_{ 0 };
-    alignas(cache_alignment) std::atomic< ArrayType * >    array_;
+    alignas(cache_alignment) BufferType *    buffer_;
 
     alignas(cache_alignment) std::atomic< Context * >    receiver_{ nullptr };
     alignas(cache_alignment) std::atomic< bool >         closed_{ false };
@@ -67,8 +63,7 @@ private:
     std::size_t    nice_sending_{ 0 };
 
     Spinlock    splk_{};
-
-    char padding_[cacheline_length];
+    char        padding_[cacheline_length];
 
 public:
     AsyncChannel();
@@ -103,7 +98,7 @@ private:
 
 template<typename T>
 AsyncChannel< T >::AsyncChannel()
-    : array_{ new ArrayType{ default_capacity } }
+    : buffer_{ new BufferType{} }
 {
 }
 
@@ -112,7 +107,7 @@ AsyncChannel< T >::~AsyncChannel() noexcept
 {
     close();
 
-    delete array_;
+    delete buffer_;
 
     // only receiver will ever be blocked
     BOOST_ASSERT( ! has_receiver_() );
@@ -128,15 +123,15 @@ bool AsyncChannel< T >::is_closed() const noexcept
 template<typename T>
 void AsyncChannel< T >::close() noexcept
 {
+    std::unique_lock< Spinlock > lk{ splk_ };
     closed_.store( true, std::memory_order_release );
+    // FIXME: wakeup consumer
 }
 
 template<typename T>
 bool AsyncChannel< T >::is_empty() const noexcept
 {
-    auto bottom = bottom_.load( std::memory_order_relaxed );
-    auto top    = top_.load( std::memory_order_relaxed );
-    return bottom <= top;
+    return buffer_->is_empty();
 }
 
 template<typename T>
@@ -203,21 +198,7 @@ OpResult AsyncChannel< T >::send_impl_( ItemType item ) noexcept
         return OpResult::Closed;
     }
 
-    auto bottom = bottom_.load( std::memory_order_relaxed );
-    auto top    = top_.load( std::memory_order_acquire );
-    auto array  = array_.load( std::memory_order_relaxed );
-
-    if (   to_signed( bottom - top )
-         > to_signed( array->size() - 1 ) ) {
-        auto new_array = array->grow( top, bottom );
-        std::swap( array, new_array );
-        array_.store( array, std::memory_order_release );
-        delete new_array;
-    }
-
-    array->put( bottom, std::move( item ) );
-    std::atomic_thread_fence( std::memory_order_release );
-    bottom_.store( bottom + 1, std::memory_order_relaxed );
+    buffer_->enqueue( std::move( item ) );
 
     {
         std::unique_lock< Spinlock > lk{ splk_ };
@@ -241,34 +222,20 @@ OpResult AsyncChannel< T >::recv_impl_( ItemType & item ) noexcept
     BOOST_ASSERT( ! has_receiver_() );
     auto running_ctx = Scheduler::running();
     while ( true ) {
-        auto top = top_.load( std::memory_order_acquire );
-        std::atomic_thread_fence( std::memory_order_seq_cst );
-        auto bottom = bottom_.load( std::memory_order_acquire );
+        if ( buffer_->dequeue( item ) ) {
+            return OpResult::Ok;
 
-        // if channel empty, wait for a sender to wake it up
-        if ( to_signed( bottom - top ) <= 0 ) {
-            if ( is_closed() ) {
+        } else {
+            std::unique_lock< Spinlock > lk{ splk_ };
+            if ( ! is_empty() ) {
+                continue;
+            } else if ( is_closed() ) {
                 return OpResult::Closed;
             }
 
-            std::unique_lock< Spinlock > lk{ splk_ };
             push_receiver_( running_ctx );
             lk.unlock(); // FIXME: sync unlocking
             Scheduler::self()->resume();
-            lk.lock();
-            continue;
-        }
-
-        auto array = array_.load( std::memory_order_consume );
-
-        if ( top_.compare_exchange_weak(
-                top,                        // expected
-                top + 1,                    // desired
-                std::memory_order_seq_cst,  // success
-                std::memory_order_relaxed   // fail
-        ) ) {
-            item = std::move( array->get( top ) );
-            return OpResult::Ok;
         }
     }
 }
