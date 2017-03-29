@@ -11,7 +11,6 @@
 #include <proxc/scheduling_policy/round_robin.hpp>
 
 #include <boost/assert.hpp>
-#include <boost/bind.hpp>
 #include <boost/intrusive_ptr.hpp>
 
 PROXC_NAMESPACE_BEGIN

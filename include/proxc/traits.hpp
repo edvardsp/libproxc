@@ -7,8 +7,6 @@
 
 #include <proxc/config.hpp>
 
-#include <boost/context/detail/apply.hpp>
-
 PROXC_NAMESPACE_BEGIN
 
 namespace traits {

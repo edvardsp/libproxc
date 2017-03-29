@@ -8,7 +8,6 @@
 #include <proxc/exceptions.hpp>
 #include <proxc/scheduler.hpp>
 
-#include <boost/bind.hpp>
 #include <boost/context/execution_context_v1.hpp>
 
 PROXC_NAMESPACE_BEGIN
