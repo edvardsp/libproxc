@@ -14,6 +14,7 @@
 #include <proxc/context.hpp>
 #include <proxc/scheduler.hpp>
 #include <proxc/spinlock.hpp>
+#include <proxc/channel/base.hpp>
 #include <proxc/channel/op_result.hpp>
 #include <proxc/detail/spsc_queue.hpp>
 
@@ -30,7 +31,7 @@ namespace async {
 namespace detail {
 
 template<typename T>
-class AsyncChannel
+class AsyncChannel : public ::proxc::channel::detail::ChannelBase
 {
 public:
     using ItemType = T;
@@ -133,7 +134,7 @@ OpResult AsyncChannel< T >::send( ItemType const & item ) noexcept
 template<typename T>
 OpResult AsyncChannel< T >::send( ItemType && item ) noexcept
 {
-    return send_impl_( std::forward< ItemType >( item ) );
+    return send_impl_( std::move( item ) );
 }
 
 template<typename T>
@@ -236,7 +237,7 @@ template<typename T> class Tx;
 template<typename T> class Rx;
 
 template<typename T>
-class Tx
+class Tx : public ::proxc::channel::detail::TxBase
 {
 private:
     using ItemType = T;
@@ -270,7 +271,7 @@ public:
     { return chan_->send( item ); }
 
     OpResult send( ItemType && item ) noexcept
-    { return chan_->send( std::forward< ItemType >( item ) ); }
+    { return chan_->send( std::move( item ) ); }
 
 private:
     Tx( ChannelPtr ptr )
@@ -283,7 +284,7 @@ private:
 };
 
 template<typename T>
-class Rx
+class Rx : public ::proxc::channel::detail::RxBase
 {
 private:
     using ItemType = T;

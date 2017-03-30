@@ -7,12 +7,14 @@
 #include <memory>
 #include <mutex>
 #include <tuple>
+#include <type_traits>
 
 #include <proxc/config.hpp>
 
 #include <proxc/context.hpp>
 #include <proxc/scheduler.hpp>
 #include <proxc/spinlock.hpp>
+#include <proxc/channel/base.hpp>
 #include <proxc/channel/op_result.hpp>
 
 #include <boost/assert.hpp>
@@ -23,18 +25,20 @@ namespace channel {
 namespace sync {
 namespace detail {
 
+////////////////////////////////////////////////////////////////////////////////
+// SyncChannel
+////////////////////////////////////////////////////////////////////////////////
+
 template<typename T>
-class SyncChannel
+class SyncChannel : ::proxc::channel::detail::ChannelBase
 {
 public:
     using ItemType = T;
 
-    enum class Result {
-        Ok,
-        Timeout,
-        Closed,
-        Error,
-    };
+    template<typename Rep, typename Period>
+    using Duration = std::chrono::duration< Rep, Period >;
+    template<typename Clock, typename Dur>
+    using TimePoint = std::chrono::time_point< Clock, Dur >;
 
 private:
     struct alignas(cache_alignment) Rendezvous {
@@ -47,7 +51,7 @@ private:
         {}
 
         Rendezvous( ItemType && item_, Context * ctx_ )
-            : item{ std::forward< ItemType >( item_ ) }
+            : item{ std::move( item_ ) }
             , ctx{ ctx_ }
         {}
     };
@@ -60,8 +64,8 @@ private:
 
     bool has_sender_() const noexcept;
     bool has_receiver_() const noexcept;
-    void push_sender_(Rendezvous *) noexcept;
-    void push_receiver_(Context *) noexcept;
+    void push_sender_( Rendezvous * ) noexcept;
+    void push_receiver_( Context * ) noexcept;
     Rendezvous * try_pop_sender_() noexcept;
     Context * try_pop_receiver_() noexcept;
 
@@ -76,15 +80,38 @@ public:
     bool is_closed() const noexcept;
     void close() noexcept;
 
-    OpResult send(ItemType const &) noexcept;
-    OpResult send(ItemType &&) noexcept;
+    // normal send and receieve methods
+    OpResult send( ItemType const & ) noexcept;
+    OpResult send( ItemType && ) noexcept;
 
-    OpResult recv(ItemType &) noexcept;
+    OpResult recv( ItemType & ) noexcept;
     ItemType recv();
 
+    // send and receive methods with duration timeout
+    template<typename Rep, typename Period>
+    OpResult send_for( ItemType const &, Duration< Rep, Period > const & ) noexcept;
+    template<typename Rep, typename Period>
+    OpResult send_for( ItemType &&, Duration< Rep, Period > const & ) noexcept;
+    template<typename Rep, typename Period>
+    OpResult recv_for( ItemType &, Duration< Rep, Period > const & ) noexcept;
+
+    // send and receive methods with timepoint timeout
+    template<typename Clock, typename Dur>
+    OpResult send_until( ItemType const &, TimePoint< Clock, Dur > const & ) noexcept;
+    template<typename Clock, typename Dur>
+    OpResult send_until( ItemType &&, TimePoint< Clock, Dur > const & ) noexcept;
+    template<typename Clock, typename Dur>
+    OpResult recv_until( ItemType &, TimePoint< Clock, Dur > const & ) noexcept;
+
 private:
-    OpResult send_impl_(Rendezvous &) noexcept;
-    OpResult recv_impl_(ItemType &) noexcept;
+    OpResult send_impl_( Rendezvous & ) noexcept;
+    OpResult recv_impl_( ItemType & ) noexcept;
+
+    template<typename Clock, typename Dur>
+    OpResult send_timeout_impl_( Rendezvous &, TimePoint< Clock, Dur > const & ) noexcept;
+    template<typename Clock, typename Dur>
+    OpResult recv_timeout_impl_( ItemType &, TimePoint< Clock, Dur > const & ) noexcept;
+
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -184,14 +211,109 @@ template<typename T>
 OpResult SyncChannel< T >::send( ItemType && item ) noexcept
 {
     auto running_ctx = Scheduler::running();
-    Rendezvous rendezvous{ std::forward< ItemType >( item ), running_ctx };
+    Rendezvous rendezvous{ std::move( item ), running_ctx };
     return send_impl_( rendezvous );
 }
+
+template<typename T>
+OpResult SyncChannel< T >::recv( ItemType & item ) noexcept
+{
+    return recv_impl_( item );
+}
+
+template<typename T>
+typename SyncChannel< T >::ItemType
+SyncChannel< T >::recv()
+{
+    ItemType item;
+    auto op_result = recv_impl_( item );
+    if ( op_result != OpResult::Ok ) {
+        throw std::system_error();
+    }
+    return std::move( item );
+}
+
+template<typename T>
+template<typename Rep, typename Period>
+OpResult SyncChannel< T >::send_for(
+    ItemType const & item,
+    Duration< Rep, Period > const & duration
+) noexcept
+{
+    auto running_ctx = Scheduler::running();
+    Rendezvous rendezvous{ item, running_ctx };
+    auto timepoint = std::chrono::steady_clock::now() + duration;
+    return send_timeout_impl_( rendezvous, timepoint );
+}
+
+template<typename T>
+template<typename Rep, typename Period>
+OpResult SyncChannel< T >::send_for(
+    ItemType && item,
+    Duration< Rep, Period > const & duration
+) noexcept
+{
+    auto running_ctx = Scheduler::running();
+    Rendezvous rendezvous{ std::move( item ), running_ctx };
+    auto timepoint = std::chrono::steady_clock::now() + duration;
+    return send_for_impl_( rendezvous, timepoint );
+}
+
+template<typename T>
+template<typename Clock, typename Dur>
+OpResult SyncChannel< T >::send_until(
+    ItemType const & item,
+    TimePoint< Clock, Dur > const & timepoint
+) noexcept
+{
+    auto running_ctx = Scheduler::running();
+    Rendezvous rendezvous{ item, running_ctx };
+    return send_until_impl_( rendezvous, timepoint );
+}
+
+template<typename T>
+template<typename Clock, typename Dur>
+OpResult SyncChannel< T >::send_until(
+    ItemType && item,
+    TimePoint< Clock, Dur > const & timepoint
+) noexcept
+{
+    auto running_ctx = Scheduler::running();
+    Rendezvous rendezvous{ std::move( item ), running_ctx };
+    return send_until_impl_( rendezvous, timepoint );
+}
+
+template<typename T>
+template<typename Rep, typename Period>
+OpResult SyncChannel< T >::recv_for(
+    ItemType & item,
+    Duration< Rep, Period > const & duration
+) noexcept
+{
+    auto timepoint = std::chrono::steady_clock::now() + duration;
+    return recv_for_impl_( item, timepoint );
+}
+
+template<typename T>
+template<typename Clock, typename Dur>
+OpResult SyncChannel< T >::recv_until(
+    ItemType & item,
+    TimePoint< Clock, Dur > const & timepoint
+) noexcept
+{
+    return recv_until_impl_( item, timepoint );
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// SyncChannel private methods
+////////////////////////////////////////////////////////////////////////////////
 
 template<typename T>
 OpResult SyncChannel< T >::send_impl_( Rendezvous & rendezvous ) noexcept
 {
     BOOST_ASSERT( ! has_sender_() );
+
+    auto self = Scheduler::self();
 
     // FIXME: implement synchronous unlocking of spinlocks
     // across Contexts when suspending current running context
@@ -203,7 +325,6 @@ OpResult SyncChannel< T >::send_impl_( Rendezvous & rendezvous ) noexcept
     // Setup rendezvous
     push_sender_( std::addressof( rendezvous ) );
 
-    auto self = Scheduler::self();
     auto receiver = try_pop_receiver_();
 
     // if receiver is ready, complete rendezvous
@@ -226,24 +347,6 @@ OpResult SyncChannel< T >::send_impl_( Rendezvous & rendezvous ) noexcept
         // Value has been consumed
         return OpResult::Ok;
     }
-}
-
-template<typename T>
-OpResult SyncChannel< T >::recv( ItemType & item ) noexcept
-{
-    return recv_impl_( item );
-}
-
-template<typename T>
-typename SyncChannel< T >::ItemType
-SyncChannel< T >::recv()
-{
-    ItemType item;
-    auto op_result = recv_impl_( item );
-    if ( op_result != OpResult::Ok ) {
-        throw std::system_error();
-    }
-    return std::move( item );
 }
 
 template<typename T>
@@ -272,8 +375,93 @@ OpResult SyncChannel< T >::recv_impl_( ItemType & item ) noexcept
             Scheduler::self()->resume();
             lk.lock();
         }
-
     }
+}
+
+template<typename T>
+template<typename Clock, typename Dur>
+OpResult SyncChannel< T >::send_timeout_impl_(
+    Rendezvous & rendezvous,
+    TimePoint< Clock, Dur > const & timepoint
+) noexcept
+{
+    BOOST_ASSERT( ! has_sender_() );
+
+    auto self = Scheduler::self();
+
+    // FIXME: implement synchronous unlocking of spinlocks
+    // across Contexts when suspending current running context
+    std::unique_lock< Spinlock > lk{ splk_ };
+    if ( is_closed() ) {
+        return OpResult::Closed;
+    }
+
+    // Setup rendezvous
+    push_sender_( std::addressof( rendezvous ) );
+
+    auto receiver = try_pop_receiver_();
+
+    // if receiver is ready, complete rendezvous
+    if ( receiver != nullptr ) {
+        self->schedule( receiver );
+    }
+
+    lk.unlock(); // FIXME: sync unlocking
+    // Receiver consumes item
+    if ( ! self->sleep_until( timepoint ) ) {
+        lk.lock();
+        try_pop_receiver_();
+        return OpResult::Timeout;
+    }
+    // Resumed
+    lk.lock();
+
+    BOOST_ASSERT( ! has_sender_() );
+
+    // Check once more if channel is closed
+    if ( is_closed() ) {
+        return OpResult::Closed;
+    } else {
+        // Value has been consumed
+        return OpResult::Ok;
+    }
+}
+
+template<typename T>
+template<typename Clock, typename Dur>
+OpResult SyncChannel< T >::recv_timeout_impl_(
+     ItemType & item,
+     TimePoint< Clock, Dur > const & timepoint
+) noexcept
+{
+    BOOST_ASSERT( ! has_receiver_() );
+
+    auto running_ctx = Scheduler::running();
+    std::unique_lock< Spinlock > lk{ splk_ };
+    Rendezvous * r = nullptr;
+    for (;;) {
+        if ( is_closed() ) {
+            return OpResult::Closed;
+        }
+
+        r = try_pop_sender_();
+        if ( r != nullptr ) {
+            lk.unlock();
+            item = std::move( r->item );
+            Scheduler::self()->schedule( r->ctx );
+            return OpResult::Ok;
+
+        } else {
+            push_receiver_( running_ctx );
+            lk.unlock(); // FIXME: sync unlocking
+            if ( ! Scheduler::self()->sleep_until( timepoint ) ) {
+                lk.lock();
+                try_pop_receiver_();
+                return OpResult::Timeout;
+            }
+        }
+    }
+
 }
 
 } // namespace detail
@@ -281,8 +469,12 @@ OpResult SyncChannel< T >::recv_impl_( ItemType & item ) noexcept
 template<typename T> class Tx;
 template<typename T> class Rx;
 
+////////////////////////////////////////////////////////////////////////////////
+// SyncChannel Tx
+////////////////////////////////////////////////////////////////////////////////
+
 template<typename T>
-class Tx
+class Tx : ::proxc::channel::detail::TxBase
 {
 private:
     using ItemType = T;
@@ -316,7 +508,7 @@ public:
     { return chan_->send( item ); }
 
     OpResult send( ItemType && item ) noexcept
-    { return chan_->send( std::forward< ItemType>( item ) ); }
+    { return chan_->send( std::move( item ) ); }
 
 private:
     Tx( ChannelPtr ptr )
@@ -328,8 +520,12 @@ private:
     create() noexcept;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+// SyncChannel Rx
+////////////////////////////////////////////////////////////////////////////////
+
 template<typename T>
-class Rx
+class Rx : ::proxc::channel::detail::RxBase
 {
 private:
     using ItemType = T;
