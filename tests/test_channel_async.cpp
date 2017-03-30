@@ -1,17 +1,31 @@
 
 #include <chrono>
 #include <iostream>
+#include <string>
 #include <vector>
 
 #include <proxc/config.hpp>
 
 #include <proxc/scheduler.hpp>
 #include <proxc/channel/async.hpp>
+#include <proxc/channel/op.hpp>
 
 #include "setup.hpp"
 
 using namespace proxc;
 using ms = std::chrono::milliseconds;
+
+using ItemType = std::string;
+template<typename T>
+using ChanType = channel::async::detail::AsyncChannel< T >;
+
+void test_raw_channel()
+{
+    ChanType< ItemType > ch;
+
+
+
+}
 
 void test_it_works()
 {
@@ -25,7 +39,8 @@ void test_it_works()
                 tx.send( i );
             }
         },
-        std::move( std::get<0>( ch ) )
+        channel::get_tx( ch )
+        /* std::move( std::get<0>( ch ) ) */
     );
     auto p2 = Scheduler::make_work(
         [&ch,&ints,&p1]( auto rx ) {
@@ -34,7 +49,8 @@ void test_it_works()
                 ints.push_back( std::move( i ) );
             }
         },
-        std::move( std::get<1>( ch ) )
+        channel::get_rx( ch )
+        /* std::move( std::get<1>( ch ) ) */
     );
 
     Scheduler::self()->commit( p2.get() );
@@ -50,6 +66,7 @@ void test_it_works()
 
 int main()
 {
+    test_raw_channel();
     test_it_works();
 
     return 0;

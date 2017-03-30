@@ -123,7 +123,7 @@ void pin_thread_affinity( std::thread & t, long id )
 void test_two_threads()
 {
     Queue q{};
-    const std::size_t num_items = 100000000;
+    const std::size_t num_items = 1000000;
     std::thread producer{
         [&]() {
             std::this_thread::sleep_for( std::chrono::milliseconds( 20 ) );
