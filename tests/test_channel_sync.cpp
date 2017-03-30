@@ -5,6 +5,7 @@
 #include <proxc/config.hpp>
 
 #include <proxc/scheduler.hpp>
+#include <proxc/channel/op.hpp>
 #include <proxc/channel/sync.hpp>
 
 #include "setup.hpp"
@@ -23,7 +24,7 @@ void test_channel_sync_works()
                 tx.send( i );
             }
         },
-        std::move( std::get<0>( ch ) )
+        channel::get_tx( ch )
     );
     auto p2 = Scheduler::make_work(
         [&ints](channel::sync::Rx< int > rx){
@@ -31,7 +32,7 @@ void test_channel_sync_works()
                 ints.push_back( item );
             }
         },
-        std::move( std::get<1>( ch ) )
+        channel::get_rx( ch )
     );
 
     Scheduler::self()->commit( p1.get() );

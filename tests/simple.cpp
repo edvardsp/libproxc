@@ -1,5 +1,7 @@
 
+#include <algorithm>
 #include <chrono>
+#include <functional>
 #include <iostream>
 
 #include <proxc/scheduler.hpp>
@@ -7,8 +9,10 @@
 #include <proxc/channel/sync.hpp>
 #include <proxc/channel/op.hpp>
 
+#include "setup.hpp"
+
 using namespace proxc;
-namespace chan = channel::async;
+namespace chan = channel::sync;
 
 using ItemType = std::size_t;
 using Tx = chan::Tx< ItemType >;
@@ -57,7 +61,6 @@ void consumer( Rx rx )
         ns_per_chan_op += diff.count() / 4;
     }
     std::cout << ns_per_chan_op / num_iters << "ns per chan op" << std::endl;
-
 }
 
 int main()
