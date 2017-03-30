@@ -29,19 +29,6 @@ namespace channel {
 namespace async {
 namespace detail {
 
-constexpr std::ptrdiff_t to_signed( std::size_t x ) noexcept
-{
-    constexpr std::size_t ptrdiff_max = static_cast< std::size_t >( PTRDIFF_MAX );
-    constexpr std::size_t ptrdiff_min = static_cast< std::size_t >( PTRDIFF_MIN );
-    static_assert( ptrdiff_max + 1 == ptrdiff_min, "Wrong unsigned integer wrapping behaviour");
-
-    if ( x > ptrdiff_max ) {
-        return static_cast< std::ptrdiff_t >( x - ptrdiff_min ) + PTRDIFF_MIN;
-    } else {
-        return static_cast< std::ptrdiff_t >( x );
-    }
-}
-
 template<typename T>
 class AsyncChannel
 {
@@ -125,7 +112,10 @@ void AsyncChannel< T >::close() noexcept
 {
     std::unique_lock< Spinlock > lk{ splk_ };
     closed_.store( true, std::memory_order_release );
-    // FIXME: wakeup consumer
+    auto receiver = try_pop_receiver_();
+    if ( receiver != nullptr ) {
+        Scheduler::self()->schedule( receiver );
+    }
 }
 
 template<typename T>
