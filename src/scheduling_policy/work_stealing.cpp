@@ -11,8 +11,8 @@
 #include <boost/assert.hpp>
 
 PROXC_NAMESPACE_BEGIN
-
 namespace scheduling_policy {
+namespace detail {
 
 template<>
 std::size_t WorkStealing::num_workers_{ 0 };
@@ -98,7 +98,7 @@ void WorkStealing::notify() noexcept
     cnd_.notify_all();
 }
 
+} // namespace detail
 } // namespace scheduling_policy
-
 PROXC_NAMESPACE_END
 

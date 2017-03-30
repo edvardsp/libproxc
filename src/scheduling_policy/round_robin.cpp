@@ -8,10 +8,10 @@
 #include <boost/assert.hpp>
 
 PROXC_NAMESPACE_BEGIN
-
-namespace hook = detail::hook;
-    
 namespace scheduling_policy {
+namespace detail {
+
+namespace hook = proxc::detail::hook;
 
 template<>
 void RoundRobin::enqueue(Context * ctx) noexcept
@@ -57,7 +57,7 @@ void RoundRobin::notify() noexcept
     cnd_.notify_all();
 }
 
+} // namespace detail
 } // namespace scheduling_policy
-
 PROXC_NAMESPACE_END
 
