@@ -33,12 +33,14 @@ private:
         if ( first_ != tail_copy_ ) {
             auto n = first_;
             first_ = first_->next_;
+            n->next_.store( nullptr, std::memory_order_relaxed );
             return n;
         }
         tail_copy_ = tail_.load( std::memory_order_acquire );
         if ( first_ != tail_copy_ ) {
             auto n = first_;
             first_ = first_->next_;
+            n->next_.store( nullptr, std::memory_order_relaxed );
             return n;
         }
         return new Node{};
