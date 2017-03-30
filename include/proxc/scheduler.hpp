@@ -96,7 +96,7 @@ public:
     void yield() noexcept;
     void join(Context *) noexcept;
 
-    void sleep_until(TimePointType const &) noexcept;
+    bool sleep_until(TimePointType const &) noexcept;
 
     void wakeup_sleep() noexcept;
     void wakeup_waiting_on(Context *) noexcept;

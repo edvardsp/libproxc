@@ -150,8 +150,11 @@ void Scheduler::schedule(Context * ctx) noexcept
     BOOST_ASSERT(   ctx != nullptr );
     BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
-    BOOST_ASSERT( ! ctx->is_linked< hook::Sleep >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
+
+    if ( ctx->is_linked< hook::Sleep >() ) {
+        ctx->unlink< hook::Sleep >();
+    }
 
     policy_->enqueue( ctx );
 }
@@ -230,7 +233,7 @@ void Scheduler::join(Context * ctx) noexcept
     }
 }
 
-void Scheduler::sleep_until(TimePointType const & time_point) noexcept
+bool Scheduler::sleep_until(TimePointType const & time_point) noexcept
 {
     BOOST_ASSERT(   running_ != nullptr );
     BOOST_ASSERT(   running_->is_type( Context::Type::Process ) );
@@ -243,9 +246,10 @@ void Scheduler::sleep_until(TimePointType const & time_point) noexcept
         running_->time_point_ = time_point;
         running_->link( sleep_queue_ );
         resume();
+        return ClockType::now() >= time_point;
+    } else {
+        return true;
     }
-    // FIXME: is this check guaranteed?
-    BOOST_ASSERT( ClockType::now() >= time_point );
 }
 
 void Scheduler::wakeup_sleep() noexcept
