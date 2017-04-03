@@ -4,6 +4,7 @@ install_headers(
     'proxc/config.hpp',
     'proxc/context.hpp',
     'proxc/parallel.hpp',
+    'proxc/process.hpp',
     'proxc/scheduler.hpp',
     'proxc/spinlock.hpp',
     'proxc/traits.hpp',
