@@ -10,7 +10,8 @@ tests = [
     ['channel_async',        ['test_channel_async.cpp']],
     ['circular_array',       ['test_circular_array.cpp']],
     ['spsc_queue',           ['test_spsc_queue.cpp']],
-    ['parallel',             ['test_parallel.cpp']]
+    ['parallel',             ['test_parallel.cpp']],
+    ['process',              ['test_process.cpp']]
 ]
 
 foreach t : tests
