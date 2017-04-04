@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <iterator>
@@ -8,6 +9,7 @@
 #include <mutex>
 #include <tuple>
 #include <type_traits>
+#include <vector>
 
 #include <proxc/config.hpp>
 
@@ -663,6 +665,18 @@ create() noexcept
 {
     auto channel = std::make_shared< detail::SyncChannel< T > >();
     return std::make_tuple( Tx< T >{ channel }, Rx< T >{ channel } );
+}
+
+template<typename T>
+std::vector< decltype(create< T >()) >
+create_n( const std::size_t n ) noexcept
+{
+    std::vector< decltype(create< T >()) > chans;
+    chans.reserve( n );
+    for( std::size_t i = 0; i < n; ++i ) {
+        chans.push_back( create< T >() );
+    }
+    return std::move( chans );
 }
 
 } // namespace sync
