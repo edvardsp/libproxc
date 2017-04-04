@@ -83,23 +83,6 @@ Process proc( Fn &&, Args && ... );
 
 namespace detail {
 
-template<typename InputIt, typename Fn>
-void launch_proc( std::vector< Process > & procs, InputIt it, Fn fn )
-{
-    auto p = proc( fn, *it );
-    p.launch();
-    procs.push_back( std::move( p ) );
-}
-
-template<typename InputIt, typename Fn, typename ... Fns>
-void launch_proc( std::vector< Process > & procs, InputIt it, Fn fn, Fns && ... fns )
-{
-    auto p = proc( fn, *it );
-    p.launch();
-    procs.push_back( std::move( p ) );
-    launch_proc( procs, it, std::forward< Fns >( fns ) ... );
-}
-
 template< typename InputIt,
           typename ... Fns
 >
@@ -111,12 +94,20 @@ auto proc_for_impl( InputIt first, InputIt last, Fns && ... fns )
     static_assert( traits::are_callable_with_arg< typename InputIt::value_type, Fns ... >{},
         "Supplied functions does not have the correct function signature" );
 
+    using FnType = detail::delegate< void( typename InputIt::value_type ) >;
+    using ArrType = std::array< FnType, sizeof...(Fns) >;
+
+    auto fn_arr = ArrType{ { std::forward< Fns >( fns ) ... } };
     const std::size_t total_size = sizeof...(Fns) * std::distance( first, last );
     std::vector< Process > procs;
     procs.reserve( total_size );
 
     for ( auto data = first; data != last; ++data ) {
-        launch_proc( procs, data, std::forward< Fns >( fns ) ... );
+        for ( auto& fn : fn_arr ) {
+            auto p = proc( fn, *data );
+            p.launch();
+            procs.push_back( std::move( p ) );
+        }
     }
     for ( auto& proc : procs ) {
         proc.join();
