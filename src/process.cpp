@@ -2,17 +2,17 @@
 #include <proxc/config.hpp>
 
 #include <proxc/process.hpp>
+#include <proxc/scheduler.hpp>
 
 PROXC_NAMESPACE_BEGIN
 
-void Process::launch_() noexcept
-{
-
-}
+////////////////////////////////////////////////////////////////////////////////
+// Process implementation
+////////////////////////////////////////////////////////////////////////////////
 
 Process::~Process() noexcept
 {
-
+    ctx_.reset();
 }
 
 Process::Process( Process && other ) noexcept
@@ -29,10 +29,31 @@ Process & Process::operator = ( Process && other ) noexcept
     return *this;
 }
 
+void Process::swap( Process & other ) noexcept
+{
+    ctx_.swap( other.ctx_ );
+}
+
 auto Process::get_id() const noexcept
     -> Id
 {
     return ctx_->get_id();
+}
+
+void Process::launch() noexcept
+{
+    Scheduler::self()->commit( ctx_.get() );
+}
+
+void Process::join()
+{
+    Scheduler::self()->join( ctx_.get() );
+    ctx_.reset();
+}
+
+void Process::detach()
+{
+    ctx_.reset();
 }
 
 PROXC_NAMESPACE_END
