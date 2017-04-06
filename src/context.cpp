@@ -94,6 +94,12 @@ void Context::print_debug() noexcept
     default:              std::cout << "(invalid)"; break;
     }
     std::cout << std::endl;
+    std::cout << "      -> Links :" << std::endl;
+    if ( is_linked< hook::Work >() )       std::cout << "         | Work" << std::endl;
+    if ( is_linked< hook::Ready >() )      std::cout << "         | Ready" << std::endl;
+    if ( is_linked< hook::Wait >() )       std::cout << "         | Wait" << std::endl;
+    if ( is_linked< hook::Sleep >() )      std::cout << "         | Sleep" << std::endl;
+    if ( is_linked< hook::Terminated >() ) std::cout << "         | Terminated" << std::endl;
     std::cout << "      -> wait queue:" << std::endl;
     for (auto& ctx : wait_queue_) {
         std::cout << "         | " << ctx.get_id() << std::endl;
