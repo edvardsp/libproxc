@@ -337,18 +337,9 @@ OpResult SyncChannel< T >::send_impl_( Rendezvous & rendezvous ) noexcept
     lk.unlock(); // FIXME: sync unlocking
     // Receiver consumes item
     self->resume();
-    // Resumed
-    lk.lock();
 
-    BOOST_ASSERT( ! has_sender_() );
-
-    // Check once more if channel is closed
-    if ( is_closed() ) {
-        return OpResult::Closed;
-    } else {
-        // Value has been consumed
-        return OpResult::Ok;
-    }
+    // Value has been consumed
+    return OpResult::Ok;
 }
 
 template<typename T>
@@ -410,23 +401,14 @@ OpResult SyncChannel< T >::send_timeout_impl_(
 
     lk.unlock(); // FIXME: sync unlocking
     // Receiver consumes item
-    if ( ! self->sleep_until( timepoint ) ) {
+    if ( self->sleep_until( timepoint ) ) {
         lk.lock();
-        try_pop_receiver_();
+        try_pop_sender_();
         return OpResult::Timeout;
     }
-    // Resumed
-    lk.lock();
 
-    BOOST_ASSERT( ! has_sender_() );
-
-    // Check once more if channel is closed
-    if ( is_closed() ) {
-        return OpResult::Closed;
-    } else {
-        // Value has been consumed
-        return OpResult::Ok;
-    }
+    // Value has been consumed
+    return OpResult::Ok;
 }
 
 template<typename T>
@@ -456,7 +438,7 @@ OpResult SyncChannel< T >::recv_timeout_impl_(
         } else {
             push_receiver_( running_ctx );
             lk.unlock(); // FIXME: sync unlocking
-            if ( ! Scheduler::self()->sleep_until( timepoint ) ) {
+            if ( Scheduler::self()->sleep_until( timepoint ) ) {
                 lk.lock();
                 try_pop_receiver_();
                 return OpResult::Timeout;
@@ -478,13 +460,21 @@ template<typename T> class Rx;
 template<typename T>
 class Tx : ::proxc::channel::detail::TxBase
 {
-private:
+public:
     using ItemType = T;
-    using ChannelPtr = std::shared_ptr< detail::SyncChannel< ItemType > >;
+
+private:
+    using ChanType = detail::SyncChannel< ItemType >;
+    using ChannelPtr = std::shared_ptr< ChanType >;
 
     ChannelPtr    chan_{ nullptr };
 
 public:
+    template<typename Rep, typename Period>
+    using Duration = typename ChanType::template Duration< Rep, Period >;
+    template<typename Clock, typename Dur>
+    using TimePoint = typename ChanType::template TimePoint< Clock, Dur >;
+
     Tx() = default;
     ~Tx()
     { if ( chan_ ) { chan_->close(); } }
@@ -506,11 +496,30 @@ public:
         chan_.reset();
     }
 
+    // normal send operations
     OpResult send( ItemType const & item ) noexcept
     { return chan_->send( item ); }
 
     OpResult send( ItemType && item ) noexcept
     { return chan_->send( std::move( item ) ); }
+
+    // send operations with duration timeout
+    template<typename Rep, typename Period>
+    OpResult send_for( ItemType const & item, Duration< Rep, Period > const & duration ) noexcept
+    { return chan_->send_for( item, duration ); }
+
+    template<typename Rep, typename Period>
+    OpResult send_for( ItemType && item, Duration< Rep, Period > const & duration ) noexcept
+    { return chan_->send_for( std::move( item ), duration ); }
+
+    // send operations with timepoint timeout
+    template<typename Clock, typename Dur>
+    OpResult send_until( ItemType const & item, TimePoint< Clock, Dur > const & timepoint ) noexcept
+    { return chan_->send_until( item, timepoint ); }
+
+    template<typename Clock, typename Dur>
+    OpResult send_until( ItemType && item, TimePoint< Clock, Dur > const & timepoint ) noexcept
+    { return chan_->send_until( std::move( item ), timepoint ); }
 
 private:
     Tx( ChannelPtr ptr )
