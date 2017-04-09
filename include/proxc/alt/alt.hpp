@@ -11,6 +11,7 @@
 
 #include <proxc/config.hpp>
 
+#include <proxc/exceptions.hpp>
 #include <proxc/channel/sync.hpp>
 #include <proxc/channel/op.hpp>
 #include <proxc/detail/delegate.hpp>
@@ -93,7 +94,7 @@ public:
                       alt::ChoiceTimeout::FnType = [](){} ) noexcept;
 
     // consumes alt and determines which choice to select
-    void select() noexcept;
+    void select();
 
 private:
     using ChoicePtr = std::unique_ptr< alt::ChoiceBase >;
@@ -235,12 +236,39 @@ Alt & Alt::timeout_if(
         ;
 }
 
-void Alt::select() noexcept
+void Alt::select()
 {
+    // if timeout choice has been set, add to choices
     if ( timeout_ ) {
         choices_.emplace_back( timeout_.release() );
     }
-    std::cout << choices_.size() << std::endl;
+
+    if ( choices_.empty() ) {
+        // suspend indefinitely, should never return
+        Scheduler::self()->resume();
+        BOOST_ASSERT_MSG( false, "unreachable" );
+        throw UnreachableError{};
+        
+    } else {
+        std::vector< alt::ChoiceBase * > ready_;
+        ready_.reserve( choices_.size() / 2 );
+        for ( auto& choice : choices_ ) {
+            if ( choice->is_ready() ) {
+                ready_.push_back( choice.get() );
+            }
+        }
+
+        alt::ChoiceBase * selected = nullptr;
+        if ( ! ready_.empty() ) {
+            if ( ready_.size() == 1 ) {
+
+            } else {
+
+            }
+        }
+
+    }
+
 }
 
 PROXC_NAMESPACE_END
