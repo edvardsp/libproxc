@@ -11,6 +11,10 @@ PROXC_NAMESPACE_BEGIN
 class UnreachableError : public std::system_error
 {
 public:
+    UnreachableError()
+        : std::system_error{ std::make_error_code( std::errc::state_not_recoverable ), "unreachable" }
+    {}
+
     UnreachableError( std::error_code ec )
         : std::system_error{ ec }
     {}
