@@ -11,7 +11,8 @@ tests = [
     ['circular_array',       ['test_circular_array.cpp']],
     ['spsc_queue',           ['test_spsc_queue.cpp']],
     ['parallel',             ['test_parallel.cpp']],
-    ['process',              ['test_process.cpp']]
+    ['process',              ['test_process.cpp']],
+    ['alt',                  ['test_alt.cpp']]
 ]
 
 foreach t : tests

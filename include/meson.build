@@ -7,10 +7,18 @@ install_headers(
     'proxc/process.hpp',
     'proxc/scheduler.hpp',
     'proxc/spinlock.hpp',
+    'proxc/this_proc.hpp',
     'proxc/traits.hpp',
     'proxc/version.hpp',
     'proxc/work_steal_deque.hpp',
     subdir : 'proxc')
+install_headers(
+    'proxc/alt/alt.hpp',
+    'proxc/alt/choice_base.hpp',
+    'proxc/alt/choice_send.hpp',
+    'proxc/alt/choice_recv.hpp',
+    'proxc/alt/choice_timeout.hpp',
+    subdir : 'proxc/alt')
 install_headers(
     'proxc/channel/async.hpp',
     'proxc/channel/op_result.hpp',

@@ -15,8 +15,6 @@
 #include <thread>
 #include <vector>
 
-#include <boost/noncopyable.hpp>
-
 PROXC_NAMESPACE_BEGIN
 
 std::size_t num_available_cores()
@@ -31,7 +29,7 @@ std::size_t num_available_cores()
 }
 
 template<typename Task>
-class ThreadPool : boost::noncopyable
+class ThreadPool
 {
 public:
     using Ptr = typename proxc::WorkStealDeque<Task>::Ptr;

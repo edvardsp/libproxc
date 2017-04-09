@@ -46,6 +46,7 @@ boost_dep = cxx.find_library('boost_context', required : true, dirs : '/usr/loca
 inc = include_directories('include')
 src = include_directories('src')
 tst = include_directories('tests')
+exm = include_directories('examples')
 
 subdir('include')
 subdir('src')

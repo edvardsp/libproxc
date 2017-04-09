@@ -82,6 +82,9 @@ public:
     bool is_closed() const noexcept;
     void close() noexcept;
 
+    bool can_send() const noexcept;
+    bool can_recv() const noexcept;
+
     // normal send and receieve methods
     OpResult send( ItemType const & ) noexcept;
     OpResult send( ItemType && ) noexcept;
@@ -202,6 +205,18 @@ void SyncChannel< T >::close() noexcept
 }
 
 template<typename T>
+bool SyncChannel< T >::can_send() const noexcept
+{
+    return has_receiver_();
+}
+
+template<typename T>
+bool SyncChannel< T >::can_recv() const noexcept
+{
+    return has_sender_();
+}
+
+template<typename T>
 OpResult SyncChannel< T >::send( ItemType const & item ) noexcept
 {
     auto running_ctx = Scheduler::running();
@@ -258,7 +273,7 @@ OpResult SyncChannel< T >::send_for(
     auto running_ctx = Scheduler::running();
     Rendezvous rendezvous{ std::move( item ), running_ctx };
     auto timepoint = std::chrono::steady_clock::now() + duration;
-    return send_for_impl_( rendezvous, timepoint );
+    return send_timeout_impl_( rendezvous, timepoint );
 }
 
 template<typename T>
@@ -270,7 +285,7 @@ OpResult SyncChannel< T >::send_until(
 {
     auto running_ctx = Scheduler::running();
     Rendezvous rendezvous{ item, running_ctx };
-    return send_until_impl_( rendezvous, timepoint );
+    return send_timeout_impl_( rendezvous, timepoint );
 }
 
 template<typename T>
@@ -282,7 +297,7 @@ OpResult SyncChannel< T >::send_until(
 {
     auto running_ctx = Scheduler::running();
     Rendezvous rendezvous{ std::move( item ), running_ctx };
-    return send_until_impl_( rendezvous, timepoint );
+    return send_timeout_impl_( rendezvous, timepoint );
 }
 
 template<typename T>
@@ -293,7 +308,7 @@ OpResult SyncChannel< T >::recv_for(
 ) noexcept
 {
     auto timepoint = std::chrono::steady_clock::now() + duration;
-    return recv_for_impl_( item, timepoint );
+    return recv_timeout_impl_( item, timepoint );
 }
 
 template<typename T>
@@ -303,7 +318,7 @@ OpResult SyncChannel< T >::recv_until(
     TimePoint< Clock, Dur > const & timepoint
 ) noexcept
 {
-    return recv_until_impl_( item, timepoint );
+    return recv_timeout_impl_( item, timepoint );
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -438,8 +453,9 @@ OpResult SyncChannel< T >::recv_timeout_impl_(
         } else {
             push_receiver_( running_ctx );
             lk.unlock(); // FIXME: sync unlocking
-            if ( Scheduler::self()->sleep_until( timepoint ) ) {
-                lk.lock();
+            bool is_timeout = Scheduler::self()->sleep_until( timepoint );
+            lk.lock();
+            if ( is_timeout ) {
                 try_pop_receiver_();
                 return OpResult::Timeout;
             }
@@ -496,6 +512,9 @@ public:
         chan_.reset();
     }
 
+    bool can_send() const noexcept
+    { return chan_->can_send(); }
+
     // normal send operations
     OpResult send( ItemType const & item ) noexcept
     { return chan_->send( item ); }
@@ -538,13 +557,21 @@ private:
 template<typename T>
 class Rx : ::proxc::channel::detail::RxBase
 {
-private:
+public:
     using ItemType = T;
-    using ChannelPtr = std::shared_ptr< detail::SyncChannel< T > >;
+
+private:
+    using ChanType = detail::SyncChannel< ItemType >;
+    using ChannelPtr = std::shared_ptr< ChanType >;
 
     ChannelPtr    chan_{ nullptr };
 
 public:
+    template<typename Rep, typename Period>
+    using Duration = typename ChanType::template Duration< Rep, Period >;
+    template<typename Clock, typename Dur>
+    using TimePoint = typename ChanType::template TimePoint< Clock, Dur >;
+
     Rx() = default;
     ~Rx()
     { if ( chan_ ) { chan_->close(); } }
@@ -566,11 +593,25 @@ public:
         chan_.reset();
     }
 
+    bool can_recv() const noexcept
+    { return chan_->can_recv(); }
+
+    // normal recv operations
     OpResult recv( ItemType & item ) noexcept
     { return chan_->recv( item ); }
 
     ItemType recv() noexcept
     { return std::move( chan_->recv() ); }
+
+    // recv operation with duration timeout
+    template<typename Rep, typename Period>
+    OpResult recv_for( ItemType & item, Duration< Rep, Period > const & duration ) noexcept
+    { return chan_->recv_for( item, duration ); }
+
+    // recv operation with timepoint timeout
+    template<typename Clock, typename Dur>
+    OpResult recv_until( ItemType & item, TimePoint< Clock, Dur > const & timepoint ) noexcept
+    { return chan_->recv_until( item, timepoint ); }
 
 private:
     Rx( ChannelPtr ptr )
