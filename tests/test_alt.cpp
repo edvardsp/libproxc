@@ -33,9 +33,9 @@ void test_it_works()
             []( auto ) {
                 // some work
             } )
-        .recv_if( [](){ return true; },
+        .recv_if( true,
             left_rx )
-        .recv_if( [](){ return true; },
+        .recv_if( true,
             right_rx,
             []( auto ) {
                 // some work
@@ -47,9 +47,9 @@ void test_it_works()
             []() {
                 // some work
             } )
-        .send_if( [](){ return true; },
+        .send_if( true,
             left_tx, 3 )
-        .send_if( [](){ return true; },
+        .send_if( true,
             right_tx, 4,
             []() {
 
@@ -64,16 +64,16 @@ void test_it_works()
             [](){
                 // some work
             } )
-        .timeout_if( [](){ return true; },
+        .timeout_if( true,
             std::chrono::steady_clock::now() )
-        .timeout_if( [](){ return true; },
+        .timeout_if( true,
             std::chrono::steady_clock::now(),
             [](){
                  // some work
             } )
-        .timeout_if( [](){ return true; },
+        .timeout_if( true,
             std::chrono::milliseconds(100) )
-        .timeout_if( [](){ return true; },
+        .timeout_if( true,
             std::chrono::milliseconds(100),
             [](){
                 // some work

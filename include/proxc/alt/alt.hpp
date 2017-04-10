@@ -1,10 +1,9 @@
 
 #pragma once
 
-#include <iostream>
-
 #include <chrono>
 #include <memory>
+#include <random>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -49,9 +48,9 @@ public:
                 typename alt::ChoiceSend< ItemType >::FnType && = [](){} ) noexcept;
 
     // send choice with guard
-    template<typename Guard, typename ItemType>
+    template<typename ItemType>
     PROXC_WARN_UNUSED
-    Alt & send_if( Guard,
+    Alt & send_if( bool,
                    channel::sync::Tx< ItemType > &,
                    ItemType &&,
                    typename alt::ChoiceSend< ItemType >::FnType && = [](){} ) noexcept;
@@ -63,9 +62,9 @@ public:
                 typename alt::ChoiceRecv< ItemType >::FnType && = []( ItemType ){} ) noexcept;
 
     // recv choice with guard
-    template<typename Guard, typename ItemType>
+    template<typename ItemType>
     PROXC_WARN_UNUSED
-    Alt & recv_if( Guard,
+    Alt & recv_if( bool,
                    channel::sync::Rx< ItemType > &,
                    typename alt::ChoiceRecv< ItemType >::FnType && = []( ItemType ){} ) noexcept;
 
@@ -81,15 +80,15 @@ public:
                    alt::ChoiceTimeout::FnType = [](){} ) noexcept;
 
     // timeout with guard
-    template<typename Guard, typename Clock, typename Dur>
+    template<typename Clock, typename Dur>
     PROXC_WARN_UNUSED
-    Alt & timeout_if( Guard,
+    Alt & timeout_if( bool,
                       std::chrono::time_point< Clock, Dur > const &,
                       alt::ChoiceTimeout::FnType = [](){} ) noexcept;
 
-    template<typename Guard, typename Rep, typename Period>
+    template<typename Rep, typename Period>
     PROXC_WARN_UNUSED
-    Alt & timeout_if( Guard,
+    Alt & timeout_if( bool,
                       std::chrono::duration< Rep, Period > const &,
                       alt::ChoiceTimeout::FnType = [](){} ) noexcept;
 
@@ -127,17 +126,15 @@ Alt & Alt::send(
 }
 
 // send choice with guard
-template<typename Guard, typename ItemType>
+template<typename ItemType>
 Alt & Alt::send_if(
-    Guard guard,
+    bool guard,
     channel::sync::Tx< ItemType > & tx,
     ItemType && item,
     typename alt::ChoiceSend< ItemType >::FnType && fn
 ) noexcept
 {
-    static_assert( std::is_same< bool, std::result_of_t< Guard() > >::value,
-        "Guard must be callable and return a boolean" );
-    return ( guard() )
+    return ( guard )
         ? send( tx,
                 std::forward< ItemType >( item ),
                 std::forward< typename alt::ChoiceSend< ItemType >::FnType >( fn ) )
@@ -162,16 +159,14 @@ Alt & Alt::recv(
 }
 
 // recv choice with guard
-template<typename Guard, typename ItemType>
+template<typename ItemType>
 Alt & Alt::recv_if(
-    Guard guard,
+    bool guard,
     channel::sync::Rx< ItemType > & rx,
     typename alt::ChoiceRecv< ItemType >::FnType && fn
 ) noexcept
 {
-    static_assert( std::is_same< bool, std::result_of_t< Guard() > >::value,
-        "Guard must be callable and return a boolean" );
-    return ( guard() )
+    return ( guard )
         ? recv( rx,
                 std::forward< typename alt::ChoiceRecv< ItemType >::FnType >( fn ) )
         : *this
@@ -204,32 +199,28 @@ Alt & Alt::timeout(
 }
 
 // timeout with guard
-template<typename Guard, typename Clock, typename Dur>
+template<typename Clock, typename Dur>
 Alt & Alt::timeout_if(
-    Guard guard,
+    bool guard,
     std::chrono::time_point< Clock, Dur > const & time_point,
     alt::ChoiceTimeout::FnType fn
 ) noexcept
 {
-    static_assert( std::is_same< bool, std::result_of_t< Guard() > >::value,
-        "Guard must be callable and return a boolean" );
-    return ( guard() )
+    return ( guard )
         ? timeout( time_point,
                    std::move( fn ) )
         : *this
         ;
 }
 
-template<typename Guard, typename Rep, typename Period>
+template<typename Rep, typename Period>
 Alt & Alt::timeout_if(
-    Guard guard,
+    bool guard,
     std::chrono::duration< Rep, Period > const & duration,
     alt::ChoiceTimeout::FnType fn
 ) noexcept
 {
-    static_assert( std::is_same< bool, std::result_of_t< Guard() > >::value,
-        "Guard must be callable and return a boolean" );
-    return ( guard() )
+    return ( guard )
         ? timeout( std::chrono::steady_clock::now() + duration,
                    std::move( fn ) )
         : *this
@@ -248,10 +239,11 @@ void Alt::select()
         Scheduler::self()->resume();
         BOOST_ASSERT_MSG( false, "unreachable" );
         throw UnreachableError{};
-        
+
     } else {
         std::vector< alt::ChoiceBase * > ready_;
-        ready_.reserve( choices_.size() / 2 );
+        // FIXME: reserve? and if so, at what size?
+        ready_.reserve( choices_.size() );
         for ( auto& choice : choices_ ) {
             if ( choice->is_ready() ) {
                 ready_.push_back( choice.get() );
@@ -260,15 +252,28 @@ void Alt::select()
 
         alt::ChoiceBase * selected = nullptr;
         if ( ! ready_.empty() ) {
+            // choose one choice immediately
             if ( ready_.size() == 1 ) {
-
+                selected = ready_.front();
             } else {
+                static thread_local std::minstd_rand rng;
+                auto id = std::uniform_int_distribution< std::size_t >
+                    { 0, ready_.size() - 1 }( rng );
+                selected = ready_[id];
+            }
 
+        } else {
+            // wait until one of the choices are available
+            for ( auto& choice : choices_ ) {
+                (void)choice;
+                // activate?
             }
         }
 
-    }
+        BOOST_ASSERT( selected != nullptr );
 
+        selected->complete_task();
+    }
 }
 
 PROXC_NAMESPACE_END
