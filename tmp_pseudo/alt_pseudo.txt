@@ -1,0 +1,45 @@
+
+// different Tx, Rx configs
+//
+//     Tx --> Rx
+// Alt Tx --> Rx
+//     Tx --> Alt Rx
+// Alt Tx --> Alt Rx ?? must synchronize
+
+void alt_pseudocode()
+{
+    cases = vector< Case >;
+    if ( cases.empty ) {
+        wait_forever();
+        // unreachable
+    }
+
+    foreach c in cases {
+        c.enter();
+    }
+
+    selected = nullptr;
+    while ( selected == nullptr ) {
+        ready = vector< Case >; // empty
+        while ( ready.empty ) {
+            wait();
+            // woken up, one or more cases should be ready
+            foreach c in cases {
+                if ( c.ready ) {
+                    ready.insert( c );
+                }
+            }
+        }
+
+        c = random_choice( ready );
+        if ( c.synchronize ) {
+            selected = c;
+        }
+    }
+
+    foreach c in cases {
+        c.leave();
+    }
+
+    selected.complete();
+}
