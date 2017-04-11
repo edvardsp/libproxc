@@ -19,21 +19,27 @@ void alt_pseudocode()
     }
 
     selected = nullptr;
+    ready = vector< Case >; // empty, capacity = ???
     while ( selected == nullptr ) {
-        ready = vector< Case >; // empty
-        while ( ready.empty ) {
-            wait();
-            // woken up, one or more cases should be ready
-            foreach c in cases {
-                if ( c.ready ) {
-                    ready.insert( c );
-                }
+        ready.clear();
+        foreach c in cases {
+            if ( c.ready() ) {
+                ready.insert( c );
             }
         }
 
-        c = random_choice( ready );
-        if ( c.synchronize ) {
-            selected = c;
+        if ( ready.empty ) {
+            alt.wait();
+            // woken up, one or more cases should be ready
+            continue;
+        }
+
+        shuffle( ready );
+        foreach c in ready {
+            if ( c.synchronize ) {
+                selected = c;
+                break;
+            }
         }
     }
 

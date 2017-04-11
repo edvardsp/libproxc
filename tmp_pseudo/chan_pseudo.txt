@@ -3,11 +3,6 @@
 // Non-alting ends must be signaled by alting ends
 // Rx cleans up ends
 
-// chan members:
-// rendezvous | { ctx, item }
-// recv_ctx   | ctx
-
-// algorithm:
 // Tx will always wait for Rx.
 // 3 cases exists:
 //      1: No Rx. Tx waits until an Rx consumes the item
@@ -19,14 +14,14 @@
 //         consume the item, and returns. No syncing
 //         needed.
 //      3: Alting Rx. Tx tries to wake up Rx and waits.
-//         One of two things happen: 
+//         One of two things happen:
 //           Either, the alting Rx syncs with this Tx,
 //             the item is consumed, Tx is woken up, and
-//             returns. 
+//             returns.
 //           Or, the alting Rx does not sync with this Tx,
 //             and this Tx will wait until next Rx
 //             arrives. This Rx will consume the item, and
-//             wakeup Tx. Tx will then return. 
+//             wakeup Tx. Tx will then return.
 void chan_send( chan, end, item )
 {
     lk = chan.spinlock;
@@ -51,8 +46,25 @@ void chan_send( chan, end, item )
     // here, Rx has consumed item
 }
 
-// algorithm:
-// 
+// Rx always consumes item and always wakes up Tx,
+// in this order.
+// 3 cases exists:
+//      1: No Tx. Rx commits end, and waits. When woken
+//         up, a Tx is ready. Then, case 2 or case 3
+//         happens.
+//      2: Normal Tx. Item is consumed, tx is woken up,
+//         and returns.
+//      3: Alting Tx. Rx commits end, may wake up Tx, and
+//         waits. When woken up, one of two thins happen:
+//           Either, the alting Tx syncs with this Rx, the
+//             item is consumed, the alting Tx is woken
+//             up, and returns.
+//           Or, the alting Tx does not sync with this Rx.
+//             This Rx is then woken up when either the
+//             same alting Tx syncs, the same alting Tx
+//             syncs with another case and leaves this Rx
+//             unsynced, or another Tx comes around and
+//             wakes up Rx. Then, cases 1, 2, or 3 happens.
 void chan_recv( chan, end, item & )
 {
     lk = chan.spinlock;
@@ -64,7 +76,7 @@ void chan_recv( chan, end, item & )
         tx_end = chan.tx_end;
 
         if ( tx_end != nullptr ) {
-            if ( tx_end.alting ) {
+            if ( tx_end.alting && ! chan.alt_sync ) {
                 // order matters here
                 chan.rx_end = { running_ctx };
                 tx_end.alting.maybe_wakeup;
@@ -73,11 +85,10 @@ void chan_recv( chan, end, item & )
                 wait();
                 lk.lock();
 
-                chan.rx_end = nullptr;
-                if ( ! chan.sync ) {
+                if ( ! chan.alt_sync ) {
                     continue;
-                } 
-
+                }
+                // alting Tx synced, can now consume item
             }
 
             chan.tx_end = nullptr;
@@ -91,82 +102,133 @@ void chan_recv( chan, end, item & )
         lk.unlock();
         wait();
         lk.lock();
-        // here, Tx should be ready
+        // Tx should be ready
     }
 }
 
-void enter( chan, chan_end, alt )
+void enter( chan, alt )
 {
     lk = chan.spinlock;
-    chan.end( chan_end ) = { running_ctx, item?, alt };
+    // Tx, FIXME: what about expensive copies of item?
+    chan.tx_end = { running_ctx, item, alt };
+    // Rx
+    chan.rx_end = { running_ctx, alt };
+    chan.alt_sync = false;
 }
 
-void leave( chan, chan_end )
+void leave_tx( chan )
 {
     lk = chan.spinlock;
-    chan.end( chan_end ) = nullptr;
-    ctx = nullptr;
-    swap( ctx, chan.alt_wait );
-    if ( ctx != nullptr ) {
-        // other end is alting as well, and waiting on being synchonized
-        // wake it up, which fails its sync
-        schedule( ctx );
+    // Tx
+    chan.tx_end = nullptr;
+    // Rx
+    chan.rx_end = nullptr;
+    chan.alt_sync = false;
+}
+
+bool ready( chan, alt )
+{
+    lk = chan.spinlock;
+    if ( chan.is_closed ) {
+        // FIXME: return true?
+        return false;
     }
+    {tx,rx}_end = chan.{tx,rx}_end;
+    return {tx,rx}_end != nullptr
+        && {tx,rx}_end.alting != alt;
 }
 
-bool ready( chan, end, alt )
+// 3 cases exists:
+//      1: No Rx.
+//      2: Normal Rx.
+//      3: Alting Rx.
+bool chan_alt_tx_sync( chan, item, alt )
 {
-    other_end = chan.other_end( end );
-    return other_end != nullptr
-        && other_end.alting != alt;
-}
-
-bool chan_alt_sync( chan, end, alt )
-{
-    // Tx is case, Rx is ready
     lk = chan.spinlock;
-    other_end = chan.other_end( end );
-    if ( other_end != nullptr ) {
+
+    rx_end = chan.rx_end;
+    if ( rx_end != nullptr ) {
         return false;
     }
 
-    if ( other_end.alting ) {
+    if ( rx_end.alting ) {
         if ( chan.alt_sync ) {
             // accept the sync
-            chan.alt_sync = false;
-            ctx = nullptr;
-            swap( ctx, alt_wait );
-            if ( ctx != nullptr ) {
-                schedule( ctx );
-            }
+            schedule( rx_end.ctx );
+
+            lk.unlock();
+            wait();
+            // Rx consumed item
+            return true;
+
+        } else {
+            // offer sync
+            chan.alt_sync = true;
+            lk.unlock();
+            wait();
+            // if chan.alt_sync true, Rx consumed item
+            return chan.alt_sync;
+        }
+
+    } else {
+        chan.alt_sync = true;
+        schedule( rx_end.ctx );
+
+        lk.unlock();
+        wait();
+        // Rx consumed item
+        return true;
+    }
+}
+
+// 3 cases exists:
+//      1: No Tx.
+//      2: Normal Tx.
+//      3: Alting Tx.
+bool chan_alt_rx_sync( chan, & item, alt )
+{
+    lk = chan.spinlock;
+
+    tx_end = chan.tx_end;
+    if ( tx_end != nullptr ) {
+        return false;
+    }
+
+    if ( tx_end.alting ) {
+        if ( chan.alt_sync ) {
+            // accept the sync
+            chan.tx_end = nullptr;
+            // Order matters here.
+            item = tx_end.item;
+            schedule( tx_end.ctx );
             return true;
 
         } else {
             // offer sync
             chan.alt_sync = true
-            chan.alt_wait = running_ctx;
-            splk.unlock();
+            lk.unlock();
             wait();
             lk.lock();
-            // alt_sync set to false indicates success
-            is_success = ! chan.alt_sync;
-            chan.alt_sync = false; // reset sync
-            return is_success;
+
+            if ( ! chan.alt_sync ) {
+                return false;
+            }
+
+            chan.tx_end = nullptr;
+            // Order matters here.
+            item = tx_end.item;
+            schedule( tx_end.ctx );
+            return true;
         }
 
     } else {
-        chan.alt_sync = true;
-        // FIXME: complete Alt Rx here
-        schedule( other_end.ctx );
+        // doesn't need to set alt_sync, as waking up tx
+        // is a side-effect of syncing.
+        chan.tx_end = nullptr;
+        // Order matters here.
+        item = tx_end.item;
+        schedule( tx_end.ctx );
         return true;
     }
-}
-
-void chan_alt_complete( chan, end )
-{
-    // Alt Tx
-
-
-    // Alt Rx
 }
 
