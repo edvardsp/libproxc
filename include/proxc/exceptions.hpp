@@ -27,7 +27,7 @@ public:
         : std::system_error{ ec, what_arg }
     {}
 
-    virtual ~UnreachableError() = default;
+    ~UnreachableError() = default;
 };
 
 PROXC_NAMESPACE_END
