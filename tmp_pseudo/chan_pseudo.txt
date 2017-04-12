@@ -111,7 +111,7 @@ void enter( chan, alt )
     chan.alt_sync = false;
 }
 
-void leave_tx( chan )
+void leave( chan )
 {
     lk = chan.spinlock;
     // Tx
@@ -137,7 +137,7 @@ bool ready( chan, alt )
 //      1: No Rx.
 //      2: Normal Rx.
 //      3: Alting Rx.
-bool chan_alt_tx_sync( chan, item, alt )
+bool chan_alt_tx_sync( chan )
 {
     lk = chan.spinlock;
 
@@ -178,7 +178,7 @@ bool chan_alt_tx_sync( chan, item, alt )
 //      1: No Tx.
 //      2: Normal Tx.
 //      3: Alting Tx.
-bool chan_alt_rx_sync( chan, & item, alt )
+bool chan_alt_rx_sync( chan )
 {
     lk = chan.spinlock;
 
@@ -192,7 +192,7 @@ bool chan_alt_rx_sync( chan, & item, alt )
             // accept the sync
             chan.tx_end = nullptr;
             // Order matters here.
-            item = tx_end.item;
+            chan.rx_end.item = tx_end.item;
             schedule( tx_end.ctx );
             return true;
 
@@ -208,7 +208,7 @@ bool chan_alt_rx_sync( chan, & item, alt )
 
             chan.tx_end = nullptr;
             // Order matters here.
-            item = tx_end.item;
+            chan.rx_end.item = tx_end.item;
             schedule( tx_end.ctx );
             return true;
         }
@@ -218,7 +218,7 @@ bool chan_alt_rx_sync( chan, & item, alt )
         // is a side-effect of syncing.
         chan.tx_end = nullptr;
         // Order matters here.
-        item = tx_end.item;
+        chan.rx_end.item = tx_end.item;
         schedule( tx_end.ctx );
         return true;
     }

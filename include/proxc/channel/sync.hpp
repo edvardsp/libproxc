@@ -112,6 +112,10 @@ public:
     template<typename Clock, typename Dur>
     OpResult recv_until( ItemType &, TimePoint< Clock, Dur > const & ) noexcept;
 
+    OpResult alt_send( ItemType const &, Alt * ) noexcept;
+    OpResult alt_send( ItemType &&, Alt * ) noexcept;
+    OpResult alt_recv( ItemType &, Alt * ) noexcept;
+
 private:
     OpResult send_impl_( ChanEnd & ) noexcept;
     OpResult recv_impl_( ChanEnd & ) noexcept;
@@ -121,6 +125,8 @@ private:
     template<typename Clock, typename Dur>
     OpResult recv_timeout_impl_( ChanEnd &, TimePoint< Clock, Dur > const & ) noexcept;
 
+    OpResult alt_send_impl_( ChanEnd & ) noexcept;
+    OpResult alt_recv_impl_( ChanEnd & ) noexcept;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -343,6 +349,31 @@ OpResult SyncChannel< T >::recv_until(
     return recv_timeout_impl_( rx, timepoint );
 }
 
+template<typename T>
+OpResult SyncChannel< T >::alt_send( ItemType const & item, Alt * alt ) noexcept
+{
+    BOOST_ASSERT( alt != nullptr );
+    ItemType i{ item };
+    ChanEnd alt_tx{ Scheduler::running(), i, alt };
+    return alt_send_impl_( alt_tx );
+}
+
+template<typename T>
+OpResult SyncChannel< T >::alt_send( ItemType && item, Alt * alt ) noexcept
+{
+    BOOST_ASSERT( alt != nullptr );
+    ChanEnd alt_tx{ Scheduler::running(), item, alt };
+    return alt_send_impl_( alt_tx );
+}
+
+template<typename T>
+OpResult SyncChannel< T >::alt_recv( ItemType & item, Alt * alt ) noexcept
+{
+    BOOST_ASSERT( alt != nullptr );
+    ChanEnd alt_rx{ Scheduler::running(), item, alt };
+    return alt_recv_impl_( alt_rx );
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // SyncChannel private methods
 ////////////////////////////////////////////////////////////////////////////////
@@ -502,6 +533,19 @@ OpResult SyncChannel< T >::recv_timeout_impl_(
         }
         // Tx should be ready
     }
+}
+
+template<typename T>
+OpResult SyncChannel< T >::alt_send_impl_( ChanEnd & alt_tx ) noexcept
+{
+
+
+}
+
+template<typename T>
+OpResult SyncChannel< T >::alt_recv_impl_( ChanEnd & alt_rx ) noexcept
+{
+
 }
 
 } // namespace detail
