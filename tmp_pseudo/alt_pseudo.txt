@@ -2,9 +2,9 @@
 // different Tx, Rx configs
 //
 //     Tx --> Rx
-// Alt Tx --> Rx
-//     Tx --> Alt Rx
-// Alt Tx --> Alt Rx ?? must synchronize
+// Alt Tx --> Rx     - must synchronize
+//     Tx --> Alt Rx - must synchronize
+// Alt Tx --> Alt Rx - must synchronize
 
 void alt_pseudocode()
 {

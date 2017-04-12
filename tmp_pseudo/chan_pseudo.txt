@@ -41,8 +41,7 @@ void chan_send( chan, end, item )
         }
     }
 
-    lk.unlock();
-    wait();
+    wait( lk );
     // here, Rx has consumed item
 }
 
@@ -81,9 +80,7 @@ void chan_recv( chan, end, item & )
                 chan.rx_end = { running_ctx };
                 tx_end.alting.maybe_wakeup;
 
-                lk.unlock();
-                wait();
-                lk.lock();
+                wait( lk, true );
 
                 if ( ! chan.alt_sync ) {
                     continue;
@@ -99,9 +96,7 @@ void chan_recv( chan, end, item & )
         }
 
         chan.end_rx = { running_ctx };
-        lk.unlock();
-        wait();
-        lk.lock();
+        wait( lk, true );
         // Tx should be ready
     }
 }
@@ -156,16 +151,15 @@ bool chan_alt_tx_sync( chan, item, alt )
             // accept the sync
             schedule( rx_end.ctx );
 
-            lk.unlock();
-            wait();
+            wait( lk );
             // Rx consumed item
             return true;
 
         } else {
             // offer sync
             chan.alt_sync = true;
-            lk.unlock();
-            wait();
+            rx_end.alting.maybe_wakeup();
+            wait( lk );
             // if chan.alt_sync true, Rx consumed item
             return chan.alt_sync;
         }
@@ -174,8 +168,7 @@ bool chan_alt_tx_sync( chan, item, alt )
         chan.alt_sync = true;
         schedule( rx_end.ctx );
 
-        lk.unlock();
-        wait();
+        wait( lk );
         // Rx consumed item
         return true;
     }
@@ -206,9 +199,8 @@ bool chan_alt_rx_sync( chan, & item, alt )
         } else {
             // offer sync
             chan.alt_sync = true
-            lk.unlock();
-            wait();
-            lk.lock();
+            tx_end.alting.maybe_wakeup();
+            wait( lk );
 
             if ( ! chan.alt_sync ) {
                 return false;
