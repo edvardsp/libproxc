@@ -49,7 +49,7 @@ void test_suspend_until(PolicyType & policy)
         throw_assert(diff > duration, "time suspended is not greater than duration");
 
         auto time_over = diff - duration;
-        throw_assert(time_over < 200us, "time over suspension is greater than 200us => " << duration_cast<microseconds>(time_over).count() << "us");
+        throw_assert(time_over < 300us, "time over suspension is greater than 200us => " << duration_cast<microseconds>(time_over).count() << "us");
     };
 
     check_duration(750us);
