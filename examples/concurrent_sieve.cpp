@@ -30,15 +30,17 @@ void filter( Rx< long > in, Tx< long > out )
 int main()
 {
     const long n = 400;
-    auto chans = chan::create_n< long >( n );
     auto ex_ch = chan::create< long >();
+    auto chans = chan::create_n< long >( n );
+    auto txs = std::move( std::get<0>( chans ) );
+    auto rxs = std::move( std::get<1>( chans ) );
 
     auto start = std::chrono::steady_clock::now();
     parallel(
-        proc( generate, channel::get_tx( chans[0] ), channel::get_rx( ex_ch ) ),
+        proc( generate, std::move( txs[0] ), channel::get_rx( ex_ch ) ),
         proc_for( static_cast< long >( 0 ), n-1,
-            [&chans]( auto i ) {
-                filter( channel::get_rx( chans[i] ), channel::get_tx( chans[i+1] ) );
+            [&txs,&rxs]( auto i ) {
+                filter( std::move( rxs[i] ), std::move( txs[i+1] ) );
             }
         ),
         proc(
@@ -51,7 +53,7 @@ int main()
                 std::cout << "each prime took approx " << diff.count() / n << "us" << std::endl;
                 ex.close();
             },
-            channel::get_rx( chans[n-1] ), channel::get_tx( ex_ch )
+            std::move( rxs[n-1] ), channel::get_tx( ex_ch )
         )
     );
 

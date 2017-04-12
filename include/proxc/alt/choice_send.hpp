@@ -33,7 +33,7 @@ public:
 
     bool is_ready() noexcept
     {
-        return tx_.can_send();
+        return tx_.ready();
     }
 
     void complete_task() noexcept

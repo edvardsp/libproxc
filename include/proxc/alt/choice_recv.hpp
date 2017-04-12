@@ -28,7 +28,7 @@ public:
 
     bool is_ready() noexcept
     {
-        return rx_.can_recv();
+        return rx_.ready();
     }
 
     void complete_task() noexcept
