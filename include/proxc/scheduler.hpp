@@ -130,6 +130,7 @@ public:
     void print_debug() noexcept;
 
 private:
+    void resolve_ctx_switch_data( CtxSwitchData * ) noexcept;
     // actual context switch
     void resume_( Context *, CtxSwitchData * ) noexcept;
     // scheduler context loop
@@ -156,14 +157,7 @@ template<typename Fn, typename Tpl>
 void Scheduler::trampoline(Fn && fn_, Tpl && tpl_, void * vp)
 {
     CtxSwitchData * data = static_cast< CtxSwitchData * >( vp );
-    if ( data != nullptr ) {
-        if ( data->ctx_ != nullptr ) {
-            Scheduler::self()->schedule( data->ctx_ );
-        }
-        if ( data->splk_ != nullptr ) {
-            data->splk_->unlock();
-        }
-    }
+    Scheduler::self()->resolve_ctx_switch_data( data );
     {
         Fn fn{ std::move( fn_ ) };
         Tpl tpl{ std::move( tpl_ ) };

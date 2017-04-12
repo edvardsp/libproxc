@@ -445,6 +445,7 @@ OpResult SyncChannel< T >::send_timeout_impl_(
     }
 
     if ( Scheduler::self()->wait_until( time_point, & lk ) ) {
+        set_tx_( nullptr );
         return OpResult::Timeout;
     } else {
         // Rx has consumed item
@@ -477,6 +478,7 @@ OpResult SyncChannel< T >::recv_timeout_impl_(
                 /* tx->alt_->maybe_wakeup(); */
 
                 if ( Scheduler::self()->wait_until( time_point, & lk, true ) ) {
+                    set_rx_( nullptr );
                     return OpResult::Timeout;
                 }
 
@@ -495,6 +497,7 @@ OpResult SyncChannel< T >::recv_timeout_impl_(
 
         set_rx_( & rx );
         if ( Scheduler::self()->wait_until( time_point, & lk, true ) ) {
+            set_rx_( nullptr );
             return OpResult::Timeout;
         }
         // Tx should be ready

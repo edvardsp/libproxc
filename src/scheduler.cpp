@@ -115,14 +115,7 @@ void Scheduler::resume_( Context * to_ctx, CtxSwitchData * data ) noexcept
     void * vp = static_cast< void * >( data );
     vp = running_->resume( vp );
     data = static_cast< CtxSwitchData * >( vp );
-    if ( data != nullptr ) {
-        if ( data->ctx_ != nullptr ) {
-            schedule( data->ctx_ );
-        }
-        if ( data->splk_ != nullptr ) {
-            data->splk_->unlock();
-        }
-    }
+    resolve_ctx_switch_data( data );
 }
 
 void Scheduler::wait() noexcept
@@ -160,7 +153,7 @@ bool Scheduler::wait_until( TimePointType const & time_point, std::unique_lock< 
 {
     CtxSwitchData data{ splk };
     auto ret = sleep_until( time_point, std::addressof( data ) );
-    if ( lock && splk != nullptr ) {
+    if ( ! ret && lock && splk != nullptr ) {
         splk->lock();
     }
     return ret;
@@ -381,6 +374,17 @@ void Scheduler::print_debug() noexcept
     }
 }
 
+void Scheduler::resolve_ctx_switch_data( CtxSwitchData * data ) noexcept
+{
+    if ( data != nullptr ) {
+        if ( data->ctx_ != nullptr ) {
+            schedule( data->ctx_ );
+        }
+        if ( data->splk_ != nullptr ) {
+            data->splk_->unlock();
+        }
+    }
+}
 // Scheduler context loop
 void Scheduler::run_(void *) noexcept
 {
