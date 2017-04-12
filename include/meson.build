@@ -25,6 +25,11 @@ install_headers(
     'proxc/channel/sync.hpp',
     subdir : 'proxc/channel')
 install_headers(
+    'proxc/timer/interface.hpp',
+    'proxc/timer/egg_timer.hpp',
+    'proxc/timer/rep_timer.hpp',
+    subdir : 'proxc/timer')
+install_headers(
     'proxc/scheduling_policy/policy_base.hpp',
     'proxc/scheduling_policy/round_robin.hpp',
     'proxc/scheduling_policy/work_stealing.hpp',
