@@ -155,17 +155,24 @@ boost::intrusive_ptr< Context > Scheduler::make_work(Fn && fn, Args && ... args)
 template<typename Fn, typename Tpl>
 void Scheduler::trampoline(Fn && fn_, Tpl && tpl_, void * vp)
 {
+    CtxSwitchData * data = static_cast< CtxSwitchData * >( vp );
+    if ( data != nullptr ) {
+        if ( data->ctx_ != nullptr ) {
+            Scheduler::self()->schedule( data->ctx_ );
+        }
+        if ( data->splk_ != nullptr ) {
+            data->splk_->unlock();
+        }
+    }
     {
         Fn fn{ std::move( fn_ ) };
         Tpl tpl{ std::move( tpl_ ) };
-        // TODO do anything with vp?
-        (void)vp;
         detail::apply( std::move(fn), std::move(tpl) );
     }
     auto self = Scheduler::self();
     self->terminate(self->running_);
     BOOST_ASSERT_MSG(false, "unreachable: should not return from scheduler trampoline().");
-    throw UnreachableError{ std::make_error_code( std::errc::state_not_recoverable ), "unreachable" };
+    throw UnreachableError{};
 }
 
 PROXC_NAMESPACE_END
