@@ -3,6 +3,7 @@
 
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <tuple>
 #include <utility>
 
@@ -43,8 +44,8 @@ public:
 
     struct CtxSwitchData
     {
-        Context *     ctx_{ nullptr };
-        Spinlock *    splk_{ nullptr };
+        Context *                         ctx_{ nullptr };
+        std::unique_lock< Spinlock > *    splk_{ nullptr };
 
         CtxSwitchData() = default;
 
@@ -52,7 +53,7 @@ public:
             : ctx_{ ctx }
         {}
 
-        explicit CtxSwitchData( Spinlock * splk ) noexcept
+        explicit CtxSwitchData( std::unique_lock< Spinlock > * splk ) noexcept
             : splk_{ splk }
         {}
     };
@@ -102,7 +103,11 @@ public:
 
     void wait() noexcept;
     void wait( Context * ) noexcept;
-    void wait( Spinlock * ) noexcept;
+    void wait( std::unique_lock< Spinlock > *, bool lock = false ) noexcept;
+
+    bool wait_until( TimePointType const & ) noexcept;
+    bool wait_until( TimePointType const &, Context * ) noexcept;
+    bool wait_until( TimePointType const &, std::unique_lock< Spinlock > *, bool lock = false ) noexcept;
 
     void resume( CtxSwitchData * = nullptr ) noexcept;
     void resume( Context *, CtxSwitchData * = nullptr ) noexcept;
@@ -116,7 +121,7 @@ public:
     void yield() noexcept;
     void join( Context * ) noexcept;
 
-    bool sleep_until( TimePointType const & ) noexcept;
+    bool sleep_until( TimePointType const &, CtxSwitchData * = nullptr ) noexcept;
 
     void wakeup_sleep() noexcept;
     void wakeup_waiting_on( Context * ) noexcept;

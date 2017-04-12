@@ -1,6 +1,7 @@
 
 #include <iostream>
 #include <memory>
+#include <mutex>
 
 #include <proxc/config.hpp>
 
@@ -135,10 +136,34 @@ void Scheduler::wait( Context * ctx ) noexcept
     resume( std::addressof( data ) );
 }
 
-void Scheduler::wait( Spinlock * splk ) noexcept
+void Scheduler::wait( std::unique_lock< Spinlock > * splk, bool lock ) noexcept
 {
     CtxSwitchData data{ splk };
     resume( std::addressof( data ) );
+    if ( lock && splk != nullptr ) {
+        splk->lock();
+    }
+}
+
+bool Scheduler::wait_until( TimePointType const & time_point ) noexcept
+{
+    return sleep_until( time_point );
+}
+
+bool Scheduler::wait_until( TimePointType const & time_point, Context * ctx ) noexcept
+{
+    CtxSwitchData data{ ctx };
+    return sleep_until( time_point, std::addressof( data ) );
+}
+
+bool Scheduler::wait_until( TimePointType const & time_point, std::unique_lock< Spinlock > * splk, bool lock ) noexcept
+{
+    CtxSwitchData data{ splk };
+    auto ret = sleep_until( time_point, std::addressof( data ) );
+    if ( lock && splk != nullptr ) {
+        splk->lock();
+    }
+    return ret;
 }
 
 void Scheduler::resume( CtxSwitchData * data ) noexcept
@@ -260,7 +285,7 @@ void Scheduler::join(Context * ctx) noexcept
     }
 }
 
-bool Scheduler::sleep_until(TimePointType const & time_point) noexcept
+bool Scheduler::sleep_until( TimePointType const & time_point, CtxSwitchData * data ) noexcept
 {
     BOOST_ASSERT(   running_ != nullptr );
     BOOST_ASSERT(   running_->is_type( Context::Type::Process ) );
@@ -272,7 +297,7 @@ bool Scheduler::sleep_until(TimePointType const & time_point) noexcept
     if (ClockType::now() < time_point) {
         running_->time_point_ = time_point;
         running_->link( sleep_queue_ );
-        resume();
+        resume( data );
         return ClockType::now() >= time_point;
     } else {
         return true;
