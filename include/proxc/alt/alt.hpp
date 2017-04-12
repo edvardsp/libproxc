@@ -45,7 +45,7 @@ public:
     PROXC_WARN_UNUSED
     Alt & send( channel::sync::Tx< ItemType > &,
                 ItemType &&,
-                typename alt::ChoiceSend< ItemType >::FnType && = [](){} ) noexcept;
+                typename alt::ChoiceSend< ItemType >::FnType && = []{} ) noexcept;
 
     // send choice with guard
     template<typename ItemType>
@@ -53,7 +53,7 @@ public:
     Alt & send_if( bool,
                    channel::sync::Tx< ItemType > &,
                    ItemType &&,
-                   typename alt::ChoiceSend< ItemType >::FnType && = [](){} ) noexcept;
+                   typename alt::ChoiceSend< ItemType >::FnType && = []{} ) noexcept;
 
     // recv choice without guard
     template<typename ItemType>
@@ -72,25 +72,25 @@ public:
     template<typename Clock, typename Dur>
     PROXC_WARN_UNUSED
     Alt & timeout( std::chrono::time_point< Clock, Dur > const &,
-                   alt::ChoiceTimeout::FnType = [](){} ) noexcept;
+                   alt::ChoiceTimeout::FnType = []{} ) noexcept;
 
     template<typename Rep, typename Period>
     PROXC_WARN_UNUSED
     Alt & timeout( std::chrono::duration< Rep, Period > const &,
-                   alt::ChoiceTimeout::FnType = [](){} ) noexcept;
+                   alt::ChoiceTimeout::FnType = []{} ) noexcept;
 
     // timeout with guard
     template<typename Clock, typename Dur>
     PROXC_WARN_UNUSED
     Alt & timeout_if( bool,
                       std::chrono::time_point< Clock, Dur > const &,
-                      alt::ChoiceTimeout::FnType = [](){} ) noexcept;
+                      alt::ChoiceTimeout::FnType = []{} ) noexcept;
 
     template<typename Rep, typename Period>
     PROXC_WARN_UNUSED
     Alt & timeout_if( bool,
                       std::chrono::duration< Rep, Period > const &,
-                      alt::ChoiceTimeout::FnType = [](){} ) noexcept;
+                      alt::ChoiceTimeout::FnType = []{} ) noexcept;
 
     // consumes alt and determines which choice to select
     void select();
