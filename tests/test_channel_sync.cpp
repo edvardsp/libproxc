@@ -83,11 +83,15 @@ void test_timeout_one_side()
                 std::string item;
                 auto res = rx.recv_for( item, duration );
                 throw_assert( res == OpResult::Timeout, "OpResult should be Timeout" );
+                res = rx.recv_for( item, duration );
+                throw_assert( res == OpResult::Timeout, "OpResult should be Timeout" );
             }, channel::get_rx( rx_recv_for ) ),
         proc( [duration]( auto rx ) {
                 std::string item;
                 auto time_point = std::chrono::steady_clock::now() + duration;
                 auto res = rx.recv_until( item, time_point );
+                throw_assert( res == OpResult::Timeout, "OpResult should be Timeout" );
+                res = rx.recv_until( item, time_point );
                 throw_assert( res == OpResult::Timeout, "OpResult should be Timeout" );
             }, channel::get_rx( rx_recv_until ) )
     );
