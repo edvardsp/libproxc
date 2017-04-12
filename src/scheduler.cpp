@@ -99,7 +99,7 @@ Scheduler::~Scheduler()
     BOOST_ASSERT( terminated_queue_.empty() );
 }
 
-void Scheduler::resume_(Context * to_ctx, void * vp) noexcept
+void Scheduler::resume_( Context * to_ctx, CtxSwitchData * data ) noexcept
 {
     BOOST_ASSERT(   to_ctx != nullptr );
     BOOST_ASSERT(   running_ != nullptr );
@@ -111,17 +111,44 @@ void Scheduler::resume_(Context * to_ctx, void * vp) noexcept
     std::swap( to_ctx, running_ );
 
     // context switch
-    running_->resume( vp );
+    void * vp = static_cast< void * >( data );
+    vp = running_->resume( vp );
+    data = static_cast< CtxSwitchData * >( vp );
+    if ( data != nullptr ) {
+        if ( data->ctx_ != nullptr ) {
+            schedule( data->ctx_ );
+        }
+        if ( data->splk_ != nullptr ) {
+            data->splk_->unlock();
+        }
+    }
 }
 
-void Scheduler::resume() noexcept
+void Scheduler::wait() noexcept
 {
-    resume( policy_->pick_next() );
+    resume();
 }
 
-void Scheduler::resume(Context * to_ctx) noexcept
+void Scheduler::wait( Context * ctx ) noexcept
 {
-    resume_( to_ctx );
+    CtxSwitchData data{ ctx };
+    resume( std::addressof( data ) );
+}
+
+void Scheduler::wait( Spinlock * splk ) noexcept
+{
+    CtxSwitchData data{ splk };
+    resume( std::addressof( data ) );
+}
+
+void Scheduler::resume( CtxSwitchData * data ) noexcept
+{
+    resume_( policy_->pick_next(), data );
+}
+
+void Scheduler::resume( Context * to_ctx, CtxSwitchData * data ) noexcept
+{
+    resume_( to_ctx, data );
 }
 
 void Scheduler::terminate(Context * ctx) noexcept

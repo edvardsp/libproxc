@@ -8,6 +8,7 @@
 
 #include <proxc/config.hpp>
 
+#include <proxc/spinlock.hpp>
 #include <proxc/traits.hpp>
 #include <proxc/detail/delegate.hpp>
 #include <proxc/detail/hook.hpp>
@@ -21,10 +22,10 @@ PROXC_NAMESPACE_BEGIN
 
 namespace hook = detail::hook;
 
+// forward declaration
 class Scheduler;
 
 namespace detail {
-
 
 } // namespace detail
 
@@ -130,7 +131,7 @@ public:
 
     // general methods
     Id get_id() const noexcept;
-    void * resume(void * vp = nullptr) noexcept;
+    void * resume( void * = nullptr ) noexcept;
 
     bool is_type(Type) const noexcept;
     bool has_terminated() noexcept;

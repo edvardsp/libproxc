@@ -8,13 +8,13 @@
 
 #include "setup.hpp"
 
-using Context = proxc::Context;
+using namespace proxc;
 
 void test_context_id()
 {
-    Context m_ctx{ proxc::context::main_type };
-    Context s_ctx{ proxc::context::scheduler_type, [](void *){} };
-    Context w_ctx{ proxc::context::work_type, [](void *){} };
+    Context m_ctx{ context::main_type };
+    Context s_ctx{ context::scheduler_type, [](void *){} };
+    Context w_ctx{ context::work_type, [](void *){} };
 
     throw_assert_equ(m_ctx.get_id(), m_ctx.get_id(),  "id should be equal");
     throw_assert_equ(s_ctx.get_id(), s_ctx.get_id(), "id should be equal");
@@ -30,9 +30,9 @@ void test_back_and_forth()
     const std::string after = "After context jump";
     std::string msg = before;
 
-    Context m_ctx{ proxc::context::main_type };
+    Context m_ctx{ context::main_type };
 
-    Context other_ctx{ proxc::context::work_type,
+    Context other_ctx{ context::work_type,
         [&](void *) {
             msg = after;
             m_ctx.resume();
@@ -50,34 +50,34 @@ void test_ping_pong()
     std::vector<std::size_t> ints;
     ints.reserve(num_items);
 
-    Context m_ctx{ proxc::context::main_type };
+    Context m_ctx{ context::main_type };
 
-    Context ping_ctx{ proxc::context::work_type,
+    Context ping_ctx{ context::work_type,
         [&] (void * vp) {
-            Context * pong = static_cast< Context * >(vp);
+            auto pong = static_cast< Context * >( vp );
             m_ctx.resume();
-            while (index++ < num_items) {
-                ints.push_back(0);
+            while ( index++ < num_items ) {
+                ints.push_back( 0 );
                 pong->resume();
             }
             m_ctx.resume();
         }
     };
 
-    Context pong_ctx{ proxc::context::work_type,
+    Context pong_ctx{ context::work_type,
         [&] (void * vp) {
-            Context * ping = static_cast< Context * >(vp);
+            auto ping = static_cast< Context * >( vp );
             m_ctx.resume();
-            while (index++ < num_items) {
-                ints.push_back(1);
+            while ( index++ < num_items ) {
+                ints.push_back( 1 );
                 ping->resume();
             }
             m_ctx.resume();
         }
     };
-
-    pong_ctx.resume(&ping_ctx);
-    ping_ctx.resume(&pong_ctx);
+    
+    pong_ctx.resume( & ping_ctx );
+    ping_ctx.resume( & pong_ctx );
     ping_ctx.resume();
 
     std::size_t j = 1;

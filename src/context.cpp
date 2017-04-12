@@ -67,7 +67,7 @@ Context::Id Context::get_id() const noexcept
     return Id{ const_cast< Context * >(this) };
 }
 
-void * Context::resume(void * vp) noexcept
+void * Context::resume( void * vp ) noexcept
 {
     return ctx_(vp);
 }

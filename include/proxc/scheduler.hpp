@@ -41,6 +41,22 @@ class Scheduler
 public:
     using ReadyQueue = detail::queue::ListQueue< Context, detail::hook::Ready, & Context::ready_ >;
 
+    struct CtxSwitchData
+    {
+        Context *     ctx_{ nullptr };
+        Spinlock *    splk_{ nullptr };
+
+        CtxSwitchData() = default;
+
+        explicit CtxSwitchData( Context * ctx ) noexcept
+            : ctx_{ ctx }
+        {}
+
+        explicit CtxSwitchData( Spinlock * splk ) noexcept
+            : splk_{ splk }
+        {}
+    };
+
 private:
     struct time_point_cmp_
     {
@@ -84,29 +100,33 @@ public:
     template<typename Fn, typename ... Args>
     static boost::intrusive_ptr< Context > make_work(Fn && fn, Args && ... args) noexcept;
 
-    void resume() noexcept;
-    void resume(Context *) noexcept;
-    void terminate(Context *) noexcept;
-    void schedule(Context *) noexcept;
+    void wait() noexcept;
+    void wait( Context * ) noexcept;
+    void wait( Spinlock * ) noexcept;
 
-    void attach(Context *) noexcept;
-    void detach(Context *) noexcept;
-    void commit(Context *) noexcept;
+    void resume( CtxSwitchData * = nullptr ) noexcept;
+    void resume( Context *, CtxSwitchData * = nullptr ) noexcept;
+    void terminate( Context * ) noexcept;
+    void schedule( Context * ) noexcept;
+
+    void attach( Context * ) noexcept;
+    void detach( Context * ) noexcept;
+    void commit( Context * ) noexcept;
 
     void yield() noexcept;
-    void join(Context *) noexcept;
+    void join( Context * ) noexcept;
 
-    bool sleep_until(TimePointType const &) noexcept;
+    bool sleep_until( TimePointType const & ) noexcept;
 
     void wakeup_sleep() noexcept;
-    void wakeup_waiting_on(Context *) noexcept;
+    void wakeup_waiting_on( Context * ) noexcept;
     void cleanup_terminated() noexcept;
 
     void print_debug() noexcept;
 
 private:
     // actual context switch
-    void resume_(Context *, void * vp = nullptr) noexcept;
+    void resume_( Context *, CtxSwitchData * ) noexcept;
     // scheduler context loop
     void run_(void *) noexcept;
 
