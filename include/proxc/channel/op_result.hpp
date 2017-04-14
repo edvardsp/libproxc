@@ -15,6 +15,13 @@ enum class OpResult {
     Error,
 };
 
+enum class AltResult {
+    Ok,
+    NoEnd,
+    Closed,
+    SyncFailed,
+};
+
 } // namespace channel
 PROXC_NAMESPACE_END
 

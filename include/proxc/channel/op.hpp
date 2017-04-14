@@ -1,89 +1,57 @@
 
 #pragma once
 
+#include <memory>
 #include <tuple>
-#include <type_traits>
+#include <vector>
 
 #include <proxc/config.hpp>
 
-#include <proxc/channel/base.hpp>
+#include <proxc/channel/sync.hpp>
+#include <proxc/channel/tx.hpp>
+#include <proxc/channel/rx.hpp>
 
 PROXC_NAMESPACE_BEGIN
 namespace channel {
-namespace detail {
 
-template<typename Ch>
-struct is_channel
+template<typename T>
+Tx< T > get_tx( std::tuple< Tx< T >, Rx< T > > & tpl )
 {
-    enum {
-        value = std::is_base_of< ChannelBase, Ch >::value,
-    };
-};
-
-template<typename Tx>
-struct is_channel_tx 
-{
-    enum {
-        value = std::is_base_of< TxBase, Tx >::value,
-    };
-};
-
-template<typename Rx>
-struct is_channel_rx
-{
-    enum {
-        value = std::is_base_of< RxBase, Rx >::value,
-    };
-};
-
-} // detail
-
-template<typename Tx, typename Rx>
-auto get_tx( std::tuple< Tx, Rx > & tpl )
-    -> std::enable_if_t<
-        std::is_trivially_copyable< Tx >::value,
-        Tx
-    >
-{
-    static_assert( detail::is_channel_tx< Tx >::value, "supplied Tx is not a valid Channel Tx" );
-    static_assert( detail::is_channel_rx< Rx >::value, "supplied Rx is not a valid Channel Rx" );
-    return std::get< 0 >( tpl );
-}
-
-template<typename Tx, typename Rx>
-auto get_tx( std::tuple< Tx, Rx > & tpl )
-    -> std::enable_if_t<
-        ! std::is_trivially_copyable< Tx >::value,
-        Tx
-    >
-{
-    static_assert( detail::is_channel_tx< Tx >::value, "supplied Tx is not a valid Channel Tx" );
-    static_assert( detail::is_channel_rx< Rx >::value, "supplied Rx is not a valid Channel Rx" );
     return std::move( std::get< 0 >( tpl ) );
 }
 
-template<typename Tx, typename Rx>
-auto get_rx( std::tuple< Tx, Rx > & tpl )
-    -> std::enable_if_t<
-        std::is_trivially_copyable< Rx >::value,
-        Rx
-    >
+template<typename T>
+Rx< T > get_rx( std::tuple< Tx< T >, Rx< T > > & tpl )
 {
-    static_assert( detail::is_channel_tx< Tx >::value, "supplied Tx is not a valid Channel Tx" );
-    static_assert( detail::is_channel_rx< Rx >::value, "supplied Rx is not a valid Channel Rx" );
-    return std::get< 1 >( tpl );
+    return std::move( std::get< 1 >( tpl ) );
 }
 
-template<typename Tx, typename Rx>
-auto get_rx( std::tuple< Tx, Rx > & tpl )
-    -> std::enable_if_t<
-        ! std::is_trivially_copyable< Rx >::value,
-        Rx
-    >
+template<typename T>
+std::tuple< Tx< T >, Rx< T > > create() noexcept
 {
-    static_assert( detail::is_channel_tx< Tx >::value, "supplied Tx is not a valid Channel Tx" );
-    static_assert( detail::is_channel_rx< Rx >::value, "supplied Rx is not a valid Channel Rx" );
-    return std::move( std::get< 1 >( tpl ) );
+    auto channel = std::make_shared< detail::SyncChannel< T > >();
+    return std::make_tuple( Tx< T >{ channel }, Rx< T >{ channel } );
+}
+
+template<typename T>
+std::tuple<
+    std::vector< Tx< T > >,
+    std::vector< Rx< T > >
+>
+create_n( const std::size_t n ) noexcept
+{
+    std::vector< Tx< T > > txs;
+    std::vector< Rx< T > > rxs;
+    txs.reserve( n );
+    rxs.reserve( n );
+    Tx< T > tx;
+    Rx< T > rx;
+    for( std::size_t i = 0; i < n; ++i ) {
+        std::tie( tx, rx ) = create< T >();
+        txs.push_back( std::move( tx ) );
+        rxs.push_back( std::move( rx ) );
+    }
+    return std::make_tuple( std::move( txs ), std::move( rxs ) );
 }
 
 } // namespace channel

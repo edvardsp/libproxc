@@ -104,10 +104,11 @@ void chan_recv( chan, end, item & )
 void enter( chan, alt )
 {
     lk = chan.spinlock;
-    // Tx, FIXME: what about expensive copies of item?
+    // Tx
     chan.tx_end = { running_ctx, item, alt };
     // Rx
     chan.rx_end = { running_ctx, alt };
+    // All
     chan.alt_sync = false;
 }
 
@@ -118,6 +119,7 @@ void leave( chan )
     chan.tx_end = nullptr;
     // Rx
     chan.rx_end = nullptr;
+    // All
     chan.alt_sync = false;
 }
 
@@ -137,12 +139,12 @@ bool ready( chan, alt )
 //      1: No Rx.
 //      2: Normal Rx.
 //      3: Alting Rx.
-bool chan_alt_tx_sync( chan )
+bool chan_alt_tx_sync( chan, item )
 {
     lk = chan.spinlock;
 
     rx_end = chan.rx_end;
-    if ( rx_end != nullptr ) {
+    if ( rx_end == nullptr ) {
         return false;
     }
 
@@ -178,12 +180,12 @@ bool chan_alt_tx_sync( chan )
 //      1: No Tx.
 //      2: Normal Tx.
 //      3: Alting Tx.
-bool chan_alt_rx_sync( chan )
+bool chan_alt_rx_sync( chan, item )
 {
     lk = chan.spinlock;
 
     tx_end = chan.tx_end;
-    if ( tx_end != nullptr ) {
+    if ( tx_end == nullptr ) {
         return false;
     }
 

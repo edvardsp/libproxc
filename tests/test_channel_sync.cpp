@@ -16,21 +16,103 @@
 using namespace proxc;
 using OpResult = proxc::channel::OpResult;
 
+void test_item_copy_move()
+{
+    using Tx = channel::sync::Tx< std::string >;
+    using Rx = channel::sync::Rx< std::string >;
+    auto ch = channel::sync::create< std::string >();
+
+    const std::string msg = "unique message";
+    parallel(
+        proc(
+            [&msg]( Tx tx ) {
+                OpResult res;
+                auto duration = std::chrono::milliseconds( 1 );
+                std::string s{ msg };
+
+                res = tx.send( s );
+                throw_assert( res == OpResult::Ok, "OpResult should be Ok" );
+                throw_assert_equ( s, msg, "item should have been copied" );
+
+                res = tx.send( std::move( s ) );
+                throw_assert( res == OpResult::Ok, "OpResult should be Ok" );
+                throw_assert_equ( s, std::string{}, "item should have been moved" );
+
+                s = msg;
+
+                res = tx.send_for( s, duration );
+                throw_assert( res == OpResult::Ok, "OpResult should be Ok" );
+                throw_assert_equ( s, msg, "item should have been copied" );
+
+                res = tx.send_for( std::move( s ), duration );
+                throw_assert( res == OpResult::Ok, "OpResult should be Ok" );
+                throw_assert_equ( s, std::string{}, "item should have been moved" );
+
+                s = msg;
+
+                res = tx.send_until( s, std::chrono::steady_clock::now() + duration );
+                throw_assert( res == OpResult::Ok, "OpResult should be Ok" );
+                throw_assert_equ( s, msg, "item should have been copied" );
+
+                res = tx.send_until( std::move( s ), std::chrono::steady_clock::now() + duration );
+                throw_assert( res == OpResult::Ok, "OpResult should be Ok" );
+                throw_assert_equ( s, std::string{}, "item should have been moved" );
+            },
+            channel::get_tx( ch ) ),
+        proc(
+            [&msg]( Rx rx ) {
+                for ( auto i : rx ) {
+                    throw_assert_equ( i, msg, "strings should match" );
+                }
+            },
+            channel::get_rx( ch ) )
+    );
+}
+
+void test_item_copy_move_timeout()
+{
+    auto ch = channel::sync::create< std::string >();
+    auto tx = channel::get_tx( ch );
+
+    auto duration = std::chrono::milliseconds( 1 );
+    OpResult res;
+    const std::string msg = "unique message";
+    std::string s{ msg };
+
+    res = tx.send_for( s, duration );
+    throw_assert( res == OpResult::Timeout, "OpResult should be Timeout" );
+    throw_assert_equ( s, msg, "item should have been copied" );
+
+    res = tx.send_for( std::move( s ), duration );
+    throw_assert( res == OpResult::Timeout, "OpResult should be Timeout" );
+    throw_assert_equ( s, msg, "item should have not been moved" );
+
+    res = tx.send_until( s, std::chrono::steady_clock::now() + duration );
+    throw_assert( res == OpResult::Timeout, "OpResult should be Timeout" );
+    throw_assert_equ( s, msg, "item should have been copied" );
+
+    res = tx.send_until( std::move( s ), std::chrono::steady_clock::now() + duration );
+    throw_assert( res == OpResult::Timeout, "OpResult should be Timeout" );
+    throw_assert_equ( s, msg, "item should have not been moved" );
+}
+
 void test_channel_sync_works()
 {
     int item = 42;
     auto ch = channel::sync::create< decltype(item) >();
     parallel(
-        proc( [ item ]( auto tx ) {
+        proc( [ &item ]( auto tx ) {
                 auto res = tx.send( item );
                 throw_assert( res == OpResult::Ok, "OpResult should be Ok" );
-            }, channel::get_tx( ch ) ),
-        proc( [ item ]( auto rx ) {
+            },
+            channel::get_tx( ch ) ),
+        proc( [ &item ]( auto rx ) {
                 decltype(item) i;
                 auto res = rx.recv( i );
                 throw_assert( res == OpResult::Ok, "OpResult should be Ok" );
                 throw_assert_equ( i, item, "items should match" );
-            }, channel::get_rx( ch ) )
+            },
+            channel::get_rx( ch ) )
     );
 }
 
@@ -248,6 +330,8 @@ void test_timeout_rx_delayed()
 
 int main()
 {
+    test_item_copy_move();
+    test_item_copy_move_timeout();
     test_channel_sync_works();
     test_range_recv();
     test_timeout_one_side();
