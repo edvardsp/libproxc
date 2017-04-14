@@ -13,18 +13,19 @@
 
 PROXC_NAMESPACE_BEGIN
 
-// forward declaration
+// forward declarations
 class Alt;
 
 namespace alt {
 
-template<typename T> class ChoiceRecv;
+template<typename T> 
+class ChoiceRecv;
 
 } // namespace alt
 
 namespace channel {
 
-// forward declarations
+// forward declaration
 template<typename T> class Tx;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -74,7 +75,7 @@ public:
     // normal recv operations
     OpResult recv( ItemType & item ) noexcept
     {
-        typename ChanType::ChanEnd rx{ Scheduler::running() };
+        ChanEnd rx{ Scheduler::running() };
         return chan_->recv( rx, item );
     }
 
@@ -94,7 +95,7 @@ public:
                          std::chrono::time_point< Clock, Dur > const & time_point
     ) noexcept
     {
-        typename ChanType::ChanEnd rx{ Scheduler::running() };
+        ChanEnd rx{ Scheduler::running() };
         return chan_->recv_until( rx, item, time_point );
     }
 
@@ -109,7 +110,7 @@ private:
 
     friend class ::proxc::alt::ChoiceRecv< T >;
 
-    void alt_enter( typename ChanType::ChanEnd & rx ) noexcept
+    void alt_enter( ChanEnd & rx ) noexcept
     {
         chan_->alt_recv_enter( rx );
     }
@@ -124,7 +125,7 @@ private:
         return chan_->alt_recv_ready( alt );
     }
 
-    AltResult alt_send( ItemType & item ) noexcept
+    AltResult alt_recv( ItemType & item ) noexcept
     {
         return chan_->alt_recv( item );
     }

@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <random>
@@ -10,9 +11,9 @@
 
 #include <proxc/config.hpp>
 
+#include <proxc/channel.hpp>
 #include <proxc/exceptions.hpp>
-#include <proxc/channel/sync.hpp>
-#include <proxc/channel/op.hpp>
+#include <proxc/spinlock.hpp>
 #include <proxc/detail/delegate.hpp>
 #include <proxc/alt/choice_base.hpp>
 #include <proxc/alt/choice_send.hpp>
@@ -28,6 +29,18 @@ namespace detail {
 
 class Alt
 {
+private:
+    using ChoicePtr = std::unique_ptr< alt::ChoiceBase >;
+
+    std::vector< ChoicePtr >                     choices_;
+    std::unique_ptr< alt::ChoiceTimeout >        timeout_{ nullptr };
+
+    alignas(cache_alignment) channel::ChanEnd    end_;
+
+    Spinlock splk_;
+
+    alignas(cache_alignment) std::atomic< Context * >    wakeup_{ nullptr };
+
 public:
     Alt();
     ~Alt() {}
@@ -96,13 +109,13 @@ public:
     void select();
 
 private:
-    using ChoicePtr = std::unique_ptr< alt::ChoiceBase >;
+    void wait() noexcept;
 
-    std::vector< ChoicePtr >                 choices_;
-    std::unique_ptr< alt::ChoiceTimeout >    timeout_{ nullptr };
+    void maybe_wakeup() noexcept;
 };
 
 Alt::Alt()
+    : end_{ Scheduler::running(), this }
 {
     choices_.reserve( 8 );
 }
@@ -117,6 +130,7 @@ Alt & Alt::send(
 {
     choices_.emplace_back(
         new alt::ChoiceSend< ItemType >{
+            end_,
             tx,
             std::forward< ItemType >( item ),
             std::forward< typename alt::ChoiceSend< ItemType >::FnType >( fn )
@@ -151,6 +165,7 @@ Alt & Alt::recv(
 {
     choices_.emplace_back(
         new alt::ChoiceRecv< ItemType >{
+            end_,
             rx,
             std::forward< typename alt::ChoiceRecv< ItemType >::FnType >( fn )
         }
@@ -236,43 +251,63 @@ void Alt::select()
 
     if ( choices_.empty() ) {
         // suspend indefinitely, should never return
-        Scheduler::self()->resume();
+        Scheduler::self()->wait();
         BOOST_ASSERT_MSG( false, "unreachable" );
         throw UnreachableError{};
 
     } else {
-        std::vector< alt::ChoiceBase * > ready_;
-        // FIXME: reserve? and if so, at what size?
-        ready_.reserve( choices_.size() );
-        for ( auto& choice : choices_ ) {
-            if ( choice->is_ready( this ) ) {
-                ready_.push_back( choice.get() );
-            }
-        }
-
         alt::ChoiceBase * selected = nullptr;
-        if ( ! ready_.empty() ) {
-            // choose one choice immediately
-            if ( ready_.size() == 1 ) {
-                selected = ready_.front();
-            } else {
-                static thread_local std::minstd_rand rng;
-                auto id = std::uniform_int_distribution< std::size_t >
-                    { 0, ready_.size() - 1 }( rng );
-                selected = ready_[id];
+        std::vector< alt::ChoiceBase * > ready;
+        // FIXME: reserve? and if so, at what size?
+        ready.reserve( choices_.size() );
+
+        while ( selected == nullptr ) {
+            ready.clear();
+            for ( auto& choice : choices_ ) {
+                if ( choice->is_ready( this ) ) {
+                    ready.push_back( choice.get() );
+                }
             }
 
-        } else {
-            // wait until one of the choices are available
-            for ( auto& choice : choices_ ) {
-                (void)choice;
-                // activate?
+            if ( ready.empty() ) {
+                wait();
+                // woken up, one or more cases should be ready
+                continue;
+            }
+
+            static thread_local std::mt19937 rng{ std::random_device{}() };
+            std::shuffle( ready.begin(), ready.end(), rng );
+
+            for ( auto& choice : ready ) {
+                if ( choice->try_complete() ) {
+                    selected = choice;
+                    break;
+                }
             }
         }
 
         BOOST_ASSERT( selected != nullptr );
+        selected->try_complete();
+    }
+}
 
-        selected->complete_task();
+void Alt::wait() noexcept
+{
+    // FIXME: race condition between ready check and this call
+    std::unique_lock< Spinlock > lk{ splk_ };
+
+    wakeup_.store( end_.ctx_, std::memory_order_release );
+    Scheduler::self()->wait( & lk, true );
+    wakeup_.store( nullptr, std::memory_order_release );
+}
+
+void Alt::maybe_wakeup() noexcept
+{
+    std::unique_lock< Spinlock > lk{ splk_ };
+
+    auto ctx = wakeup_.exchange( nullptr, std::memory_order_acq_rel );
+    if ( ctx != nullptr ) {
+        Scheduler::self()->schedule( ctx );
     }
 }
 

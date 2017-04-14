@@ -73,14 +73,14 @@ public:
     // normal send operations
     OpResult send( ItemType const & item ) noexcept
     {
-        typename ChanType::ChanEnd tx{ Scheduler::running() };
+        ChanEnd tx{ Scheduler::running() };
         ItemType i{ item };
         return chan_->send( tx, i );
     }
 
     OpResult send( ItemType && item ) noexcept
     {
-        typename ChanType::ChanEnd tx{ Scheduler::running() };
+        ChanEnd tx{ Scheduler::running() };
         ItemType i{ std::move( item ) };
         return chan_->send( tx, i );
     }
@@ -91,7 +91,7 @@ public:
                          std::chrono::time_point< Clock, Dur > const & time_point
     ) noexcept
     {
-        typename ChanType::ChanEnd tx{ Scheduler::running() };
+        ChanEnd tx{ Scheduler::running() };
         return chan_->send_until( tx, item, time_point );
     }
 
@@ -100,7 +100,7 @@ public:
                          std::chrono::time_point< Clock, Dur > const & time_point
     ) noexcept
     {
-        typename ChanType::ChanEnd tx{ Scheduler::running() };
+        ChanEnd tx{ Scheduler::running() };
         ItemType i{ item };
         return chan_->send_until( tx, i, time_point );
     }
@@ -137,7 +137,7 @@ private:
 
     friend class ::proxc::alt::ChoiceSend< T >;
 
-    void alt_enter( typename ChanType::ChanEnd & tx ) noexcept
+    void alt_enter( ChanEnd & tx ) noexcept
     {
         chan_->alt_send_enter( tx );
     }

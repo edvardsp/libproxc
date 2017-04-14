@@ -18,34 +18,63 @@ public:
     using TxType = channel::Tx< ItemType >;
     using FnType = detail::delegate< void( void ) >;
 
-    ChoiceSend( TxType & tx, ItemType const & item, FnType && fn )
-        : tx_{ tx }
-        , item_{ item }
-        , fn_{ std::forward< FnType >( fn ) }
-    {}
+private:
+    channel::ChanEnd &    end_;
 
-    ChoiceSend( TxType & tx, ItemType && item, FnType && fn )
-        : tx_{ tx }
+    TxType &    tx_;
+    ItemType    item_;
+    FnType      fn_;
+
+public:
+    ChoiceSend( channel::ChanEnd & end, TxType & tx, ItemType const & item, FnType fn )
+        : end_{ end }
+        , tx_{ tx }
+        , item_{ item }
+        , fn_{ std::move( fn ) }
+    {
+        enter();
+    }
+
+    ChoiceSend( channel::ChanEnd & end, TxType & tx, ItemType && item, FnType fn )
+        : end_{ end }
+        , tx_{ tx }
         , item_{ std::move( item ) }
-        , fn_{ std::forward< FnType >( fn ) }
-    {}
+        , fn_{ std::move( fn ) }
+    {
+        enter();
+    }
+
+    ~ChoiceSend()
+    {
+        leave();
+    }
 
     bool is_ready( Alt * alt ) const noexcept
     {
         return tx_.alt_ready( alt );
     }
 
-    void complete_task() noexcept
+    bool try_complete() noexcept
     {
-        auto res = tx_.send( std::move( item_ ) );
-        BOOST_ASSERT( res == channel::OpResult::Ok );
+        auto res = tx_.alt_send( item_ );
+        return res == channel::AltResult::Ok;
+    }
+
+    void run_func() const noexcept
+    {
         fn_();
     }
 
 private:
-    TxType &    tx_;
-    ItemType    item_;
-    FnType      fn_;
+    void enter() noexcept
+    {
+        tx_.alt_enter( end_ );
+    }
+
+    void leave() noexcept
+    {
+        tx_.alt_leave();
+    }
 };
 
 } // namespace alt

@@ -20,6 +20,16 @@ PROXC_NAMESPACE_BEGIN
 class Alt;
 
 namespace channel {
+
+struct alignas(cache_alignment) ChanEnd
+{
+    Context *     ctx_;
+    Alt *         alt_;
+    ChanEnd( Context * ctx, Alt * alt = nullptr )
+        : ctx_{ ctx }, alt_{ alt }
+    {}
+};
+
 namespace detail {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -31,15 +41,6 @@ class ChannelImpl
 {
 public:
     using ItemType = T;
-
-    struct alignas(cache_alignment) ChanEnd
-    {
-        Context *     ctx_;
-        Alt *         alt_;
-        ChanEnd( Context * ctx, Alt * alt = nullptr )
-            : ctx_{ ctx }, alt_{ alt }
-        {}
-    };
 
 private:
     struct alignas(cache_alignment) Payload

@@ -26,8 +26,12 @@ public:
 
     // interface
     virtual bool is_ready( Alt * ) const noexcept = 0;
+    virtual bool try_complete() noexcept = 0;
+    virtual void run_func() const noexcept = 0;
 
-    virtual void complete_task() noexcept = 0;
+private:
+    virtual void enter() noexcept = 0;
+    virtual void leave() noexcept = 0;
 };
 
 } // namespace alt
