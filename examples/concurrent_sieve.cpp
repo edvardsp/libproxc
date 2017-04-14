@@ -4,9 +4,8 @@
 #include <proxc.hpp>
 
 using namespace proxc;
-namespace chan = channel::sync;
-template<typename T> using Tx = chan::Tx< T >;
-template<typename T> using Rx = chan::Rx< T >;
+template<typename T> using Tx = channel::Tx< T >;
+template<typename T> using Rx = channel::Rx< T >;
 
 void generate( Tx< long > out, Rx< long > ex )
 {
@@ -18,7 +17,7 @@ void generate( Tx< long > out, Rx< long > ex )
 
 void filter( Rx< long > in, Tx< long > out )
 {
-    long prime;
+    long prime{};
     in.recv( prime );
     for ( auto i : in ) {
         if ( i % prime != 0 ) {
@@ -30,8 +29,8 @@ void filter( Rx< long > in, Tx< long > out )
 int main()
 {
     const long n = 400;
-    auto ex_ch = chan::create< long >();
-    auto chans = chan::create_n< long >( n );
+    auto ex_ch = channel::create< long >();
+    auto chans = channel::create_n< long >( n );
     auto txs = std::move( std::get<0>( chans ) );
     auto rxs = std::move( std::get<1>( chans ) );
 
@@ -45,7 +44,7 @@ int main()
         ),
         proc(
             [start,n]( Rx< long > in, Tx< long > ex ){
-                long prime;
+                long prime{};
                 in.recv( prime );
                 auto end = std::chrono::steady_clock::now();
                 std::chrono::duration< double, std::micro > diff = end - start;

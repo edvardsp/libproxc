@@ -15,11 +15,12 @@
 #include <boost/assert.hpp>
 
 PROXC_NAMESPACE_BEGIN
-namespace channel {
-namespace detail {
 
 // forward declaration
 class Alt;
+
+namespace channel {
+namespace detail {
 
 ////////////////////////////////////////////////////////////////////////////////
 // ChannelImpl
@@ -102,10 +103,12 @@ public:
     // send and receive methods for alting
     void alt_send_enter( ChanEnd & ) noexcept;
     void alt_send_leave() noexcept;
+    bool alt_send_ready( Alt * ) const noexcept;
     AltResult alt_send( ItemType & ) noexcept;
 
     void alt_recv_enter( ChanEnd & ) noexcept;
     void alt_recv_leave() noexcept;
+    bool alt_recv_ready( Alt * ) const noexcept;
     AltResult alt_recv( ItemType & ) noexcept;
 };
 
@@ -132,7 +135,7 @@ template<typename T>
 void ChannelImpl< T >::close() noexcept
 {
     closed_.store( true, std::memory_order_release );
-    auto tx = tx_end_.load( std::memory_order_consume );
+    auto tx = tx_end_.exchange( nullptr, std::memory_order_acq_rel );
     if ( tx != nullptr ) {
         // FIXME: call item destructor?
         if ( tx->alt_ != nullptr ) {
@@ -143,7 +146,7 @@ void ChannelImpl< T >::close() noexcept
             Scheduler::self()->schedule( tx->ctx_ );
         }
     }
-    auto rx = rx_end_.load( std::memory_order_consume );
+    auto rx = rx_end_.exchange( nullptr, std::memory_order_acq_rel );
     if ( rx != nullptr ) {
         if ( rx->alt_ != nullptr ) {
             // FIXME
@@ -286,6 +289,7 @@ OpResult ChannelImpl< T >::send_until(
 
     if ( Scheduler::self()->wait_until( time_point, & lk ) ) {
         tx_end_.store( nullptr, std::memory_order_release );
+        payload_.store( nullptr, std::memory_order_release );
         return OpResult::Timeout;
     } else {
         // Rx has consumed item
@@ -379,6 +383,18 @@ void ChannelImpl< T >::alt_send_leave() noexcept
 }
 
 template<typename T>
+bool ChannelImpl< T >::alt_send_ready( Alt * alt ) const noexcept
+{
+    BOOST_ASSERT( alt != nullptr );
+
+    if ( is_closed() ) {
+        return false;
+    }
+    auto rx = rx_end_.load( std::memory_order_acquire );
+    return ( rx != nullptr ) && ( rx->alt_ != alt );
+}
+
+template<typename T>
 AltResult ChannelImpl< T >::alt_send( ItemType & item ) noexcept
 {
     BOOST_ASSERT( tx_end_.load( std::memory_order_relaxed ) != nullptr );
@@ -449,6 +465,18 @@ void ChannelImpl< T >::alt_recv_leave() noexcept
     rx_end_.store( nullptr, std::memory_order_release );
     // FIXME: make sure this does not leave a syncing end hanging
     alt_sync_.store( false, std::memory_order_release );
+}
+
+template<typename T>
+bool ChannelImpl< T >::alt_recv_ready( Alt * alt ) const noexcept
+{
+    BOOST_ASSERT( alt != nullptr );
+
+    if ( is_closed() ) {
+        return false;
+    }
+    auto tx = tx_end_.load( std::memory_order_acquire );
+    return ( tx != nullptr ) && ( tx->alt_ != alt );
 }
 
 template<typename T>

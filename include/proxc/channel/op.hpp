@@ -29,7 +29,7 @@ Rx< T > get_rx( std::tuple< Tx< T >, Rx< T > > & tpl )
 template<typename T>
 std::tuple< Tx< T >, Rx< T > > create() noexcept
 {
-    auto channel = std::make_shared< detail::SyncChannel< T > >();
+    auto channel = std::make_shared< detail::ChannelImpl< T > >();
     return std::make_tuple( Tx< T >{ channel }, Rx< T >{ channel } );
 }
 

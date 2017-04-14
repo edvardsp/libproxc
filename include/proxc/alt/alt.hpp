@@ -43,7 +43,7 @@ public:
     // send choice without guard
     template<typename ItemType>
     PROXC_WARN_UNUSED
-    Alt & send( channel::sync::Tx< ItemType > &,
+    Alt & send( channel::Tx< ItemType > &,
                 ItemType &&,
                 typename alt::ChoiceSend< ItemType >::FnType && = []{} ) noexcept;
 
@@ -51,21 +51,21 @@ public:
     template<typename ItemType>
     PROXC_WARN_UNUSED
     Alt & send_if( bool,
-                   channel::sync::Tx< ItemType > &,
+                   channel::Tx< ItemType > &,
                    ItemType &&,
                    typename alt::ChoiceSend< ItemType >::FnType && = []{} ) noexcept;
 
     // recv choice without guard
     template<typename ItemType>
     PROXC_WARN_UNUSED
-    Alt & recv( channel::sync::Rx< ItemType > &,
+    Alt & recv( channel::Rx< ItemType > &,
                 typename alt::ChoiceRecv< ItemType >::FnType && = []( ItemType ){} ) noexcept;
 
     // recv choice with guard
     template<typename ItemType>
     PROXC_WARN_UNUSED
     Alt & recv_if( bool,
-                   channel::sync::Rx< ItemType > &,
+                   channel::Rx< ItemType > &,
                    typename alt::ChoiceRecv< ItemType >::FnType && = []( ItemType ){} ) noexcept;
 
     // timeout without guard
@@ -110,7 +110,7 @@ Alt::Alt()
 // send choice without guard
 template<typename ItemType>
 Alt & Alt::send(
-    channel::sync::Tx< ItemType > & tx,
+    channel::Tx< ItemType > & tx,
     ItemType && item,
     typename alt::ChoiceSend< ItemType >::FnType && fn
 ) noexcept
@@ -129,7 +129,7 @@ Alt & Alt::send(
 template<typename ItemType>
 Alt & Alt::send_if(
     bool guard,
-    channel::sync::Tx< ItemType > & tx,
+    channel::Tx< ItemType > & tx,
     ItemType && item,
     typename alt::ChoiceSend< ItemType >::FnType && fn
 ) noexcept
@@ -145,7 +145,7 @@ Alt & Alt::send_if(
 // recv choice without guard
 template<typename ItemType>
 Alt & Alt::recv(
-    channel::sync::Rx< ItemType > & rx,
+    channel::Rx< ItemType > & rx,
     typename alt::ChoiceRecv< ItemType >::FnType && fn
 ) noexcept
 {
@@ -162,7 +162,7 @@ Alt & Alt::recv(
 template<typename ItemType>
 Alt & Alt::recv_if(
     bool guard,
-    channel::sync::Rx< ItemType > & rx,
+    channel::Rx< ItemType > & rx,
     typename alt::ChoiceRecv< ItemType >::FnType && fn
 ) noexcept
 {
@@ -245,7 +245,7 @@ void Alt::select()
         // FIXME: reserve? and if so, at what size?
         ready_.reserve( choices_.size() );
         for ( auto& choice : choices_ ) {
-            if ( choice->is_ready() ) {
+            if ( choice->is_ready( this ) ) {
                 ready_.push_back( choice.get() );
             }
         }

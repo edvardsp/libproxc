@@ -5,18 +5,15 @@
 #include <iostream>
 
 #include <proxc/scheduler.hpp>
-#include <proxc/channel/async.hpp>
-#include <proxc/channel/sync.hpp>
-#include <proxc/channel/op.hpp>
+#include <proxc/channel.hpp>
 
 #include "setup.hpp"
 
 using namespace proxc;
-namespace chan = channel::sync;
 
 using ItemType = std::size_t;
-using Tx = chan::Tx< ItemType >;
-using Rx = chan::Rx< ItemType >;
+using Tx = channel::Tx< ItemType >;
+using Rx = channel::Rx< ItemType >;
 
 //  0   successor
 //  |   | (++)  A
@@ -65,10 +62,10 @@ void consumer( Rx rx )
 
 int main()
 {
-    auto a_ch = chan::create< ItemType >();
-    auto b_ch = chan::create< ItemType >();
-    auto c_ch = chan::create< ItemType >();
-    auto d_ch = chan::create< ItemType >();
+    auto a_ch = channel::create< ItemType >();
+    auto b_ch = channel::create< ItemType >();
+    auto c_ch = channel::create< ItemType >();
+    auto d_ch = channel::create< ItemType >();
 
     auto self = proxc::Scheduler::self();
     auto suc = self->make_work( successor,

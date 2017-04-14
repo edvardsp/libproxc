@@ -8,27 +8,63 @@
 
 #include <proxc/parallel.hpp>
 #include <proxc/this_proc.hpp>
-#include <proxc/channel/sync.hpp>
-#include <proxc/channel/op.hpp>
+#include <proxc/channel.hpp>
 
 #include "setup.hpp"
 
 using namespace proxc;
 using OpResult = proxc::channel::OpResult;
 
+class Obj
+{
+private:
+    std::size_t value_;
+
+public:
+    Obj()
+        : value_{}
+    {}
+
+    Obj( std::size_t value )
+        : value_{ value }
+    {}
+
+    Obj( Obj const & ) = default;
+    Obj & operator = ( Obj const & ) = default;
+
+    Obj( Obj && other )
+    {
+        std::swap( value_, other.value_ );
+        other.value_ = std::size_t{};
+    }
+    Obj & operator = ( Obj && other )
+    {
+        std::swap( value_, other.value_ );
+        other.value_ = std::size_t{};
+        return *this;
+    }
+
+    bool operator == ( Obj const & other )
+    { return value_ == other.value_; }
+
+    template<typename CharT, typename TraitsT>
+    friend std::basic_ostream< CharT, TraitsT > &
+    operator << ( std::basic_ostream< CharT, TraitsT > & out, Obj const & obj )
+    { return out << "Obj{" << obj.value_ << "}"; }
+};
+
 void test_item_copy_move()
 {
-    using Tx = channel::sync::Tx< std::string >;
-    using Rx = channel::sync::Rx< std::string >;
-    auto ch = channel::sync::create< std::string >();
+    using ObjType = Obj;
+    auto ch = channel::create< ObjType >();
 
-    const std::string msg = "unique message";
+    const ObjType msg{ 1337 };
     parallel(
         proc(
-            [&msg]( Tx tx ) {
+            [&msg]( channel::Tx< ObjType > tx ) {
                 OpResult res;
                 auto duration = std::chrono::milliseconds( 1 );
-                std::string s{ msg };
+                ObjType s{ msg };
 
                 res = tx.send( s );
                 throw_assert( res == OpResult::Ok, "OpResult should be Ok" );
@@ -36,7 +72,7 @@ void test_item_copy_move()
 
                 res = tx.send( std::move( s ) );
                 throw_assert( res == OpResult::Ok, "OpResult should be Ok" );
-                throw_assert_equ( s, std::string{}, "item should have been moved" );
+                throw_assert_equ( s, ObjType{}, "item should have been moved" );
 
                 s = msg;
 
@@ -46,7 +82,7 @@ void test_item_copy_move()
 
                 res = tx.send_for( std::move( s ), duration );
                 throw_assert( res == OpResult::Ok, "OpResult should be Ok" );
-                throw_assert_equ( s, std::string{}, "item should have been moved" );
+                throw_assert_equ( s, ObjType{}, "item should have been moved" );
 
                 s = msg;
 
@@ -56,11 +92,11 @@ void test_item_copy_move()
 
                 res = tx.send_until( std::move( s ), std::chrono::steady_clock::now() + duration );
                 throw_assert( res == OpResult::Ok, "OpResult should be Ok" );
-                throw_assert_equ( s, std::string{}, "item should have been moved" );
+                throw_assert_equ( s, ObjType{}, "item should have been moved" );
             },
             channel::get_tx( ch ) ),
         proc(
-            [&msg]( Rx rx ) {
+            [&msg]( channel::Rx< ObjType > rx ) {
                 for ( auto i : rx ) {
                     throw_assert_equ( i, msg, "strings should match" );
                 }
@@ -71,7 +107,7 @@ void test_item_copy_move()
 
 void test_item_copy_move_timeout()
 {
-    auto ch = channel::sync::create< std::string >();
+    auto ch = channel::create< std::string >();
     auto tx = channel::get_tx( ch );
 
     auto duration = std::chrono::milliseconds( 1 );
@@ -99,7 +135,7 @@ void test_item_copy_move_timeout()
 void test_channel_sync_works()
 {
     int item = 42;
-    auto ch = channel::sync::create< decltype(item) >();
+    auto ch = channel::create< decltype(item) >();
     parallel(
         proc( [ &item ]( auto tx ) {
                 auto res = tx.send( item );
@@ -107,7 +143,7 @@ void test_channel_sync_works()
             },
             channel::get_tx( ch ) ),
         proc( [ &item ]( auto rx ) {
-                decltype(item) i;
+                decltype(item) i{};
                 auto res = rx.recv( i );
                 throw_assert( res == OpResult::Ok, "OpResult should be Ok" );
                 throw_assert_equ( i, item, "items should match" );
@@ -119,7 +155,7 @@ void test_channel_sync_works()
 void test_range_recv()
 {
     std::vector< bool > items = { true, false, false, true };
-    auto ch = channel::sync::create< bool >();
+    auto ch = channel::create< bool >();
     parallel(
         proc( [ &items ]( auto tx ) {
                 for ( auto i : items ) {
@@ -139,10 +175,10 @@ void test_range_recv()
 
 void test_timeout_one_side()
 {
-    auto tx_send_for   = channel::sync::create< std::string >();
-    auto tx_send_until = channel::sync::create< std::string >();
-    auto rx_recv_for   = channel::sync::create< std::string >();
-    auto rx_recv_until = channel::sync::create< std::string >();
+    auto tx_send_for   = channel::create< std::string >();
+    auto tx_send_until = channel::create< std::string >();
+    auto rx_recv_for   = channel::create< std::string >();
+    auto rx_recv_until = channel::create< std::string >();
     auto duration = std::chrono::milliseconds( 10 );
 
     parallel(
@@ -181,8 +217,8 @@ void test_timeout_one_side()
 
 void test_timeout_complete()
 {
-    auto ch_for   = channel::sync::create< std::string >();
-    auto ch_until = channel::sync::create< std::string >();
+    auto ch_for   = channel::create< std::string >();
+    auto ch_until = channel::create< std::string >();
 
     auto duration   = std::chrono::milliseconds( 10 );
 
@@ -227,8 +263,8 @@ void test_timeout_complete()
 
 void test_timeout_tx_delayed()
 {
-    auto ch_for   = channel::sync::create< std::string >();
-    auto ch_until = channel::sync::create< std::string >();
+    auto ch_for   = channel::create< std::string >();
+    auto ch_until = channel::create< std::string >();
 
     auto delay      = std::chrono::milliseconds( 5 );
     auto duration   = std::chrono::milliseconds( 20 );
@@ -280,8 +316,8 @@ void test_timeout_tx_delayed()
 
 void test_timeout_rx_delayed()
 {
-    auto ch_for   = channel::sync::create< std::string >();
-    auto ch_until = channel::sync::create< std::string >();
+    auto ch_for   = channel::create< std::string >();
+    auto ch_until = channel::create< std::string >();
 
     auto delay      = std::chrono::milliseconds( 5 );
     auto duration   = std::chrono::milliseconds( 20 );

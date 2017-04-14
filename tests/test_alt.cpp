@@ -2,8 +2,7 @@
 #include <proxc/config.hpp>
 
 #include <proxc/alt/alt.hpp>
-#include <proxc/channel/sync.hpp>
-#include <proxc/channel/op.hpp>
+#include <proxc/channel.hpp>
 
 #include "setup.hpp"
 
@@ -11,10 +10,10 @@ using namespace proxc;
 
 void test_it_works()
 {
-    auto up    = channel::sync::create< int >();
-    auto down  = channel::sync::create< int >();
-    auto left  = channel::sync::create< int >();
-    auto right = channel::sync::create< int >();
+    auto up    = channel::create< int >();
+    auto down  = channel::create< int >();
+    auto left  = channel::create< int >();
+    auto right = channel::create< int >();
 
     auto up_tx    = channel::get_tx( up );
     auto up_rx    = channel::get_rx( up );

@@ -4,8 +4,7 @@
 #include <proxc/config.hpp>
 
 #include <proxc/alt/choice_base.hpp>
-#include <proxc/channel/sync.hpp>
-#include <proxc/channel/op_result.hpp>
+#include <proxc/channel.hpp>
 #include <proxc/detail/delegate.hpp>
 
 #include <boost/assert.hpp>
@@ -18,7 +17,7 @@ class ChoiceRecv : public ChoiceBase
 {
 public:
     using ItemType = T;
-    using RxType = channel::sync::Rx< ItemType >;
+    using RxType = channel::Rx< ItemType >;
     using FnType = detail::delegate< void( ItemType ) >;
 
     ChoiceRecv( RxType & rx, FnType && fn )
@@ -26,14 +25,14 @@ public:
         , fn_{ std::forward< FnType >( fn )  }
     {}
 
-    bool is_ready() noexcept
+    bool is_ready( Alt * alt ) const noexcept
     {
-        return rx_.ready();
+        return rx_.alt_ready( alt );
     }
 
     void complete_task() noexcept
     {
-        ItemType item;
+        ItemType item{};
         auto res = rx_.recv( item );
         BOOST_ASSERT( res == channel::OpResult::Ok );
         fn_( std::move( item ) );

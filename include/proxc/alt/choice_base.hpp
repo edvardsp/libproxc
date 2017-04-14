@@ -4,6 +4,10 @@
 #include <proxc/config.hpp>
 
 PROXC_NAMESPACE_BEGIN
+
+// forward declaration
+class Alt;
+
 namespace alt {
 
 class ChoiceBase
@@ -21,7 +25,7 @@ public:
     ChoiceBase & operator = ( ChoiceBase && ) = delete;
 
     // interface
-    virtual bool is_ready() noexcept = 0;
+    virtual bool is_ready( Alt * ) const noexcept = 0;
 
     virtual void complete_task() noexcept = 0;
 };

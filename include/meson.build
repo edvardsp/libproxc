@@ -1,6 +1,7 @@
 
 install_headers('proxc.hpp')
 install_headers(
+    'proxc/channel.hpp',
     'proxc/config.hpp',
     'proxc/context.hpp',
     'proxc/parallel.hpp',
@@ -20,9 +21,11 @@ install_headers(
     'proxc/alt/choice_timeout.hpp',
     subdir : 'proxc/alt')
 install_headers(
-    'proxc/channel/async.hpp',
     'proxc/channel/op_result.hpp',
     'proxc/channel/sync.hpp',
+    'proxc/channel/tx.hpp',
+    'proxc/channel/rx.hpp',
+    'proxc/channel/op.hpp',
     subdir : 'proxc/channel')
 install_headers(
     'proxc/timer/interface.hpp',

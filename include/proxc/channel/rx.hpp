@@ -7,10 +7,29 @@
 
 #include <proxc/config.hpp>
 
+#include <proxc/context.hpp>
+#include <proxc/scheduler.hpp>
 #include <proxc/channel/sync.hpp>
 
 PROXC_NAMESPACE_BEGIN
+
+// forward declaration
+class Alt;
+
+namespace alt {
+
+template<typename T> class ChoiceRecv;
+
+} // namespace alt
+
 namespace channel {
+
+// forward declarations
+template<typename T> class Tx;
+
+////////////////////////////////////////////////////////////////////////////////
+// Rx
+////////////////////////////////////////////////////////////////////////////////
 
 template<typename T>
 class Rx
@@ -19,20 +38,19 @@ public:
     using ItemType = T;
 
 private:
-    using ChanType = detail::SyncChannel< ItemType >;
+    using ChanType = detail::ChannelImpl< ItemType >;
     using ChanPtr = std::shared_ptr< ChanType >;
 
     ChanPtr    chan_{ nullptr };
 
 public:
-    template<typename Rep, typename Period>
-    using Duration = typename ChanType::template Duration< Rep, Period >;
-    template<typename Clock, typename Dur>
-    using TimePoint = typename ChanType::template TimePoint< Clock, Dur >;
-
     Rx() = default;
     ~Rx()
-    { if ( chan_ ) { chan_->close(); } }
+    {
+        if ( chan_ ) {
+            chan_->close();
+        }
+    }
 
     // make non-copyable
     Rx( Rx const & )               = delete;
@@ -43,7 +61,9 @@ public:
     Rx & operator = ( Rx && ) = default;
 
     bool is_closed() const noexcept
-    { return chan_->is_closed(); }
+    {
+        return chan_->is_closed();
+    }
 
     void close() noexcept
     {
@@ -51,25 +71,32 @@ public:
         chan_.reset();
     }
 
-    bool ready() const noexcept
-    { return chan_->has_tx_(); }
-
     // normal recv operations
     OpResult recv( ItemType & item ) noexcept
-    { return chan_->recv( item ); }
-
-    ItemType recv() noexcept
-    { return std::move( chan_->recv() ); }
+    {
+        typename ChanType::ChanEnd rx{ Scheduler::running() };
+        return chan_->recv( rx, item );
+    }
 
     // recv operation with duration timeout
     template<typename Rep, typename Period>
-    OpResult recv_for( ItemType & item, Duration< Rep, Period > const & duration ) noexcept
-    { return chan_->recv_for( item, duration ); }
+    OpResult recv_for( ItemType & item,
+                       std::chrono::duration< Rep, Period > const & duration
+    ) noexcept
+    {
+        auto time_point = std::chrono::steady_clock::now() + duration;
+        return recv_until( item, time_point );
+    }
 
     // recv operation with timepoint timeout
     template<typename Clock, typename Dur>
-    OpResult recv_until( ItemType & item, TimePoint< Clock, Dur > const & timepoint ) noexcept
-    { return chan_->recv_until( item, timepoint ); }
+    OpResult recv_until( ItemType & item,
+                         std::chrono::time_point< Clock, Dur > const & time_point
+    ) noexcept
+    {
+        typename ChanType::ChanEnd rx{ Scheduler::running() };
+        return chan_->recv_until( rx, item, time_point );
+    }
 
 private:
     Rx( ChanPtr ptr )
@@ -80,6 +107,28 @@ private:
     friend std::tuple< Tx< U >, Rx< U > >
     create() noexcept;
 
+    friend class ::proxc::alt::ChoiceRecv< T >;
+
+    void alt_enter( typename ChanType::ChanEnd & rx ) noexcept
+    {
+        chan_->alt_recv_enter( rx );
+    }
+
+    void alt_leave() noexcept
+    {
+        chan_->alt_recv_leave();
+    }
+
+    bool alt_ready( Alt * alt ) const noexcept
+    {
+        return chan_->alt_recv_ready( alt );
+    }
+
+    AltResult alt_send( ItemType & item ) noexcept
+    {
+        return chan_->alt_recv( item );
+    }
+
 public:
     class Iterator
         : public std::iterator<
@@ -89,7 +138,7 @@ public:
     {
     private:
         using StorageType = typename std::aligned_storage<
-            sizeof(ItemType), alignof(ItemType)
+            sizeof( ItemType ), alignof( ItemType )
         >::type;
 
         Rx< T > *      rx_{ nullptr };
@@ -98,7 +147,7 @@ public:
         void increment() noexcept
         {
             BOOST_ASSERT( rx_ != nullptr );
-            ItemType item;
+            ItemType item{};
             auto res = rx_->recv( item );
             if ( res == OpResult::Ok ) {
                 auto addr = static_cast< void * >( std::addressof( storage_ ) );
@@ -166,7 +215,6 @@ end( Rx< T > & )
 {
     return typename Rx< T >::Iterator();
 }
-
 
 } // namespace channel
 PROXC_NAMESPACE_END

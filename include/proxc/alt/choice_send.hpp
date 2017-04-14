@@ -4,8 +4,7 @@
 #include <proxc/config.hpp>
 
 #include <proxc/alt/choice_base.hpp>
-#include <proxc/channel/sync.hpp>
-#include <proxc/channel/op_result.hpp>
+#include <proxc/channel.hpp>
 #include <proxc/detail/delegate.hpp>
 
 PROXC_NAMESPACE_BEGIN
@@ -16,7 +15,7 @@ class ChoiceSend : public ChoiceBase
 {
 public:
     using ItemType = T;
-    using TxType = channel::sync::Tx< ItemType >;
+    using TxType = channel::Tx< ItemType >;
     using FnType = detail::delegate< void( void ) >;
 
     ChoiceSend( TxType & tx, ItemType const & item, FnType && fn )
@@ -31,9 +30,9 @@ public:
         , fn_{ std::forward< FnType >( fn ) }
     {}
 
-    bool is_ready() noexcept
+    bool is_ready( Alt * alt ) const noexcept
     {
-        return tx_.ready();
+        return tx_.alt_ready( alt );
     }
 
     void complete_task() noexcept

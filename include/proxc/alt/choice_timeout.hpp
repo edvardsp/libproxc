@@ -33,7 +33,7 @@ public:
         , fn_{ std::move( fn ) }
     {}
 
-    bool is_ready() noexcept
+    bool is_ready( Alt * ) const noexcept
     {
         return ( time_point_ != std::chrono::steady_clock::time_point::min() )
             ? std::chrono::steady_clock::now() >= time_point_

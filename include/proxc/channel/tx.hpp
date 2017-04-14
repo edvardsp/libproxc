@@ -11,11 +11,20 @@
 #include <proxc/channel/sync.hpp>
 
 PROXC_NAMESPACE_BEGIN
+
+// forward declaration
+class Alt;
+
+namespace alt {
+
+template<typename T> class ChoiceSend;
+
+} // namespace alt
+
 namespace channel {
 
 // forward declaration
 template<typename T> class Rx;
-template<typename T> class ChoiceRecv;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Tx
@@ -36,7 +45,11 @@ private:
 public:
     Tx() = default;
     ~Tx()
-    { if ( chan_ ) { chan_->close(); } }
+    {
+        if ( chan_ ) {
+            chan_->close();
+        }
+    }
 
     // make non-copyable
     Tx( Tx const & )               = delete;
@@ -47,7 +60,9 @@ public:
     Tx & operator = ( Tx && ) = default;
 
     bool is_closed() const noexcept
-    { return chan_->is_closed(); }
+    {
+        return chan_->is_closed();
+    }
 
     void close() noexcept
     {
@@ -70,45 +85,46 @@ public:
         return chan_->send( tx, i );
     }
 
-    // send operations with duration timeout
-    template<typename Rep, typename Period>
-    OpResult send_for( ItemType const & item,
-                       std::chrono::duration< Rep, Period > const & duration
+    // send operations with timepoint timeout
+    template<typename Clock, typename Dur>
+    OpResult send_until( ItemType && item,
+                         std::chrono::time_point< Clock, Dur > const & time_point
     ) noexcept
     {
-        auto time_point = std::chrono::steady_clock::now() + duration;
-        return send_until( item, time_point );
+        typename ChanType::ChanEnd tx{ Scheduler::running() };
+        return chan_->send_until( tx, item, time_point );
     }
 
+    template<typename Clock, typename Dur>
+    OpResult send_until( ItemType const & item,
+                         std::chrono::time_point< Clock, Dur > const & time_point
+    ) noexcept
+    {
+        typename ChanType::ChanEnd tx{ Scheduler::running() };
+        ItemType i{ item };
+        return chan_->send_until( tx, i, time_point );
+    }
+
+    // send operations with duration timeout
     template<typename Rep, typename Period>
     OpResult send_for( ItemType && item,
                        std::chrono::duration< Rep, Period > const & duration
     ) noexcept
     {
         auto time_point = std::chrono::steady_clock::now() + duration;
-        return chan_->send_for( std::move( item ), duration );
+        return send_until( std::move( item ), time_point );
     }
 
-    // send operations with timepoint timeout
-    template<typename Clock, typename Dur>
-    OpResult send_until( ItemType const & item,
-                         std::chrono::time_point< Clock, Dur > const & timepoint
+    template<typename Rep, typename Period>
+    OpResult send_for( ItemType const & item,
+                       std::chrono::duration< Rep, Period > const & duration
     ) noexcept
     {
-        typename ChanType::ChanEnd tx{ Scheduler::running() };
+        auto time_point = std::chrono::steady_clock::now() + duration;
         ItemType i{ item };
-        return chan_->send_until( i, timepoint );
+        return send_until( std::move( i ), time_point );
     }
 
-    template<typename Clock, typename Dur>
-    OpResult send_until( ItemType && item,
-                         std::chrono::time_point< Clock, Dur > const & timepoint
-    ) noexcept
-    {
-        typename ChanType::ChanEnd tx{ Scheduler::running() };
-        ItemType i{ std::move( item ) };
-        return chan_->send_until( i, timepoint );
-    }
 
 private:
     Tx( ChanPtr ptr )
@@ -119,7 +135,7 @@ private:
     friend std::tuple< Tx< U >, Rx< U > >
     create() noexcept;
 
-    friend class ChoiceRecv< T >;
+    friend class ::proxc::alt::ChoiceSend< T >;
 
     void alt_enter( typename ChanType::ChanEnd & tx ) noexcept
     {
@@ -131,9 +147,9 @@ private:
         chan_->alt_send_leave();
     }
 
-    bool alt_ready() const noexcept
+    bool alt_ready( Alt * alt ) const noexcept
     {
-        return chan_->has_rx_();
+        return chan_->alt_send_ready( alt );
     }
 
     AltResult alt_send( ItemType & item ) noexcept
