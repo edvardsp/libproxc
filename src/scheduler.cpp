@@ -7,6 +7,7 @@
 
 #include <proxc/context.hpp>
 #include <proxc/scheduler.hpp>
+#include <proxc/alt/alt.hpp>
 
 #include <proxc/scheduling_policy/policy_base.hpp>
 #include <proxc/scheduling_policy/round_robin.hpp>
@@ -317,6 +318,12 @@ void Scheduler::wakeup_sleep() noexcept
         ctx->time_point_ = (TimePointType::max)();
         schedule( ctx );
     }
+}
+
+void Scheduler::wakeup_alt( Alt * alt ) noexcept
+{
+    BOOST_ASSERT( alt != nullptr );
+    alt->maybe_wakeup();
 }
 
 void Scheduler::wakeup_waiting_on(Context * ctx) noexcept

@@ -26,6 +26,9 @@
 
 PROXC_NAMESPACE_BEGIN
 
+// forward declarations
+class Alt;
+
 namespace detail {
 
 // Schwarz counter
@@ -124,6 +127,7 @@ public:
     bool sleep_until( TimePointType const &, CtxSwitchData * = nullptr ) noexcept;
 
     void wakeup_sleep() noexcept;
+    static void wakeup_alt( Alt * ) noexcept;
     void wakeup_waiting_on( Context * ) noexcept;
     void cleanup_terminated() noexcept;
 

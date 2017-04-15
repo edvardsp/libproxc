@@ -23,9 +23,6 @@
 #include <boost/assert.hpp>
 
 PROXC_NAMESPACE_BEGIN
-namespace detail {
-
-} // namespace detail
 
 class Alt
 {
@@ -39,7 +36,10 @@ private:
 
     Spinlock splk_;
 
+    alignas(cache_alignment) std::atomic< bool >         readying_{ false };
     alignas(cache_alignment) std::atomic< Context * >    wakeup_{ nullptr };
+
+    friend class ::proxc::Scheduler;
 
 public:
     Alt();
@@ -60,12 +60,25 @@ public:
                 ItemType &&,
                 typename alt::ChoiceSend< ItemType >::FnType && = []{} ) noexcept;
 
+    template<typename ItemType>
+    PROXC_WARN_UNUSED
+    Alt & send( channel::Tx< ItemType > &,
+                ItemType const &,
+                typename alt::ChoiceSend< ItemType >::FnType && = []{} ) noexcept;
+
     // send choice with guard
     template<typename ItemType>
     PROXC_WARN_UNUSED
     Alt & send_if( bool,
                    channel::Tx< ItemType > &,
                    ItemType &&,
+                   typename alt::ChoiceSend< ItemType >::FnType && = []{} ) noexcept;
+
+    template<typename ItemType>
+    PROXC_WARN_UNUSED
+    Alt & send_if( bool,
+                   channel::Tx< ItemType > &,
+                   ItemType const &,
                    typename alt::ChoiceSend< ItemType >::FnType && = []{} ) noexcept;
 
     // recv choice without guard
@@ -109,8 +122,12 @@ public:
     void select();
 
 private:
-    void wait() noexcept;
+    [[noreturn]]
+    void select_0();
+    alt::ChoiceBase * select_1() noexcept;
+    alt::ChoiceBase * select_n() noexcept;
 
+    void maybe_wait() noexcept;
     void maybe_wakeup() noexcept;
 };
 
@@ -128,14 +145,34 @@ Alt & Alt::send(
     typename alt::ChoiceSend< ItemType >::FnType && fn
 ) noexcept
 {
-    choices_.emplace_back(
-        new alt::ChoiceSend< ItemType >{
-            end_,
-            tx,
-            std::forward< ItemType >( item ),
-            std::forward< typename alt::ChoiceSend< ItemType >::FnType >( fn )
-        }
-    );
+    if ( ! tx.is_closed() ) {
+        choices_.push_back(
+            std::make_unique< alt::ChoiceSend< ItemType > >(
+                end_,
+                tx,
+                std::move( item ),
+                std::forward< typename alt::ChoiceSend< ItemType >::FnType >( fn )
+            ) );
+    }
+    return *this;
+}
+
+template<typename ItemType>
+Alt & Alt::send(
+    channel::Tx< ItemType > & tx,
+    ItemType const & item,
+    typename alt::ChoiceSend< ItemType >::FnType && fn
+) noexcept
+{
+    if ( ! tx.is_closed() ) {
+        choices_.push_back(
+            std::make_unique< alt::ChoiceSend< ItemType > >(
+                end_,
+                tx,
+                item,
+                std::forward< typename alt::ChoiceSend< ItemType >::FnType >( fn )
+            ) );
+    }
     return *this;
 }
 
@@ -150,7 +187,23 @@ Alt & Alt::send_if(
 {
     return ( guard )
         ? send( tx,
-                std::forward< ItemType >( item ),
+                std::move( item ),
+                std::forward< typename alt::ChoiceSend< ItemType >::FnType >( fn ) )
+        : *this
+        ;
+}
+
+template<typename ItemType>
+Alt & Alt::send_if(
+    bool guard,
+    channel::Tx< ItemType > & tx,
+    ItemType const & item,
+    typename alt::ChoiceSend< ItemType >::FnType && fn
+) noexcept
+{
+    return ( guard )
+        ? send( tx,
+                item,
                 std::forward< typename alt::ChoiceSend< ItemType >::FnType >( fn ) )
         : *this
         ;
@@ -163,13 +216,14 @@ Alt & Alt::recv(
     typename alt::ChoiceRecv< ItemType >::FnType && fn
 ) noexcept
 {
-    choices_.emplace_back(
-        new alt::ChoiceRecv< ItemType >{
-            end_,
-            rx,
-            std::forward< typename alt::ChoiceRecv< ItemType >::FnType >( fn )
-        }
-    );
+    if ( ! rx.is_closed() ) {
+        choices_.push_back(
+            std::make_unique< alt::ChoiceRecv< ItemType > >(
+                end_,
+                rx,
+                std::forward< typename alt::ChoiceRecv< ItemType >::FnType >( fn )
+            ) );
+    }
     return *this;
 }
 
@@ -249,56 +303,85 @@ void Alt::select()
         choices_.emplace_back( timeout_.release() );
     }
 
-    if ( choices_.empty() ) {
-        // suspend indefinitely, should never return
-        Scheduler::self()->wait();
-        BOOST_ASSERT_MSG( false, "unreachable" );
-        throw UnreachableError{};
+    alt::ChoiceBase * selected = nullptr;
+    switch ( choices_.size() ) {
+    case 0:  select_0(); // never returns
+    case 1:  selected = select_1(); break;
+    default: selected = select_n(); break;
+    }
 
-    } else {
-        alt::ChoiceBase * selected = nullptr;
-        std::vector< alt::ChoiceBase * > ready;
-        // FIXME: reserve? and if so, at what size?
-        ready.reserve( choices_.size() );
+    BOOST_ASSERT( selected != nullptr );
+    selected->run_func();
+}
 
-        while ( selected == nullptr ) {
-            ready.clear();
-            for ( auto& choice : choices_ ) {
-                if ( choice->is_ready( this ) ) {
-                    ready.push_back( choice.get() );
-                }
-            }
+void Alt::select_0()
+{
+    // suspend indefinitely, should never return
+    Scheduler::self()->wait();
+    BOOST_ASSERT_MSG( false, "unreachable" );
+    throw UnreachableError{};
+}
 
-            if ( ready.empty() ) {
-                wait();
-                // woken up, one or more cases should be ready
-                continue;
-            }
+alt::ChoiceBase * Alt::select_1() noexcept
+{
+    for (;;) {
+        alt::ChoiceBase * ready = choices_.begin()->get();
+        readying_.store( false, std::memory_order_release );
 
-            static thread_local std::mt19937 rng{ std::random_device{}() };
-            std::shuffle( ready.begin(), ready.end(), rng );
-
-            for ( auto& choice : ready ) {
-                if ( choice->try_complete() ) {
-                    selected = choice;
-                    break;
-                }
-            }
+        if ( ! ready->is_ready( this ) ) {
+            maybe_wait();
+            // woken up, case should be ready
+            continue;
         }
 
-        BOOST_ASSERT( selected != nullptr );
-        selected->try_complete();
+        if ( ready->try_complete() ) {
+            return ready;
+        }
     }
 }
 
-void Alt::wait() noexcept
+ alt::ChoiceBase * Alt::select_n() noexcept
+{
+    std::vector< alt::ChoiceBase * > ready;
+    // FIXME: reserve? and if so, at what size?
+    ready.reserve( choices_.size() );
+
+    for (;;) {
+        ready.clear();
+        readying_.store( false, std::memory_order_release );
+        for ( auto& choice : choices_ ) {
+            if ( choice->is_ready( this ) ) {
+                ready.push_back( choice.get() );
+            }
+        }
+
+        if ( ready.empty() ) {
+            maybe_wait();
+            // woken up, one or more cases should be ready
+            continue;
+        }
+
+        static thread_local std::mt19937 rng{ std::random_device{}() };
+        std::shuffle( ready.begin(), ready.end(), rng );
+
+        for ( auto& choice : ready ) {
+            if ( choice->try_complete() ) {
+                return choice;
+            }
+        }
+    }
+}
+
+void Alt::maybe_wait() noexcept
 {
     // FIXME: race condition between ready check and this call
     std::unique_lock< Spinlock > lk{ splk_ };
 
-    wakeup_.store( end_.ctx_, std::memory_order_release );
-    Scheduler::self()->wait( & lk, true );
-    wakeup_.store( nullptr, std::memory_order_release );
+    if ( ! readying_.exchange( false, std::memory_order_acq_rel ) ) {
+        wakeup_.store( end_.ctx_, std::memory_order_release );
+        Scheduler::self()->wait( & lk, true );
+        wakeup_.store( nullptr, std::memory_order_release );
+    }
 }
 
 void Alt::maybe_wakeup() noexcept
@@ -308,6 +391,8 @@ void Alt::maybe_wakeup() noexcept
     auto ctx = wakeup_.exchange( nullptr, std::memory_order_acq_rel );
     if ( ctx != nullptr ) {
         Scheduler::self()->schedule( ctx );
+    } else {
+        readying_.store( true, std::memory_order_release );
     }
 }
 

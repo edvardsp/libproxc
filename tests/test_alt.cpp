@@ -1,55 +1,68 @@
 
+#include <iostream>
+#include <vector>
+
 #include <proxc/config.hpp>
 
 #include <proxc/alt/alt.hpp>
 #include <proxc/channel.hpp>
+#include <proxc/parallel.hpp>
 
 #include "setup.hpp"
+#include "obj.hpp"
 
 using namespace proxc;
 
-void test_it_works()
+void test_all_cases()
 {
-    auto up    = channel::create< int >();
-    auto down  = channel::create< int >();
-    auto left  = channel::create< int >();
-    auto right = channel::create< int >();
+    auto tx_ch = channel::create< int >();
+    auto rx_ch = channel::create< int >();
 
-    auto up_tx    = channel::get_tx( up );
-    auto up_rx    = channel::get_rx( up );
-    auto down_tx  = channel::get_tx( down );
-    auto down_rx  = channel::get_rx( down );
-    auto left_tx  = channel::get_tx( left );
-    auto left_rx  = channel::get_rx( left );
-    auto right_tx = channel::get_tx( right );
-    auto right_rx = channel::get_rx( right );
+    auto tx = channel::get_tx( tx_ch );
+    auto rx = channel::get_rx( rx_ch );
+
+    int item = 42;
 
     Alt()
         .recv(
-            up_rx )
+            rx )
         .recv(
-            down_rx,
+            rx,
             []( auto ) {
                 // some work
             } )
         .recv_if( true,
-            left_rx )
+            rx )
         .recv_if( true,
-            right_rx,
+            rx,
             []( auto ) {
                 // some work
             } )
         .send(
-            up_tx, 1 )
+            tx, 1 )
         .send(
-            down_tx, 2,
+            tx, item )
+        .send(
+            tx, 2,
+            []() {
+                // some work
+            } )
+        .send(
+            tx, item,
             []() {
                 // some work
             } )
         .send_if( true,
-            left_tx, 3 )
+            tx, 3 )
         .send_if( true,
-            right_tx, 4,
+            tx, item)
+        .send_if( true,
+            tx, 4,
+            []() {
+
+            } )
+        .send_if( true,
+            tx, item,
             []() {
 
             } )
@@ -80,9 +93,190 @@ void test_it_works()
         .select();
 }
 
+void test_single_send_case()
+{
+    std::vector< int > ints = { 0, -1, 2, -3, 4, -5, 6, -7, 8, -9, 10 };
+    auto ch = channel::create< int >();
+    parallel(
+        proc(
+            [&ints]( channel::Tx< int > tx ) {
+                for ( auto& i : ints ) {
+                    Alt()
+                        .send( tx, i )
+                        .select();
+                }
+            }, channel::get_tx( ch ) ),
+        proc(
+            [&ints]( channel::Rx< int > rx ) {
+                for ( auto& i : ints ) {
+                    int item{};
+                    auto res = rx.recv( item );
+                    throw_assert( res == channel::OpResult::Ok, "OpResult should be Ok" );
+                    throw_assert_equ( item, i, "items should match" );
+                }
+            }, channel::get_rx( ch ) )
+    );
+}
+
+void test_single_recv_case()
+{
+    std::vector< int > ints = { 0, -1, 2, -3, 4, -5, 6, -7, 8, -9, 10 };
+    auto ch = channel::create< int >();
+    parallel(
+        proc(
+            [&ints]( channel::Tx< int > tx ) {
+                for ( auto& i : ints ) {
+                    auto res = tx.send( i );
+                    throw_assert( res == channel::OpResult::Ok, "OpResult should be Ok" );
+                }
+            }, channel::get_tx( ch ) ),
+        proc(
+            [&ints]( channel::Rx< int > rx ) {
+                for ( auto& i : ints ) {
+                    Alt()
+                        .recv( rx,
+                            [&i]( int item ) {
+                                throw_assert( item == i, "items should match" );
+                            } )
+                        .select();
+                }
+            }, channel::get_rx( ch ) )
+    );
+}
+
+void test_two_alt_single_case()
+{
+    std::vector< int > ints = { 23, 1, -2, 0, 3232, 42 };
+    auto ch = channel::create< int >();
+    parallel(
+        proc(
+            [&ints]( channel::Tx< int > tx ) {
+                for ( auto& i : ints ) {
+                    Alt()
+                        .send( tx, i )
+                        .select();
+                }
+            }, channel::get_tx( ch ) ),
+        proc(
+            [&ints]( channel::Rx< int > rx ) {
+                for ( auto& i : ints ) {
+                    Alt()
+                        .recv( rx,
+                            [&i]( int item ) {
+                                throw_assert_equ( item, i, "items should match" );
+                            } )
+                        .select();
+                }
+            }, channel::get_rx( ch ) )
+    );
+}
+
+void test_alting_triangle()
+{
+    using T = Obj;
+    auto ch1 = channel::create< T >();
+    auto ch2 = channel::create< T >();
+    auto ch3 = channel::create< T >();
+    std::size_t num = 10;
+
+    parallel(
+        proc( [num]( channel::Tx< T > tx, channel::Rx< T > rx )
+        {
+            std::size_t n_tx = 0, n_rx = 0;
+            while ( n_tx < num && n_rx < num ) {
+                Alt()
+                    .send_if( n_tx < num,
+                        tx, Obj{ n_tx },
+                        [&n_tx]{ ++n_tx; } )
+                    .recv_if( n_rx < num,
+                        rx,
+                        [&n_rx]( Obj ){ ++n_rx; } )
+                    .select();
+            }
+        }, channel::get_tx( ch1 ), channel::get_rx( ch2 ) ),
+        proc( [num]( channel::Tx< T > tx, channel::Rx< T > rx )
+        {
+            std::size_t n_tx = 0, n_rx = 0;
+            while ( n_tx < num && n_rx < num ) {
+                Alt()
+                    .send_if( n_tx < num,
+                        tx, Obj{ n_tx },
+                        [&n_tx]{ ++n_tx; } )
+                    .recv_if( n_rx < num,
+                        rx,
+                        [&n_rx]( Obj ){ ++n_rx; } )
+                    .select();
+            }
+        }, channel::get_tx( ch2 ), channel::get_rx( ch3 ) ),
+        proc( [num]( channel::Tx< T > tx, channel::Rx< T > rx )
+        {
+            std::size_t n_tx = 0, n_rx = 0;
+            while ( n_tx < num && n_rx < num ) {
+                Alt()
+                    .send_if( n_tx < num,
+                        tx, Obj{ n_tx },
+                        [&n_tx]{ ++n_tx; } )
+                    .recv_if( n_rx < num,
+                        rx,
+                        [&n_rx]( Obj ){ ++n_rx; } )
+                    .select();
+            }
+        }, channel::get_tx( ch3 ), channel::get_rx( ch1 ) )
+    );
+}
+
+void test_simple_ex()
+{
+    std::vector< int > ints1 = { 5, 12, -9, 45, 93, 1 };
+    std::vector< int > ints2 = { -1, 2, -3, 4 };
+    auto ch1 = channel::create< int >();
+    auto ch2 = channel::create< int >();
+    parallel(
+        proc(
+            [&ints1]( channel::Tx< int > tx ) {
+                for ( auto& i : ints1 ) {
+                    auto res = tx.send( i );
+                    throw_assert( res == channel::OpResult::Ok, "OpResult should be Ok" );
+                }
+            }, channel::get_tx( ch1 ) ),
+        proc(
+            [&ints2]( channel::Tx< int > tx ) {
+                for ( auto& i : ints2 ) {
+                    auto res = tx.send( i );
+                    throw_assert( res == channel::OpResult::Ok, "OpResult should be Ok" );
+                }
+            }, channel::get_tx( ch2 ) ),
+        proc(
+            [&ints1,&ints2]( channel::Rx< int > rx1, channel::Rx< int > rx2 ) {
+                auto it1 = ints1.begin(), it2 = ints2.begin();
+                while ( it1 != ints1.end() || it2 != ints2.end() ) {
+                    Alt()
+                        .recv(
+                            rx1,
+                            [&it1]( int item ) {
+                                int i = *it1++;
+                                throw_assert_equ( item, i, "items should match" );
+                            } )
+                        .recv(
+                            rx2,
+                            [&it2]( int item ) {
+                                int i = *it2++;
+                                throw_assert_equ( item, i, "items should match" );
+                            } )
+                        .select();
+                }
+            }, channel::get_rx( ch1 ), channel::get_rx( ch2 ) )
+    );
+}
+
 int main()
 {
-    test_it_works();
+    test_all_cases();
+    test_single_send_case();
+    test_single_recv_case();
+    test_two_alt_single_case();
+    test_alting_triangle();
+    test_simple_ex();
 
     return 0;
 }

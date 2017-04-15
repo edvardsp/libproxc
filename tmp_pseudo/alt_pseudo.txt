@@ -22,6 +22,7 @@ void alt_pseudocode()
     ready = vector< Case >; // empty, capacity = ???
     while ( selected == nullptr ) {
         ready.clear();
+        // readying_ = false, wakeup_ = nullptr
         foreach c in cases {
             if ( c.ready() ) {
                 ready.insert( c );

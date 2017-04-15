@@ -16,9 +16,6 @@
 
 PROXC_NAMESPACE_BEGIN
 
-// forward declaration
-class Alt;
-
 namespace channel {
 
 struct alignas(cache_alignment) ChanEnd
@@ -31,6 +28,14 @@ struct alignas(cache_alignment) ChanEnd
 };
 
 namespace detail {
+
+enum class Sync
+{
+    Vacant,
+    Offered,
+    Accepted,
+    Rejected,
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 // ChannelImpl
@@ -60,7 +65,13 @@ private:
     alignas(cache_alignment) std::atomic< Payload * >    payload_{ nullptr };
 
     // used to synchronize during alting, on either Tx or Rx end
-    alignas(cache_alignment) std::atomic< bool >    alt_sync_{ false };
+    alignas(cache_alignment) std::atomic< Sync >    alt_sync_{ Sync::Vacant };
+
+    inline bool is_sync_state( Sync state ) const noexcept
+    { return state == alt_sync_.load( std::memory_order_release ); }
+
+    inline void set_sync_state( Sync state ) noexcept
+    { return alt_sync_.store( state, std::memory_order_acquire ); }
 
 public:
     ChannelImpl() = default;
@@ -140,8 +151,7 @@ void ChannelImpl< T >::close() noexcept
     if ( tx != nullptr ) {
         // FIXME: call item destructor?
         if ( tx->alt_ != nullptr ) {
-            // FIXME
-            /* tx->alt_->maybe_wakeup(); */
+            Scheduler::wakeup_alt( tx->alt_ );
         } else {
             BOOST_ASSERT( tx->ctx_ != nullptr );
             Scheduler::self()->schedule( tx->ctx_ );
@@ -150,8 +160,7 @@ void ChannelImpl< T >::close() noexcept
     auto rx = rx_end_.exchange( nullptr, std::memory_order_acq_rel );
     if ( rx != nullptr ) {
         if ( rx->alt_ != nullptr ) {
-            // FIXME
-            /* rx->alt_->maybe_wakeup(); */
+            Scheduler::wakeup_alt( rx->alt_ );
         } else {
             BOOST_ASSERT( rx->ctx_ != nullptr );
             Scheduler::self()->schedule( rx->ctx_ );
@@ -187,12 +196,12 @@ OpResult ChannelImpl< T >::send( ChanEnd & tx, ItemType & item ) noexcept
     Payload payload{ item };
     payload_.store( std::addressof( payload ), std::memory_order_release );
 
-    auto rx = rx_end_.exchange( nullptr, std::memory_order_acq_rel );
+    auto rx = rx_end_.load( std::memory_order_acquire );
     if ( rx != nullptr ) {
         if ( rx->alt_ != nullptr ) {
-            // FIXME
-            /* rx->alt_->maybe_wakeup(); */
-        } else {
+            Scheduler::wakeup_alt( rx->alt_ );
+        } else if ( rx->alt_ == nullptr ) {
+            rx_end_.store( nullptr, std::memory_order_release );
             Scheduler::self()->schedule( rx->ctx_ );
         }
     }
@@ -216,29 +225,23 @@ OpResult ChannelImpl< T >::recv( ChanEnd & rx, ItemType & item ) noexcept
 
         auto tx = tx_end_.load( std::memory_order_acquire );
         if ( tx != nullptr ) {
-            if ( tx->alt_ && ! alt_sync_.load( std::memory_order_acquire ) ) {
+            if ( tx->alt_ == nullptr || is_sync_state( Sync::Accepted ) ) {
+                set_sync_state( Sync::Vacant );
+                tx_end_.store( nullptr, std::memory_order_release );
+                auto payload = payload_.exchange( nullptr, std::memory_order_acq_rel );
+                BOOST_ASSERT( payload != nullptr );
+
                 // order matters here
-                rx_end_.store( std::addressof( rx ), std::memory_order_release );
-                // FIXME
-                /* tx->alt_->maybe_wakeup(); */
+                item = std::move( payload->item_ );
+                Scheduler::self()->schedule( tx->ctx_ );
+                return OpResult::Ok;
 
-                Scheduler::self()->wait( & lk, true );
-
-                if ( ! alt_sync_.load( std::memory_order_acquire ) ) {
-                    continue;
-                }
-                // alting Tx synced, can now consume item
+            } else if ( tx->alt_ != nullptr ) {
+                Scheduler::wakeup_alt( tx->alt_ );
             }
-
-            tx_end_.store( nullptr, std::memory_order_release );
-            auto payload = payload_.exchange( nullptr, std::memory_order_acq_rel );
-            BOOST_ASSERT( payload != nullptr );
-            // order matters here
-            item = std::move( payload->item_ );
-            Scheduler::self()->schedule( tx->ctx_ );
-            return OpResult::Ok;
         }
 
+        // wait because no Tx, or Alt Tx has not synced
         rx_end_.store( std::addressof( rx ), std::memory_order_release );
         Scheduler::self()->wait( & lk, true );
         // Tx should be ready
@@ -281,8 +284,7 @@ OpResult ChannelImpl< T >::send_until(
     auto rx = rx_end_.exchange( nullptr, std::memory_order_acq_rel );
     if ( rx != nullptr ) {
         if ( rx->alt_ != nullptr ) {
-            // FIXME
-            /* rx->alt_->maybe_wakeup(); */
+            Scheduler::wakeup_alt( rx->alt_ );
         } else {
             Scheduler::self()->schedule( rx->ctx_ );
         }
@@ -329,18 +331,17 @@ OpResult ChannelImpl< T >::recv_until(
 
         auto tx = tx_end_.load( std::memory_order_acquire );
         if ( tx != nullptr ) {
-            if ( tx->alt_ && ! alt_sync_.load( std::memory_order_acquire ) ) {
+            if ( tx->alt_ && is_sync_state( Sync::Vacant ) ) {
                 // order matters here
                 rx_end_.store( std::addressof( rx ), std::memory_order_release );
-                // FIXME
-                /* tx->alt_->maybe_wakeup(); */
+                Scheduler::wakeup_alt( tx->alt_ );
 
                 if ( Scheduler::self()->wait_until( time_point, & lk, true ) ) {
                     rx_end_.store( nullptr, std::memory_order_release );
                     return OpResult::Timeout;
                 }
 
-                if ( ! alt_sync_.load( std::memory_order_acquire ) ) {
+                if ( ! is_sync_state( Sync::Accepted ) ) {
                     continue;
                 }
                 // alting Tx synced, can now consume item
@@ -367,12 +368,13 @@ OpResult ChannelImpl< T >::recv_until(
 template<typename T>
 void ChannelImpl< T >::alt_send_enter( ChanEnd & tx ) noexcept
 {
-    BOOST_ASSERT( tx_end_.load( std::memory_order_relaxed ) == nullptr );
+    // FIXME: commented out for now, as this does not allow multiple sends
+    // from the same alt. Might delete this alter.
+    /* BOOST_ASSERT( tx_end_.load( std::memory_order_relaxed ) == nullptr ); */
     BOOST_ASSERT( payload_.load( std::memory_order_relaxed ) == nullptr );
 
     std::unique_lock< Spinlock > lk{ splk_ };
     tx_end_.store( std::addressof( tx ), std::memory_order_release );
-    alt_sync_.store( false, std::memory_order_release );
 }
 
 template<typename T>
@@ -380,7 +382,14 @@ void ChannelImpl< T >::alt_send_leave() noexcept
 {
     std::unique_lock< Spinlock > lk{ splk_ };
     tx_end_.store( nullptr, std::memory_order_release );
-    alt_sync_.store( false, std::memory_order_release );
+    auto state = alt_sync_.exchange( Sync::Vacant, std::memory_order_release );
+    if ( Sync::Vacant != state && Sync::Accepted != state ) {
+        // other end is waiting for sync answer
+        auto rx = rx_end_.load( std::memory_order_acquire );
+        BOOST_ASSERT( rx != nullptr );
+        set_sync_state( Sync::Rejected );
+        Scheduler::self()->schedule( rx->ctx_ );
+    }
 }
 
 template<typename T>
@@ -392,13 +401,17 @@ bool ChannelImpl< T >::alt_send_ready( Alt * alt ) const noexcept
         return false;
     }
     auto rx = rx_end_.load( std::memory_order_acquire );
-    return ( rx != nullptr ) && ( rx->alt_ != alt );
+    auto state = alt_sync_.load( std::memory_order_release );
+    return ( rx != nullptr ) &&
+           ( rx->alt_ != alt ) &&
+           ( Sync::Vacant == state || Sync::Offered == state );
 }
 
 template<typename T>
 AltResult ChannelImpl< T >::alt_send( ItemType & item ) noexcept
 {
     BOOST_ASSERT( tx_end_.load( std::memory_order_relaxed ) != nullptr );
+    BOOST_ASSERT( is_sync_state( Sync::Vacant ) || is_sync_state( Sync::Offered ) );
 
     std::unique_lock< Spinlock > lk{ splk_ };
 
@@ -406,7 +419,7 @@ AltResult ChannelImpl< T >::alt_send( ItemType & item ) noexcept
         return AltResult::Closed;
     }
 
-    auto rx = rx_end_.exchange( nullptr, std::memory_order_acq_rel );
+    auto rx = rx_end_.load( std::memory_order_release );
     if ( rx == nullptr ) {
         return AltResult::NoEnd;
     }
@@ -415,29 +428,42 @@ AltResult ChannelImpl< T >::alt_send( ItemType & item ) noexcept
     payload_.store( std::addressof( payload ), std::memory_order_release );
 
     if ( rx->alt_ != nullptr ) {
-        if ( alt_sync_.load( std::memory_order_acquire ) ) {
+        auto sync = alt_sync_.load( std::memory_order_release );
+        if ( Sync::Offered == sync ) {
             // accept the sync
+            set_sync_state( Sync::Accepted );
             Scheduler::self()->schedule( rx->ctx_ );
 
             Scheduler::self()->wait( & lk );
             // Rx consumed item
             return AltResult::Ok;
 
-        } else {
+        } else if ( Sync::Vacant == sync ) {
             // offer sync
-            alt_sync_.store( true, std::memory_order_release );
-            // FIXME
-            // rx->alt_->maybe_wakeup();
-            Scheduler::self()->wait( & lk );
-            // if alt_sync is true, Rx consumed item
-            return ( alt_sync_.load( std::memory_order_acquire ) )
-                ? AltResult::Ok
-                : AltResult::SyncFailed
-                ;
+            set_sync_state( Sync::Offered );
+            Scheduler::wakeup_alt( rx->alt_ );
+
+            Scheduler::self()->wait( & lk, true );
+
+            auto answer = alt_sync_.exchange( Sync::Vacant, std::memory_order_acq_rel );
+            if ( answer == Sync::Accepted ) {
+                return AltResult::Ok;
+            } else {
+                payload_.store( nullptr, std::memory_order_release );
+                return AltResult::SyncFailed;
+            }
+
+        } else {
+            payload_.store( nullptr, std::memory_order_release );
+            return AltResult::SyncFailed;
         }
 
     } else {
-        alt_sync_.store( true, std::memory_order_release );
+        rx_end_.store( nullptr, std::memory_order_release );
+
+        // order matters here
+        set_sync_state( Sync::Accepted );
+        // sync state is reset by Rx
         Scheduler::self()->schedule( rx->ctx_ );
 
         Scheduler::self()->wait( & lk );
@@ -450,13 +476,12 @@ AltResult ChannelImpl< T >::alt_send( ItemType & item ) noexcept
 template<typename T>
 void ChannelImpl< T >::alt_recv_enter( ChanEnd & rx ) noexcept
 {
-    BOOST_ASSERT( rx_end_.load( std::memory_order_relaxed ) == nullptr );
-    BOOST_ASSERT( payload_.load( std::memory_order_relaxed ) == nullptr );
+    // FIXME: commented out for now, as this does not allow multiple recvs
+    // from the same alt. Might delete this alter.
+    /* BOOST_ASSERT( rx_end_.load( std::memory_order_relaxed ) == nullptr ); */
 
     std::unique_lock< Spinlock > lk{ splk_ };
     rx_end_.store( std::addressof( rx ), std::memory_order_release );
-    // FIXME: make sure this does not leave a syncing end hanging
-    alt_sync_.store( false, std::memory_order_release );
 }
 
 template<typename T>
@@ -464,8 +489,14 @@ void ChannelImpl< T >::alt_recv_leave() noexcept
 {
     std::unique_lock< Spinlock > lk{ splk_ };
     rx_end_.store( nullptr, std::memory_order_release );
-    // FIXME: make sure this does not leave a syncing end hanging
-    alt_sync_.store( false, std::memory_order_release );
+    auto state = alt_sync_.load( std::memory_order_release );
+    if ( Sync::Vacant != state && Sync::Accepted != state ) {
+        // other end is waiting for sync answer
+        auto tx = tx_end_.load( std::memory_order_acquire );
+        BOOST_ASSERT( tx != nullptr );
+        set_sync_state( Sync::Rejected );
+        Scheduler::self()->schedule( tx->ctx_ );
+    }
 }
 
 template<typename T>
@@ -477,7 +508,10 @@ bool ChannelImpl< T >::alt_recv_ready( Alt * alt ) const noexcept
         return false;
     }
     auto tx = tx_end_.load( std::memory_order_acquire );
-    return ( tx != nullptr ) && ( tx->alt_ != alt );
+    auto state = alt_sync_.load( std::memory_order_release );
+    return ( tx != nullptr ) &&
+           ( tx->alt_ != alt ) &&
+           ( Sync::Vacant == state || Sync::Offered == state );
 }
 
 template<typename T>
@@ -498,27 +532,30 @@ AltResult ChannelImpl< T >::alt_recv( ItemType & item ) noexcept
 
     // showing empty branches for easier explanation
     if ( tx->alt_ != nullptr ) {
-        if ( alt_sync_.load( std::memory_order_acquire ) ) {
+        if ( Sync::Offered == alt_sync_.load( std::memory_order_acquire ) ) {
             // accept the sync
+            alt_sync_.store( Sync::Accepted, std::memory_order_release );
+
         } else {
             // offer sync
-            alt_sync_.store( true, std::memory_order_release );
-            // FIXME
-            // tx->alt_->maybe_wakeup();
+            alt_sync_.store( Sync::Offered, std::memory_order_release );
+            Scheduler::wakeup_alt( tx->alt_ );
             Scheduler::self()->wait( & lk );
 
-            if ( ! alt_sync_.load( std::memory_order_acquire ) ) {
+            auto answer = alt_sync_.exchange( Sync::Vacant, std::memory_order_acq_rel );
+            if ( Sync::Accepted != answer ) {
                 return AltResult::SyncFailed;
             }
             // sync accepted
         }
+
     } else {
         // doesn't need to set alt_sync, as waking up tx
         // is a side-effect of syncing.
+        tx_end_.store( nullptr, std::memory_order_release );
     }
 
     // complete the channel transaction
-    tx_end_.store( nullptr, std::memory_order_release );
     auto payload = payload_.exchange( nullptr, std::memory_order_acq_rel );
     BOOST_ASSERT( payload != nullptr );
     // Order matters here
