@@ -22,30 +22,39 @@ public:
     using FnType = detail::delegate< void( ItemType ) >;
 
 private:
-    channel::ChanEnd &    end_;
+    channel::ChanEnd    end_;
 
     RxType &     rx_;
     FnType       fn_;
     ItemType     item_;
 
 public:
-    ChoiceRecv( channel::ChanEnd & end, RxType & rx, FnType fn )
-        : end_{ end }
+    ChoiceRecv( Alt * alt,
+                Context * ctx,
+                RxType & rx,
+                FnType fn )
+        : ChoiceBase{ alt }
+        , end_{ ctx, this }
         , rx_{ rx }
         , fn_{ std::move( fn ) }
         , item_{}
+    {}
+
+    ~ChoiceRecv() {}
+
+    void enter() noexcept
     {
-        enter();
+        rx_.alt_enter( end_ );
     }
 
-    ~ChoiceRecv()
+    void leave() noexcept
     {
-        leave();
+        rx_.alt_leave();
     }
 
-    bool is_ready( Alt * alt ) const noexcept
+    bool is_ready() const noexcept
     {
-        return rx_.alt_ready( alt );
+        return rx_.alt_ready( this );
     }
 
     bool try_complete() noexcept
@@ -57,17 +66,6 @@ public:
     void run_func() const noexcept
     {
         fn_( std::move( item_ ) );
-    }
-
-private:
-    void enter() noexcept
-    {
-        rx_.alt_enter( end_ );
-    }
-
-    void leave() noexcept
-    {
-        rx_.alt_leave();
     }
 };
 

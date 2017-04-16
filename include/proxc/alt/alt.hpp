@@ -11,6 +11,7 @@
 
 #include <proxc/config.hpp>
 
+#include <proxc/context.hpp>
 #include <proxc/channel.hpp>
 #include <proxc/exceptions.hpp>
 #include <proxc/spinlock.hpp>
@@ -27,19 +28,20 @@ PROXC_NAMESPACE_BEGIN
 class Alt
 {
 private:
-    using ChoicePtr = std::unique_ptr< alt::ChoiceBase >;
+    using ChoiceType = alt::ChoiceBase;
+    using ChoicePtr = std::unique_ptr< ChoiceType >;
 
     std::vector< ChoicePtr >                     choices_;
     std::unique_ptr< alt::ChoiceTimeout >        timeout_{ nullptr };
 
-    alignas(cache_alignment) channel::ChanEnd    end_;
+    Context *    ctx_;
 
     Spinlock splk_;
 
-    alignas(cache_alignment) std::atomic< bool >         readying_{ false };
-    alignas(cache_alignment) std::atomic< Context * >    wakeup_{ nullptr };
+    alignas(cache_alignment) std::atomic< ChoiceType * >    selected_{ nullptr };
+    alignas(cache_alignment) std::atomic< bool >            wakeup_{ false };
 
-    friend class ::proxc::Scheduler;
+    friend class alt::ChoiceBase;
 
 public:
     Alt();
@@ -124,15 +126,16 @@ public:
 private:
     [[noreturn]]
     void select_0();
-    alt::ChoiceBase * select_1() noexcept;
-    alt::ChoiceBase * select_n() noexcept;
+    ChoiceType * select_1() noexcept;
+    ChoiceType * select_n() noexcept;
 
-    void maybe_wait() noexcept;
+    void wait( std::unique_lock< Spinlock > & ) noexcept;
+    bool try_select( ChoiceType * ) noexcept;
     void maybe_wakeup() noexcept;
 };
 
 Alt::Alt()
-    : end_{ Scheduler::running(), this }
+    : ctx_{ Scheduler::running() }
 {
     choices_.reserve( 8 );
 }
@@ -148,7 +151,8 @@ Alt & Alt::send(
     if ( ! tx.is_closed() ) {
         choices_.push_back(
             std::make_unique< alt::ChoiceSend< ItemType > >(
-                end_,
+                this,
+                ctx_,
                 tx,
                 std::move( item ),
                 std::forward< typename alt::ChoiceSend< ItemType >::FnType >( fn )
@@ -167,7 +171,8 @@ Alt & Alt::send(
     if ( ! tx.is_closed() ) {
         choices_.push_back(
             std::make_unique< alt::ChoiceSend< ItemType > >(
-                end_,
+                this,
+                ctx_,
                 tx,
                 item,
                 std::forward< typename alt::ChoiceSend< ItemType >::FnType >( fn )
@@ -219,7 +224,8 @@ Alt & Alt::recv(
     if ( ! rx.is_closed() ) {
         choices_.push_back(
             std::make_unique< alt::ChoiceRecv< ItemType > >(
-                end_,
+                this,
+                ctx_,
                 rx,
                 std::forward< typename alt::ChoiceRecv< ItemType >::FnType >( fn )
             ) );
@@ -250,7 +256,7 @@ Alt & Alt::timeout(
 ) noexcept
 {
     if ( ! timeout_ || ! timeout_->is_less( time_point ) ) {
-        timeout_.reset( new alt::ChoiceTimeout{ time_point, std::move( fn ) } );
+        timeout_.reset( new alt::ChoiceTimeout{ this, time_point, std::move( fn ) } );
     }
     return *this;
 }
@@ -322,77 +328,121 @@ void Alt::select_0()
     throw UnreachableError{};
 }
 
-alt::ChoiceBase * Alt::select_1() noexcept
+auto Alt::select_1() noexcept
+    -> ChoiceType *
 {
-    for (;;) {
-        alt::ChoiceBase * ready = choices_.begin()->get();
-        readying_.store( false, std::memory_order_release );
+    std::unique_lock< Spinlock > lk{ splk_ };
 
-        if ( ! ready->is_ready( this ) ) {
-            maybe_wait();
-            // woken up, case should be ready
+    ChoiceType * choice = choices_.begin()->get();
+
+    choice->enter();
+    do {
+        if ( ! choice->is_ready() ) {
+            wait( lk );
+            // choice should be ready now
             continue;
         }
+    } while ( choice->try_complete() );
+    choice->leave();
 
-        if ( ready->try_complete() ) {
-            return ready;
-        }
-    }
+    return choice;
 }
 
- alt::ChoiceBase * Alt::select_n() noexcept
+auto Alt::select_n() noexcept
+    -> ChoiceType *
 {
-    std::vector< alt::ChoiceBase * > ready;
+    std::vector< ChoiceType * > ready;
     // FIXME: reserve? and if so, at what size?
     ready.reserve( choices_.size() );
 
-    for (;;) {
+    std::unique_lock< Spinlock > lk{ splk_ };
+
+    for ( auto& choice : choices_ ) {
+        choice->enter();
+    }
+
+    ChoiceType * selected = nullptr;
+    while ( selected == nullptr ) {
         ready.clear();
-        readying_.store( false, std::memory_order_release );
         for ( auto& choice : choices_ ) {
-            if ( choice->is_ready( this ) ) {
+            if ( choice->is_ready() ) {
                 ready.push_back( choice.get() );
             }
         }
 
         if ( ready.empty() ) {
-            maybe_wait();
-            // woken up, one or more cases should be ready
+            wait( lk );
+            // one or more choices should be ready,
+            // and selected_ should be set. If set,
+            // this is the winning choice.
+            selected = selected_.load( std::memory_order_acquire );
+            if ( selected != nullptr && ! selected->try_complete() ) {
+                // selected was set, but failed to compelte the transaction.
+                // check ready cases again and reset selected.
+                selected_.store( nullptr, std::memory_order_release );
+                selected = nullptr;
+            }
             continue;
         }
 
-        static thread_local std::mt19937 rng{ std::random_device{}() };
-        std::shuffle( ready.begin(), ready.end(), rng );
+        if ( ready.size() == 1 ) {
+            selected = *ready.begin();
+            if ( ! selected->try_complete() ) {
+                selected = nullptr;
+            }
+        } else {
+            static thread_local std::mt19937 rng{ std::random_device{}() };
+            std::shuffle( ready.begin(), ready.end(), rng );
 
-        for ( auto& choice : ready ) {
-            if ( choice->try_complete() ) {
-                return choice;
+            for ( auto& choice : ready ) {
+                if ( choice->try_complete() ) {
+                    selected = choice;
+                    break;
+                }
             }
         }
     }
+
+    for ( auto& choice : choices_ ) {
+        choice->leave();
+    }
+
+    selected_.store( nullptr, std::memory_order_release );
+    return selected;
 }
 
-void Alt::maybe_wait() noexcept
+void Alt::wait( std::unique_lock< Spinlock > & lk ) noexcept
 {
-    // FIXME: race condition between ready check and this call
+    wakeup_.store( true, std::memory_order_release );
+    Scheduler::self()->wait( std::addressof( lk ), true );
+    wakeup_.store( false, std::memory_order_release );
+}
+
+// called by external choices
+bool Alt::try_select( ChoiceType * choice ) noexcept
+{
     std::unique_lock< Spinlock > lk{ splk_ };
 
-    if ( ! readying_.exchange( false, std::memory_order_acq_rel ) ) {
-        wakeup_.store( end_.ctx_, std::memory_order_release );
-        Scheduler::self()->wait( & lk, true );
-        wakeup_.store( nullptr, std::memory_order_release );
+    ChoiceType * expected = nullptr;
+    bool success = selected_.compare_exchange_strong(
+        expected,
+        choice,
+        std::memory_order_acq_rel,
+        std::memory_order_relaxed
+    );
+    if ( wakeup_.exchange( false, std::memory_order_acq_rel ) ) {
+        Scheduler::self()->schedule( ctx_ );
     }
+    return success;
 }
 
+// called by external choices
 void Alt::maybe_wakeup() noexcept
 {
     std::unique_lock< Spinlock > lk{ splk_ };
 
-    auto ctx = wakeup_.exchange( nullptr, std::memory_order_acq_rel );
-    if ( ctx != nullptr ) {
-        Scheduler::self()->schedule( ctx );
-    } else {
-        readying_.store( true, std::memory_order_release );
+    if ( wakeup_.exchange( false, std::memory_order_acq_rel ) ) {
+        Scheduler::self()->schedule( ctx_ );
     }
 }
 

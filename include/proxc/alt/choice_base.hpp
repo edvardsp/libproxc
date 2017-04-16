@@ -12,8 +12,11 @@ namespace alt {
 
 class ChoiceBase
 {
+private:
+    Alt *    alt_;
+
 public:
-    ChoiceBase() {}
+    ChoiceBase( Alt * ) noexcept;
     virtual ~ChoiceBase() noexcept {}
 
     // make non-copyable
@@ -24,14 +27,16 @@ public:
     ChoiceBase( ChoiceBase && ) = delete;
     ChoiceBase & operator = ( ChoiceBase && ) = delete;
 
-    // interface
-    virtual bool is_ready( Alt * ) const noexcept = 0;
-    virtual bool try_complete() noexcept = 0;
-    virtual void run_func() const noexcept = 0;
+    // base methods
+    bool try_select() noexcept;
+    void maybe_wakeup() noexcept;
 
-private:
+    // interface
     virtual void enter() noexcept = 0;
     virtual void leave() noexcept = 0;
+    virtual bool try_complete() noexcept = 0;
+    virtual bool is_ready() const noexcept = 0;
+    virtual void run_func() const noexcept = 0;
 };
 
 } // namespace alt

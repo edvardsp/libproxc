@@ -10,6 +10,7 @@
 #include <proxc/context.hpp>
 #include <proxc/scheduler.hpp>
 #include <proxc/spinlock.hpp>
+#include <proxc/alt/choice_base.hpp>
 #include <proxc/channel/op_result.hpp>
 
 #include <boost/assert.hpp>
@@ -20,22 +21,15 @@ namespace channel {
 
 struct alignas(cache_alignment) ChanEnd
 {
-    Context *     ctx_;
-    Alt *         alt_;
-    ChanEnd( Context * ctx, Alt * alt = nullptr )
-        : ctx_{ ctx }, alt_{ alt }
+    Context *            ctx_;
+    alt::ChoiceBase *    alt_choice_;
+    ChanEnd( Context * ctx,
+             alt::ChoiceBase * alt_choice = nullptr )
+        : ctx_{ ctx }, alt_choice_{ alt_choice }
     {}
 };
 
 namespace detail {
-
-enum class Sync
-{
-    Vacant,
-    Offered,
-    Accepted,
-    Rejected,
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 // ChannelImpl
@@ -64,15 +58,6 @@ private:
     alignas(cache_alignment) std::atomic< ChanEnd * >    rx_end_{ nullptr };
     alignas(cache_alignment) std::atomic< Payload * >    payload_{ nullptr };
 
-    // used to synchronize during alting, on either Tx or Rx end
-    alignas(cache_alignment) std::atomic< Sync >    alt_sync_{ Sync::Vacant };
-
-    inline bool is_sync_state( Sync state ) const noexcept
-    { return state == alt_sync_.load( std::memory_order_release ); }
-
-    inline void set_sync_state( Sync state ) noexcept
-    { return alt_sync_.store( state, std::memory_order_acquire ); }
-
 public:
     ChannelImpl() = default;
     ~ChannelImpl() noexcept;
@@ -97,6 +82,7 @@ public:
     OpResult send_for( ChanEnd &,
                        ItemType &,
                        std::chrono::duration< Rep, Period > const & ) noexcept;
+
     template<typename Rep, typename Period>
     OpResult recv_for( ChanEnd &,
                        ItemType &,
@@ -107,6 +93,7 @@ public:
     OpResult send_until( ChanEnd &,
                          ItemType &,
                          std::chrono::time_point< Clock, Dur > const & ) noexcept;
+
     template<typename Clock, typename Dur>
     OpResult recv_until( ChanEnd &,
                          ItemType &,
@@ -147,22 +134,21 @@ template<typename T>
 void ChannelImpl< T >::close() noexcept
 {
     closed_.store( true, std::memory_order_release );
-    auto tx = tx_end_.exchange( nullptr, std::memory_order_acq_rel );
+    ChanEnd * tx = tx_end_.exchange( nullptr, std::memory_order_acq_rel );
     if ( tx != nullptr ) {
-        // FIXME: call item destructor?
-        if ( tx->alt_ != nullptr ) {
-            Scheduler::wakeup_alt( tx->alt_ );
+        alt::ChoiceBase * alt_choice = tx->alt_choice_;
+        if ( alt_choice != nullptr ) {
+            alt_choice->maybe_wakeup();
         } else {
-            BOOST_ASSERT( tx->ctx_ != nullptr );
             Scheduler::self()->schedule( tx->ctx_ );
         }
     }
-    auto rx = rx_end_.exchange( nullptr, std::memory_order_acq_rel );
+    ChanEnd * rx = rx_end_.exchange( nullptr, std::memory_order_acq_rel );
     if ( rx != nullptr ) {
-        if ( rx->alt_ != nullptr ) {
-            Scheduler::wakeup_alt( rx->alt_ );
+        alt::ChoiceBase * alt_choice = tx->alt_choice_;
+        if ( alt_choice != nullptr ) {
+            alt_choice->maybe_wakeup();
         } else {
-            BOOST_ASSERT( rx->ctx_ != nullptr );
             Scheduler::self()->schedule( rx->ctx_ );
         }
     }
@@ -196,11 +182,13 @@ OpResult ChannelImpl< T >::send( ChanEnd & tx, ItemType & item ) noexcept
     Payload payload{ item };
     payload_.store( std::addressof( payload ), std::memory_order_release );
 
-    auto rx = rx_end_.load( std::memory_order_acquire );
+    ChanEnd * rx = rx_end_.load( std::memory_order_acquire );
     if ( rx != nullptr ) {
-        if ( rx->alt_ != nullptr ) {
-            Scheduler::wakeup_alt( rx->alt_ );
-        } else if ( rx->alt_ == nullptr ) {
+        alt::ChoiceBase * alt_choice = rx->alt_choice_;
+        if ( alt_choice != nullptr ) {
+            // doesn't care whether its selected or not
+            (void)alt_choice->try_select();
+        } else {
             rx_end_.store( nullptr, std::memory_order_release );
             Scheduler::self()->schedule( rx->ctx_ );
         }
@@ -208,6 +196,9 @@ OpResult ChannelImpl< T >::send( ChanEnd & tx, ItemType & item ) noexcept
 
     Scheduler::self()->wait( & lk );
     // Rx has consumed item
+    // tx_end_ and payload_ should be zeroed by Rx
+    BOOST_ASSERT( tx_end_.load( std::memory_order_acquire ) == nullptr );
+    BOOST_ASSERT( payload_.load( std::memory_order_acquire ) == nullptr );
     return OpResult::Ok;
 }
 
@@ -223,21 +214,19 @@ OpResult ChannelImpl< T >::recv( ChanEnd & rx, ItemType & item ) noexcept
             return OpResult::Closed;
         }
 
-        auto tx = tx_end_.load( std::memory_order_acquire );
+        ChanEnd * tx = tx_end_.load( std::memory_order_acquire );
         if ( tx != nullptr ) {
-            if ( tx->alt_ == nullptr || is_sync_state( Sync::Accepted ) ) {
-                set_sync_state( Sync::Vacant );
+            bool tx_ready = false;
+            alt::ChoiceBase alt_choice = tx->alt_choice_;
+            if ( alt_choice != nullptr ) {
+
+            } else {
+                tx_ready = true;
+            }
+
+            if ( tx_ready ) {
                 tx_end_.store( nullptr, std::memory_order_release );
-                auto payload = payload_.exchange( nullptr, std::memory_order_acq_rel );
-                BOOST_ASSERT( payload != nullptr );
-
-                // order matters here
-                item = std::move( payload->item_ );
-                Scheduler::self()->schedule( tx->ctx_ );
-                return OpResult::Ok;
-
-            } else if ( tx->alt_ != nullptr ) {
-                Scheduler::wakeup_alt( tx->alt_ );
+                Payload * payload = payload_.exchange( nullptr, std::memory_order_release );
             }
         }
 

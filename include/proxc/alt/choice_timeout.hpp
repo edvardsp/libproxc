@@ -21,35 +21,39 @@ private:
     FnType                                   fn_;
 
 public:
-    ChoiceTimeout()
-        : time_point_{ std::chrono::steady_clock::time_point::min() }
+    ChoiceTimeout( Alt * alt )
+        : ChoiceBase{ alt }
+        , time_point_{ std::chrono::steady_clock::time_point::min() }
         , fn_{ []{} }
-    {
-        enter();
-    }
+    {}
 
     template<typename Rep, typename Period>
-    ChoiceTimeout( std::chrono::duration< Rep, Period > const & duration, FnType fn )
-        : time_point_{ std::chrono::steady_clock::now() + duration }
+    ChoiceTimeout( Alt * alt,
+                   std::chrono::duration< Rep, Period > const & duration,
+                   FnType fn )
+        : ChoiceBase{ alt }
+        , time_point_{ std::chrono::steady_clock::now() + duration }
         , fn_{ std::move( fn ) }
-    {
-        enter();
-    }
+    {}
 
     template<typename Clock, typename Dur>
-    ChoiceTimeout( std::chrono::time_point< Clock, Dur > const & time_point, FnType fn )
-        : time_point_{ time_point }
+    ChoiceTimeout( Alt * alt,
+                   std::chrono::time_point< Clock, Dur > const & time_point,
+                   FnType fn )
+        : ChoiceBase{ alt }
+        , time_point_{ time_point }
         , fn_{ std::move( fn ) }
-    {
-        enter();
-    }
+    {}
 
-    ~ChoiceTimeout()
-    {
-        leave();
-    }
+    ~ChoiceTimeout() {}
 
-    bool is_ready( Alt * ) const noexcept
+    void enter() noexcept
+    { /* FIXME */ }
+
+    void leave() noexcept
+    { /* FIXME */ }
+
+    bool is_ready() const noexcept
     {
         return ( time_point_ != std::chrono::steady_clock::time_point::min() )
             ? std::chrono::steady_clock::now() >= time_point_
@@ -72,13 +76,6 @@ public:
     {
         return time_point_ < time_point;
     }
-
-private:
-    void enter() noexcept
-    {}
-
-    void leave() noexcept
-    {}
 };
 
 } // namespace alt

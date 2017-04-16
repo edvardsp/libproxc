@@ -1,5 +1,6 @@
 
 proxc_sources = [
+    'alt.cpp',
     'context.cpp',
     'process.cpp',
     'scheduler.cpp',

@@ -19,39 +19,52 @@ public:
     using FnType = detail::delegate< void( void ) >;
 
 private:
-    channel::ChanEnd &    end_;
+    channel::ChanEnd    end_;
 
     TxType &    tx_;
     ItemType    item_;
     FnType      fn_;
 
 public:
-    ChoiceSend( channel::ChanEnd & end, TxType & tx, ItemType const & item, FnType fn )
-        : end_{ end }
+    ChoiceSend( Alt * alt,
+                Context * ctx,
+                TxType & tx,
+                ItemType const & item,
+                FnType fn )
+        : ChoiceBase{ alt }
+        , end_{ ctx, this }
         , tx_{ tx }
         , item_{ item }
         , fn_{ std::move( fn ) }
-    {
-        enter();
-    }
+    {}
 
-    ChoiceSend( channel::ChanEnd & end, TxType & tx, ItemType && item, FnType fn )
-        : end_{ end }
+    ChoiceSend( Alt * alt,
+                Context * ctx,
+                TxType & tx,
+                ItemType && item,
+                FnType fn )
+        : ChoiceBase{ alt }
+        , end_{ ctx, this }
         , tx_{ tx }
         , item_{ std::move( item ) }
         , fn_{ std::move( fn ) }
+    {}
+
+    ~ChoiceSend() {}
+
+    void enter() noexcept
     {
-        enter();
+        tx_.alt_enter( end_ );
     }
 
-    ~ChoiceSend()
+    void leave() noexcept
     {
-        leave();
+        tx_.alt_leave();
     }
 
-    bool is_ready( Alt * alt ) const noexcept
+    bool is_ready() const noexcept
     {
-        return tx_.alt_ready( alt );
+        return tx_.alt_ready( this );
     }
 
     bool try_complete() noexcept
@@ -63,17 +76,6 @@ public:
     void run_func() const noexcept
     {
         fn_();
-    }
-
-private:
-    void enter() noexcept
-    {
-        tx_.alt_enter( end_ );
-    }
-
-    void leave() noexcept
-    {
-        tx_.alt_leave();
     }
 };
 
