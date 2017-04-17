@@ -421,7 +421,10 @@ void Alt::wait( std::unique_lock< Spinlock > & lk ) noexcept
 // called by external choices
 bool Alt::try_select( ChoiceType * choice ) noexcept
 {
-    std::unique_lock< Spinlock > lk{ splk_ };
+    std::unique_lock< Spinlock > lk{ splk_, std::defer_lock };
+    if ( ! lk.try_lock() ) {
+        return false;
+    }
 
     ChoiceType * expected = nullptr;
     bool success = selected_.compare_exchange_strong(
@@ -439,7 +442,8 @@ bool Alt::try_select( ChoiceType * choice ) noexcept
 // called by external choices
 void Alt::maybe_wakeup() noexcept
 {
-    std::unique_lock< Spinlock > lk{ splk_ };
+    // FIXME: do i need a spinlock?
+    /* std::unique_lock< Spinlock > lk{ splk_ }; */
 
     if ( wakeup_.exchange( false, std::memory_order_acq_rel ) ) {
         Scheduler::self()->schedule( ctx_ );

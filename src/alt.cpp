@@ -10,6 +10,11 @@ ChoiceBase::ChoiceBase( Alt * alt ) noexcept
     : alt_{ alt }
 {}
 
+bool ChoiceBase::same_alt( Alt * alt ) noexcept
+{
+    return alt == alt_;
+}
+
 bool ChoiceBase::try_select() noexcept
 {
     return alt_->try_select( this );

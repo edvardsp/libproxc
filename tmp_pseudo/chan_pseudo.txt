@@ -30,19 +30,25 @@ void chan_send( chan, end, item )
         return;
     }
 
-    chan.tx_end = { runnin_ctx, item };
-
     rx_end = pop( chan.rx_end );
     if ( rx_end != nullptr ) {
-        if ( rx_end.alting ) {
-            rx_end.alting.maybe_wakeup;
-        } else {
-            schedule( rx_end.ctx );
+        if ( rx_end.alt == nullptr
+            || rx_end.alt.try_select() ) {
+            rx_end.item = move( item );
+            chan.rx_consumed = true;
+            scehdule( rx_end.ctx );
+            return Ok;
         }
     }
 
+    chan.tx_end = { running_ctx, item };
     wait( lk );
-    // here, Rx has consumed item
+    // Rx has consumed item if tx_consumed set true
+    if ( chan.tx_consumed.exchange( false ) ) {
+        return Ok;
+    } else {
+        return Closed;
+    }
 }
 
 // Rx always consumes item and always wakes up Tx,
@@ -67,112 +73,88 @@ void chan_send( chan, end, item )
 void chan_recv( chan, end, item & )
 {
     lk = chan.spinlock;
-    loop {
-        if ( chan.closed() ) {
-            return;
-        }
 
-        tx_end = chan.tx_end;
+    if ( chan.closed() ) {
+        return;
+    }
 
-        if ( tx_end != nullptr ) {
-            if ( tx_end.alting && ! chan.alt_sync ) {
-                // order matters here
-                chan.rx_end = { running_ctx };
-                tx_end.alting.maybe_wakeup;
+    tx_end = pop( chan.tx_end );
+    if (   tx_end != nullptr
+        && (    tx_end.alt == nullptr
+             || tx_end.alt.try_select() ) )
+    {
+        item = move( tx_end.item );
+        chan.tx_consumed = true;
+        scehdule( tx_end.ctx );
+        return Ok;
+    }
 
-                wait( lk, true );
-
-                if ( ! chan.alt_sync ) {
-                    continue;
-                }
-                // alting Tx synced, can now consume item
-            }
-
-            chan.tx_end = nullptr;
-            // order matters here
-            item = tx_end.item;
-            schedule( tx_end.ctx );
-            return;
-        }
-
-        chan.end_rx = { running_ctx };
-        wait( lk, true );
-        // Tx should be ready
+    chan.rx_end = { running_ctx, item };
+    wait( lk );
+    // Tx has consumed item if rx_consumed set true
+    if ( chan.rx_consumed.exchange( false ) ) {
+        return Ok;
+    } else {
+        return Closed;
     }
 }
 
-void enter( chan, alt )
+void enter( chan, end )
 {
     lk = chan.spinlock;
-    // Tx
-    chan.tx_end = { running_ctx, item, alt };
-    // Rx
-    chan.rx_end = { running_ctx, alt };
-    // All
-    chan.alt_sync = false;
+    chan.{tx/rx}_end = end;
 }
 
 void leave( chan )
 {
     lk = chan.spinlock;
-    // Tx
-    chan.tx_end = nullptr;
-    // Rx
-    chan.rx_end = nullptr;
-    // All
-    chan.alt_sync = false;
+    chan.{tx/rx}_end = nullptr;
 }
 
-bool ready( chan, alt )
+bool ready( chan )
 {
     lk = chan.spinlock;
+
     if ( chan.is_closed ) {
         // FIXME: return true?
         return false;
     }
     {tx,rx}_end = chan.{tx,rx}_end;
-    return {tx,rx}_end != nullptr
-        && {tx,rx}_end.alting != alt;
+    return {tx,rx}_end != nullptr;
+    // checking that the end is not ready on the same alt
+    // is and should be done by the alt before entering happens
 }
 
 // 3 cases exists:
 //      1: No Rx.
 //      2: Normal Rx.
 //      3: Alting Rx.
-bool chan_alt_tx_sync( chan, item )
+bool chan_alt_send( chan, item )
 {
     lk = chan.spinlock;
 
-    rx_end = chan.rx_end;
-    if ( rx_end == nullptr ) {
+    if ( chan.is_closed() ) {
         return false;
     }
 
-    if ( rx_end.alting ) {
-        if ( chan.alt_sync ) {
-            // accept the sync
-            schedule( rx_end.ctx );
-
-            wait( lk );
-            // Rx consumed item
+    rx_end = chan.rx_end;
+    if ( rx_end != nullptr ) {
+        if ( rx_end.alt == nullptr
+            || rx_end.alt.try_select() )
+        {
+            chan.tx_end = nullptr;
+            chan.rx_end = nullptr;
+            rx_end.item = move( item );
+            chan.rx_consumed = true;
+            scehdule( rx_end.ctx );
             return true;
 
         } else {
-            // offer sync
-            chan.alt_sync = true;
-            rx_end.alting.maybe_wakeup();
-            wait( lk );
-            // if chan.alt_sync true, Rx consumed item
-            return chan.alt_sync;
+            return false;
         }
 
     } else {
-        chan.alt_sync = true;
-        schedule( rx_end.ctx );
-
-        wait( lk );
-        // Rx consumed item
-        return true;
+        return false;
     }
 }
 
@@ -180,7 +162,7 @@ bool chan_alt_tx_sync( chan, item )
 //      1: No Tx.
 //      2: Normal Tx.
 //      3: Alting Tx.
-bool chan_alt_rx_sync( chan, item )
+bool chan_alt_recv( chan, item )
 {
     lk = chan.spinlock;
 
@@ -189,40 +171,24 @@ bool chan_alt_rx_sync( chan, item )
         return false;
     }
 
-    if ( tx_end.alting ) {
-        if ( chan.alt_sync ) {
-            // accept the sync
+    tx_end = chan.tx_end;
+    if ( tx_end != nullptr ) {
+        if ( tx_end.alt == nullptr
+            || tx_end.alt.try_select() )
+        {
+            chan.rx_end = nullptr;
             chan.tx_end = nullptr;
-            // Order matters here.
-            chan.rx_end.item = tx_end.item;
-            schedule( tx_end.ctx );
+            item = move( tx_end.item );
+            chan.tx_consumed = true;
+            scehdule( tx_end.ctx );
             return true;
 
         } else {
-            // offer sync
-            chan.alt_sync = true
-            tx_end.alting.maybe_wakeup();
-            wait( lk );
-
-            if ( ! chan.alt_sync ) {
-                return false;
-            }
-
-            chan.tx_end = nullptr;
-            // Order matters here.
-            chan.rx_end.item = tx_end.item;
-            schedule( tx_end.ctx );
-            return true;
+            return false;
         }
 
     } else {
-        // doesn't need to set alt_sync, as waking up tx
-        // is a side-effect of syncing.
-        chan.tx_end = nullptr;
-        // Order matters here.
-        chan.rx_end.item = tx_end.item;
-        schedule( tx_end.ctx );
-        return true;
+        return false;
     }
 }
 

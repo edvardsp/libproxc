@@ -28,6 +28,7 @@ public:
     ChoiceBase & operator = ( ChoiceBase && ) = delete;
 
     // base methods
+    bool same_alt( Alt * ) noexcept;
     bool try_select() noexcept;
     void maybe_wakeup() noexcept;
 
