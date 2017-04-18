@@ -55,6 +55,8 @@ void alt_pseudocode()
         // unreachable
     }
 
+    lk = alt.spinlock;
+
     foreach c in cases {
         c.enter();
     }
@@ -70,15 +72,18 @@ void alt_pseudocode()
         }
 
         if ( ready.empty ) {
-            alt.wait();
-            // woken up, one or more cases should be ready
-            continue;
+            alt.wait( lk );
+            // selected is set by the "winning" choice,
+            // and the operation is completed.
+            // lk is unlocked by wait.
+            break;
         }
 
         shuffle( ready );
         foreach c in ready {
-            if ( c.synchronize ) {
+            if ( c.try_complete() ) {
                 selected = c;
+                lk.unlock();
                 break;
             }
         }

@@ -36,9 +36,6 @@ struct alignas(cache_alignment) ChanEnd
     {}
 };
 
-template<typename ItemT>
-struct AltEnd;
-
 ////////////////////////////////////////////////////////////////////////////////
 // ChannelImpl
 ////////////////////////////////////////////////////////////////////////////////
@@ -49,7 +46,6 @@ class ChannelImpl
 public:
     using ItemT = T;
     using EndT  = ChanEnd< ItemT >;
-    using AltT  = AltEnd< ItemT >;
 
 private:
     Spinlock    splk_{};
@@ -61,6 +57,35 @@ private:
 
     alignas(cache_alignment) std::atomic< EndT * >    rx_end_{ nullptr };
     alignas(cache_alignment) std::atomic< bool >      rx_consumed_{ false };
+
+    alignas(cache_alignment) std::atomic< bool >    alt_sync_{ false };
+
+    struct alignas(cache_alignment) AltSync
+    {
+        bool                     synced_{ false };
+        std::atomic< bool > &    alt_sync_;
+        AltSync( std::atomic< bool > & alt_sync ) noexcept
+            : alt_sync_{ alt_sync }
+        {
+            bool inactive = false;
+            synced_= alt_sync_.compare_exchange_strong(
+                inactive,
+                true,
+                std::memory_order_acq_rel,
+                std::memory_order_relaxed
+            );
+        }
+        ~AltSync() noexcept
+        {
+            if ( synced_ ) {
+                alt_sync_.store( false, std::memory_order_release );
+            }
+        }
+        bool clashed() const noexcept
+        {
+            return ! synced_;
+        }
+    };
 
 public:
     ChannelImpl() = default;

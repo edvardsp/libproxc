@@ -1,27 +1,4 @@
 
-// Rx always completes channel comm
-// Non-alting ends must be signaled by alting ends
-// Rx cleans up ends
-
-// Tx will always wait for Rx.
-// 3 cases exists:
-//      1: No Rx. Tx waits until an Rx consumes the item
-//         and wakes up Tx, then returns. This applies for
-//         both alting and non-alting. If alting Rx
-//         chooses this Tx, then it is an auto-sync and
-//         waking up Tx is a side-effect of the syncing.
-//      2: Normal Rx. Tx wakes up Rx, waits for it to
-//         consume the item, and returns. No syncing
-//         needed.
-//      3: Alting Rx. Tx tries to wake up Rx and waits.
-//         One of two things happen:
-//           Either, the alting Rx syncs with this Tx,
-//             the item is consumed, Tx is woken up, and
-//             returns.
-//           Or, the alting Rx does not sync with this Tx,
-//             and this Tx will wait until next Rx
-//             arrives. This Rx will consume the item, and
-//             wakeup Tx. Tx will then return.
 void chan_send( chan, end, item )
 {
     lk = chan.spinlock;
@@ -31,45 +8,28 @@ void chan_send( chan, end, item )
     }
 
     rx_end = pop( chan.rx_end );
-    if ( rx_end != nullptr ) {
-        if ( rx_end.alt == nullptr
-            || rx_end.alt.try_select() ) {
-            rx_end.item = move( item );
-            chan.rx_consumed = true;
-            scehdule( rx_end.ctx );
-            return Ok;
-        }
+    if ( rx_end != nullptr || ( rx_end.alt == nullptr || rx_end.alt.try_select( blocking ) ) )
+    {
+        rx_end.item = move( item );
+        chan.rx_consumed = true;
+        scehdule( rx_end.ctx );
+        return Ok;
     }
 
     chan.tx_end = { running_ctx, item };
     wait( lk );
-    // Rx has consumed item if tx_consumed set true
-    if ( chan.tx_consumed.exchange( false ) ) {
-        return Ok;
-    } else {
-        return Closed;
-    }
+    // Tx has consumed item if rx_consumed set true,
+    // else the channel is closed. The reasoning is that
+    // this channel end is only woken up by the other end if
+    // the operation completed or the channel closed. Even though
+    // the channel might have been closed immediately after the
+    // operation completed, the operation will be registered by
+    // the boolean flag.
+    return ( chan.rx_consumed.exchange( false ) )
+        ? Ok
+        : Closed ;
 }
 
-// Rx always consumes item and always wakes up Tx,
-// in this order.
-// 3 cases exists:
-//      1: No Tx. Rx commits end, and waits. When woken
-//         up, a Tx is ready. Then, case 2 or case 3
-//         happens.
-//      2: Normal Tx. Item is consumed, tx is woken up,
-//         and returns.
-//      3: Alting Tx. Rx commits end, may wake up Tx, and
-//         waits. When woken up, one of two thins happen:
-//           Either, the alting Tx syncs with this Rx, the
-//             item is consumed, the alting Tx is woken
-//             up, and returns.
-//           Or, the alting Tx does not sync with this Rx.
-//             This Rx is then woken up when either the
-//             same alting Tx syncs, the same alting Tx
-//             syncs with another case and leaves this Rx
-//             unsynced, or another Tx comes around and
-//             wakes up Rx. Then, cases 1, 2, or 3 happens.
 void chan_recv( chan, end, item & )
 {
     lk = chan.spinlock;
@@ -79,9 +39,7 @@ void chan_recv( chan, end, item & )
     }
 
     tx_end = pop( chan.tx_end );
-    if (   tx_end != nullptr
-        && (    tx_end.alt == nullptr
-             || tx_end.alt.try_select() ) )
+    if ( tx_end != nullptr && ( tx_end.alt == nullptr || tx_end.alt.try_select( blocking ) ) )
     {
         item = move( tx_end.item );
         chan.tx_consumed = true;
@@ -91,30 +49,35 @@ void chan_recv( chan, end, item & )
 
     chan.rx_end = { running_ctx, item };
     wait( lk );
-    // Tx has consumed item if rx_consumed set true
-    if ( chan.rx_consumed.exchange( false ) ) {
-        return Ok;
-    } else {
-        return Closed;
-    }
+    // Tx has consumed item if rx_consumed set true,
+    // else the channel is closed. The reasoning is that
+    // this channel end is only woken up by the other end if
+    // the operation completed or the channel closed. Even though
+    // the channel might have been closed immediately after the
+    // operation completed, the operation will be registered by
+    // the boolean flag.
+    return ( chan.rx_consumed.exchange( false ) )
+        ? Ok
+        : Closed ;
 }
 
 void enter( chan, end )
 {
-    lk = chan.spinlock;
+    // no spinlock
     chan.{tx/rx}_end = end;
 }
 
 void leave( chan )
 {
+    // spinlock here to ensure the channel end is not
+    // used after the alting process has ended.
     lk = chan.spinlock;
     chan.{tx/rx}_end = nullptr;
 }
 
 bool ready( chan )
 {
-    lk = chan.spinlock;
-
+    // no spinlock
     if ( chan.is_closed ) {
         // FIXME: return true?
         return false;
@@ -125,12 +88,14 @@ bool ready( chan )
     // is and should be done by the alt before entering happens
 }
 
-// 3 cases exists:
-//      1: No Rx.
-//      2: Normal Rx.
-//      3: Alting Rx.
 bool chan_alt_send( chan, item )
 {
+    // this is to avoid deadlocks when both Tx and Rx is alting.
+    AltSync alt_sync{ chan.alt_sync_ };
+    if ( alt_sync.clashed() ) {
+        return false;
+    }
+
     lk = chan.spinlock;
 
     if ( chan.is_closed() ) {
@@ -139,9 +104,10 @@ bool chan_alt_send( chan, item )
 
     rx_end = chan.rx_end;
     if ( rx_end != nullptr ) {
-        if ( rx_end.alt == nullptr
-            || rx_end.alt.try_select() )
-        {
+        if ( rx_end.alt == nullptr || rx_end.alt.try_select( non_blocking ) ) {
+            // Rx is either not alting, or it is alting and
+            // it "won" the selection. Either way, complete the
+            // operation.
             chan.tx_end = nullptr;
             chan.rx_end = nullptr;
             rx_end.item = move( item );
@@ -158,12 +124,14 @@ bool chan_alt_send( chan, item )
     }
 }
 
-// 3 cases exists:
-//      1: No Tx.
-//      2: Normal Tx.
-//      3: Alting Tx.
 bool chan_alt_recv( chan, item )
 {
+    // this is to avoid deadlocks when both Tx and Rx is alting.
+    AltSync alt_sync{ chan.alt_sync_ };
+    if ( alt_sync.clashed() ) {
+        return false;
+    }
+
     lk = chan.spinlock;
 
     tx_end = chan.tx_end;
@@ -173,9 +141,10 @@ bool chan_alt_recv( chan, item )
 
     tx_end = chan.tx_end;
     if ( tx_end != nullptr ) {
-        if ( tx_end.alt == nullptr
-            || tx_end.alt.try_select() )
-        {
+        if ( tx_end.alt == nullptr || tx_end.alt.try_select( non_blocking ) ) {
+            // Tx is either not alting, or it is alting and
+            // it "won" the selection. Either way, complete the
+            // operation.
             chan.rx_end = nullptr;
             chan.tx_end = nullptr;
             item = move( tx_end.item );
