@@ -46,6 +46,22 @@
 //      all choices are "leaved", erasing the alt pointer. After "leaving", the
 //      selected choice has now completed its operation, and the corresponding
 //      function, if specified, is executed.
+//
+// Lock pattern and deadlock avoidance:
+//      Each alting process has a lock. Each channel also has a lock. An
+//      alting process, e.g. a AltTx, will have the following lock patterns,
+//      based on whether Rx is alting or not.
+//      - Normal Rx: AltTx locks the alt lock, then the channel lock.
+//          ##  AltTx.lock -> channel.lock
+//      - AltRx: AltTx locks the alt lock, then the channel lock, then the
+//          AltRx lock.
+//          ##  AltTx.lock -> channel.lock -> AltRx.lock
+//      This can cause issues when both ends, Tx and Rx, are alting. A keen eye
+//      can see that if both AltTx and AltRx are trying to complete the operation,
+//      it is possible for a deadlock to occur if both ends acquires its own lock before
+//      progressing the lock pattern. To avoid this, an atomic flag must be acquired
+//      through test-and-set to be able to lock the channel lock. This ensure if both ends are
+//      alting, only one end will progress the lock pattern, while the other end will wait.
 
 void alt_pseudocode()
 {

@@ -58,37 +58,34 @@ private:
     alignas(cache_alignment) std::atomic< EndT * >    rx_end_{ nullptr };
     alignas(cache_alignment) std::atomic< bool >      rx_consumed_{ false };
 
-    alignas(cache_alignment) std::atomic< bool >    alt_sync_{ false };
+    alignas(cache_alignment) std::atomic_flag    alt_sync_;
 
-    struct alignas(cache_alignment) AltSync
+    struct alignas(cache_alignment) SyncGuard
     {
-        bool                     synced_{ false };
-        std::atomic< bool > &    alt_sync_;
-        AltSync( std::atomic< bool > & alt_sync ) noexcept
+        bool                  status_{ false };
+        std::atomic_flag &    alt_sync_;
+        SyncGuard( std::atomic_flag & alt_sync ) noexcept
             : alt_sync_{ alt_sync }
         {
-            bool inactive = false;
-            synced_= alt_sync_.compare_exchange_strong(
-                inactive,
-                true,
-                std::memory_order_acq_rel,
-                std::memory_order_relaxed
-            );
+            status_ = ! alt_sync_.test_and_set( std::memory_order_acquire );
         }
-        ~AltSync() noexcept
+        ~SyncGuard() noexcept
         {
-            if ( synced_ ) {
-                alt_sync_.store( false, std::memory_order_release );
+            if ( status_ ) {
+                alt_sync_.clear( std::memory_order_release );
             }
         }
         bool clashed() const noexcept
         {
-            return ! synced_;
+            return ! status_;
         }
     };
 
 public:
-    ChannelImpl() = default;
+    ChannelImpl()
+    {
+        alt_sync_.clear( std::memory_order_release );
+    }
     ~ChannelImpl() noexcept;
 
     // make non-copyable

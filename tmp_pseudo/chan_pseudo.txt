@@ -91,11 +91,19 @@ bool ready( chan )
 bool chan_alt_send( chan, item )
 {
     // this is to avoid deadlocks when both Tx and Rx is alting.
-    AltSync alt_sync{ chan.alt_sync_ };
-    if ( alt_sync.clashed() ) {
+    // SyncGuard will try to test-and-set the atomic flag. If
+    // it fails, the other end is alting and is currently trying to
+    // complete this channel operation. The SyncGuard will set the
+    // clear the atomic flag at function exit if it managed to test-and-set it.
+    SyncGuard guard{ chan.alt_sync_ };
+    if ( guard.clashed() ) {
         return false;
     }
 
+    // locking the channel spinlock is now safe, as the only possibility
+    // of a deadlock is when both Tx and Rx is alting, and only one of them
+    // can be completing the channel operation because only one will be
+    // able to acquire the sync guard.
     lk = chan.spinlock;
 
     if ( chan.is_closed() ) {
@@ -127,11 +135,19 @@ bool chan_alt_send( chan, item )
 bool chan_alt_recv( chan, item )
 {
     // this is to avoid deadlocks when both Tx and Rx is alting.
-    AltSync alt_sync{ chan.alt_sync_ };
-    if ( alt_sync.clashed() ) {
+    // SyncGuard will try to test-and-set the atomic flag. If
+    // it fails, the other end is alting and is currently trying to
+    // complete this channel operation. The SyncGuard will clear the
+    // atomic flag at function exit if it managed to test-and-set it.
+    SyncGuard guard{ chan.alt_sync_ };
+    if ( guard.clashed() ) {
         return false;
     }
 
+    // locking the channel spinlock is now safe, as the only possibility
+    // of a deadlock is when both Tx and Rx is alting, and only one of them
+    // can be completing the channel operation because only one will be
+    // able to acquire the sync guard.
     lk = chan.spinlock;
 
     tx_end = chan.tx_end;
