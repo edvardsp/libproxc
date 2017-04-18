@@ -39,6 +39,13 @@ public:
         , fn_{ std::move( fn ) }
         , item_{}
     {}
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+
+    ~ChoiceRecv() {}
+=======
+>>>>>>> merge
 
     ~ChoiceRecv() {}
 
@@ -51,6 +58,7 @@ public:
     {
         rx_.alt_leave();
     }
+>>>>>>> origin/diploma
 
     bool is_ready() const noexcept
     {
@@ -67,6 +75,22 @@ public:
     {
         fn_( std::move( item_ ) );
     }
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+
+    void enter() noexcept
+    {
+        rx_.alt_enter( end_ );
+    }
+
+    void leave() noexcept
+    {
+        rx_.alt_leave();
+    }
+=======
+>>>>>>> origin/diploma
+>>>>>>> merge
 };
 
 } // namespace alt

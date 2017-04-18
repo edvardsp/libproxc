@@ -46,6 +46,7 @@ public:
     {}
 
     ~ChoiceTimeout() {}
+<<<<<<< HEAD
 
     void enter() noexcept
     { /* FIXME */ }
@@ -53,6 +54,18 @@ public:
     void leave() noexcept
     { /* FIXME */ }
 
+=======
+
+<<<<<<< HEAD
+=======
+    void enter() noexcept
+    { /* FIXME */ }
+
+    void leave() noexcept
+    { /* FIXME */ }
+
+>>>>>>> origin/diploma
+>>>>>>> merge
     bool is_ready() const noexcept
     {
         return ( time_point_ != std::chrono::steady_clock::time_point::min() )
@@ -76,6 +89,18 @@ public:
     {
         return time_point_ < time_point;
     }
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+
+    void enter() noexcept
+    {}
+
+    void leave() noexcept
+    {}
+=======
+>>>>>>> origin/diploma
+>>>>>>> merge
 };
 
 } // namespace alt

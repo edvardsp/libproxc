@@ -8,6 +8,7 @@
 #include <proxc/context.hpp>
 #include <proxc/scheduler.hpp>
 #include <proxc/alt/alt.hpp>
+#include <proxc/alt/choice_base.hpp>
 
 #include <proxc/scheduling_policy/policy_base.hpp>
 #include <proxc/scheduling_policy/round_robin.hpp>
@@ -320,10 +321,17 @@ void Scheduler::wakeup_sleep() noexcept
     }
 }
 
-void Scheduler::wakeup_alt( Alt * alt ) noexcept
+void Scheduler::wait_alt( Alt * alt ) noexcept
 {
     BOOST_ASSERT( alt != nullptr );
-    alt->maybe_wakeup();
+    alt->maybe_wait();
+}
+
+bool Scheduler::wakeup_alt( alt::ChoiceBase * choice ) noexcept
+{
+    BOOST_ASSERT( choice != nullptr );
+    auto alt = choice->alt_;
+    return alt->try_wakeup( choice );
 }
 
 void Scheduler::wakeup_waiting_on(Context * ctx) noexcept
@@ -386,6 +394,9 @@ void Scheduler::resolve_ctx_switch_data( CtxSwitchData * data ) noexcept
     if ( data != nullptr ) {
         if ( data->ctx_ != nullptr ) {
             schedule( data->ctx_ );
+        }
+        if ( data->alt_ != nullptr ) {
+
         }
         if ( data->splk_ != nullptr ) {
             data->splk_->unlock();

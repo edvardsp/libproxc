@@ -4,6 +4,7 @@ proxc_sources = [
     'context.cpp',
     'process.cpp',
     'scheduler.cpp',
+    'alt/choice_base.cpp',
     'scheduling_policy/round_robin.cpp',
     'scheduling_policy/work_stealing.cpp'
 ]

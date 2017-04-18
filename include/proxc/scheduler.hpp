@@ -29,6 +29,12 @@ PROXC_NAMESPACE_BEGIN
 // forward declarations
 class Alt;
 
+namespace alt {
+
+class ChoiceBase;
+
+} // namespace alt
+
 namespace detail {
 
 // Schwarz counter
@@ -127,9 +133,11 @@ public:
     bool sleep_until( TimePointType const &, CtxSwitchData * = nullptr ) noexcept;
 
     void wakeup_sleep() noexcept;
-    static void wakeup_alt( Alt * ) noexcept;
     void wakeup_waiting_on( Context * ) noexcept;
     void cleanup_terminated() noexcept;
+
+    static void wait_alt( Alt * ) noexcept;
+    static bool wakeup_alt( alt::ChoiceBase * ) noexcept;
 
     void print_debug() noexcept;
 

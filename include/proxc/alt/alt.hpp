@@ -34,6 +34,7 @@ private:
     std::vector< ChoicePtr >                     choices_;
     std::unique_ptr< alt::ChoiceTimeout >        timeout_{ nullptr };
 
+<<<<<<< HEAD
     Context *    ctx_;
 
     Spinlock splk_;
@@ -41,6 +42,26 @@ private:
     alignas(cache_alignment) std::atomic< ChoiceType * >    selected_{ nullptr };
     alignas(cache_alignment) std::atomic< bool >            wakeup_{ false };
 
+=======
+<<<<<<< HEAD
+    Context *    alt_ctx_;
+
+    Spinlock splk_;
+
+    alignas(cache_alignment) std::atomic< alt::ChoiceBase * >    selected_{ nullptr };
+    alignas(cache_alignment) std::atomic< Context * >            wakeup_{ nullptr };
+
+    friend class ::proxc::Scheduler;
+=======
+    Context *    ctx_;
+
+    Spinlock splk_;
+
+    alignas(cache_alignment) std::atomic< ChoiceType * >    selected_{ nullptr };
+    alignas(cache_alignment) std::atomic< bool >            wakeup_{ false };
+
+>>>>>>> origin/diploma
+>>>>>>> merge
     friend class alt::ChoiceBase;
 
 public:
@@ -129,13 +150,31 @@ private:
     ChoiceType * select_1() noexcept;
     ChoiceType * select_n() noexcept;
 
+<<<<<<< HEAD
     void wait( std::unique_lock< Spinlock > & ) noexcept;
     bool try_select( ChoiceType * ) noexcept;
+=======
+<<<<<<< HEAD
+    void wait( std::unique_lock< Spinlock > * ) noexcept;
+    bool try_select( alt::ChoiceBase * ) noexcept;
+=======
+    void wait( std::unique_lock< Spinlock > & ) noexcept;
+    bool try_select( ChoiceType * ) noexcept;
+>>>>>>> origin/diploma
+>>>>>>> merge
     void maybe_wakeup() noexcept;
 };
 
 Alt::Alt()
+<<<<<<< HEAD
     : ctx_{ Scheduler::running() }
+=======
+<<<<<<< HEAD
+    : alt_ctx_{ Scheduler::running() }
+=======
+    : ctx_{ Scheduler::running() }
+>>>>>>> origin/diploma
+>>>>>>> merge
 {
     choices_.reserve( 8 );
 }
@@ -152,7 +191,15 @@ Alt & Alt::send(
         choices_.push_back(
             std::make_unique< alt::ChoiceSend< ItemType > >(
                 this,
+<<<<<<< HEAD
                 ctx_,
+=======
+<<<<<<< HEAD
+                alt_ctx_,
+=======
+                ctx_,
+>>>>>>> origin/diploma
+>>>>>>> merge
                 tx,
                 std::move( item ),
                 std::forward< typename alt::ChoiceSend< ItemType >::FnType >( fn )
@@ -172,7 +219,15 @@ Alt & Alt::send(
         choices_.push_back(
             std::make_unique< alt::ChoiceSend< ItemType > >(
                 this,
+<<<<<<< HEAD
                 ctx_,
+=======
+<<<<<<< HEAD
+                alt_ctx_,
+=======
+                ctx_,
+>>>>>>> origin/diploma
+>>>>>>> merge
                 tx,
                 item,
                 std::forward< typename alt::ChoiceSend< ItemType >::FnType >( fn )
@@ -225,7 +280,15 @@ Alt & Alt::recv(
         choices_.push_back(
             std::make_unique< alt::ChoiceRecv< ItemType > >(
                 this,
+<<<<<<< HEAD
                 ctx_,
+=======
+<<<<<<< HEAD
+                alt_ctx_,
+=======
+                ctx_,
+>>>>>>> origin/diploma
+>>>>>>> merge
                 rx,
                 std::forward< typename alt::ChoiceRecv< ItemType >::FnType >( fn )
             ) );
@@ -309,7 +372,11 @@ void Alt::select()
         choices_.emplace_back( timeout_.release() );
     }
 
-    alt::ChoiceBase * selected = nullptr;
+    for ( auto& choice : choices_ ) {
+        choice->enter();
+    }
+
+    alt::ChoiceBase * selected;
     switch ( choices_.size() ) {
     case 0:  select_0(); // never returns
     case 1:  selected = select_1(); break;
@@ -332,24 +399,60 @@ auto Alt::select_1() noexcept
     -> ChoiceType *
 {
     std::unique_lock< Spinlock > lk{ splk_ };
+<<<<<<< HEAD
 
     ChoiceType * choice = choices_.begin()->get();
 
+=======
+<<<<<<< HEAD
+    auto choice = choices_.begin()->get();
+
+    choice->enter();
+
+    for ( ;; ) {
+        if ( ! choice->is_ready() ) {
+            wait( & lk );
+            // woken up, case should be ready
+=======
+
+    ChoiceType * choice = choices_.begin()->get();
+
+>>>>>>> merge
     choice->enter();
     do {
         if ( ! choice->is_ready() ) {
             wait( lk );
             // choice should be ready now
             continue;
+>>>>>>> origin/diploma
         }
     } while ( choice->try_complete() );
     choice->leave();
 
+<<<<<<< HEAD
     return choice;
 }
 
 auto Alt::select_n() noexcept
     -> ChoiceType *
+=======
+<<<<<<< HEAD
+        if ( choice->try_complete() ) {
+            choice->leave();
+            return choice;
+        }
+    }
+}
+
+alt::ChoiceBase * Alt::select_n() noexcept
+=======
+    return choice;
+}
+
+auto Alt::select_n() noexcept
+    -> ChoiceType *
+>>>>>>> origin/diploma
+>>>>>>> merge
 {
     std::vector< ChoiceType * > ready;
     // FIXME: reserve? and if so, at what size?
@@ -361,8 +464,18 @@ auto Alt::select_n() noexcept
         choice->enter();
     }
 
+<<<<<<< HEAD
     ChoiceType * selected = nullptr;
     while ( selected == nullptr ) {
+=======
+<<<<<<< HEAD
+    alt::ChoiceBase * selected = nullptr;
+    while( selected == nullptr ) {
+=======
+    ChoiceType * selected = nullptr;
+    while ( selected == nullptr ) {
+>>>>>>> origin/diploma
+>>>>>>> merge
         ready.clear();
         for ( auto& choice : choices_ ) {
             if ( choice->is_ready() ) {
@@ -371,6 +484,23 @@ auto Alt::select_n() noexcept
         }
 
         if ( ready.empty() ) {
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+            wait( & lk );
+
+            // woken up, selected should be set
+            selected = selected_.load( std::memory_order_acquire );
+            if ( selected != nullptr && selected->try_complete() ) {
+                continue;
+            }
+            selected_.store( nullptr, std::memory_order_release );
+            selected = nullptr;
+            // failed completing the alt case, usually because
+            // the other end was alting and failed to set selected.
+
+=======
+>>>>>>> merge
             wait( lk );
             // one or more choices should be ready,
             // and selected_ should be set. If set,
@@ -390,6 +520,10 @@ auto Alt::select_n() noexcept
             if ( ! selected->try_complete() ) {
                 selected = nullptr;
             }
+<<<<<<< HEAD
+=======
+>>>>>>> origin/diploma
+>>>>>>> merge
         } else {
             static thread_local std::mt19937 rng{ std::random_device{}() };
             std::shuffle( ready.begin(), ready.end(), rng );
@@ -406,13 +540,57 @@ auto Alt::select_n() noexcept
     for ( auto& choice : choices_ ) {
         choice->leave();
     }
+<<<<<<< HEAD
 
+=======
+<<<<<<< HEAD
+=======
+
+>>>>>>> origin/diploma
+>>>>>>> merge
     selected_.store( nullptr, std::memory_order_release );
     return selected;
 }
 
+<<<<<<< HEAD
 void Alt::wait( std::unique_lock< Spinlock > & lk ) noexcept
 {
+=======
+<<<<<<< HEAD
+void Alt::wait( std::unique_lock< Spinlock > * lk ) noexcept
+{
+    wakeup_.store( end_.ctx_, std::memory_order_release );
+    Scheduler::self()->wait( lk, true );
+    wakeup_.store( nullptr, std::memory_order_release );
+}
+
+// called externally by choices
+bool Alt::try_select( alt::ChoiceBase * choice ) noexcept
+{
+    BOOST_ASSERT( choice != nullptr );
+
+    std::unique_lock< Spinlock > lk{ splk_, std::defer_lock };
+    if ( ! lk.try_lock() )  {
+        return false;
+    }
+
+    alt::ChoiceBase * expected = nullptr;
+    bool success = selected_.compare_exchange_strong(
+        expected,                       // expected
+        choice,                         // desired
+        std::memory_order_acq_rel,      // success order
+        std::memory_order_relaxed       // fail order
+    );
+
+    auto ctx = wakeup_.exchange( nullptr, std::memory_order_acq_rel );
+    if ( ctx != nullptr ) {
+        Scheduler::self()->schedule( ctx );
+    }
+
+=======
+void Alt::wait( std::unique_lock< Spinlock > & lk ) noexcept
+{
+>>>>>>> merge
     wakeup_.store( true, std::memory_order_release );
     Scheduler::self()->wait( std::addressof( lk ), true );
     wakeup_.store( false, std::memory_order_release );
@@ -436,20 +614,43 @@ bool Alt::try_select( ChoiceType * choice ) noexcept
     if ( wakeup_.exchange( false, std::memory_order_acq_rel ) ) {
         Scheduler::self()->schedule( ctx_ );
     }
+<<<<<<< HEAD
+=======
+>>>>>>> origin/diploma
+>>>>>>> merge
     return success;
 }
 
 // called by external choices
 void Alt::maybe_wakeup() noexcept
 {
+<<<<<<< HEAD
     // FIXME: do i need a spinlock?
     /* std::unique_lock< Spinlock > lk{ splk_ }; */
 
     if ( wakeup_.exchange( false, std::memory_order_acq_rel ) ) {
         Scheduler::self()->schedule( ctx_ );
+=======
+<<<<<<< HEAD
+    std::unique_lock< Spinlock > lk{ splk_, std::defer_lock };
+
+    if ( ! lk.try_lock() )  {
+        return;
+    }
+
+    auto ctx = wakeup_.exchange( nullptr, std::memory_order_acq_rel );
+    if ( ctx != nullptr ) {
+        Scheduler::self()->schedule( ctx );
+=======
+    // FIXME: do i need a spinlock?
+    /* std::unique_lock< Spinlock > lk{ splk_ }; */
+
+    if ( wakeup_.exchange( false, std::memory_order_acq_rel ) ) {
+        Scheduler::self()->schedule( ctx_ );
+>>>>>>> origin/diploma
+>>>>>>> merge
     }
 }
 
 PROXC_NAMESPACE_END
-
 

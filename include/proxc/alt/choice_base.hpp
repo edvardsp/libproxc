@@ -3,6 +3,14 @@
 
 #include <proxc/config.hpp>
 
+#include <proxc/scheduler.hpp>
+
+#include <boost/assert.hpp>
+
+PROXC_NAMESPACE_BEGIN
+
+// forward declaration
+class Alt;
 PROXC_NAMESPACE_BEGIN
 
 // forward declaration
@@ -12,11 +20,11 @@ namespace alt {
 
 class ChoiceBase
 {
-private:
-    Alt *    alt_;
-
 public:
-    ChoiceBase( Alt * ) noexcept;
+    ChoiceBase() {}
+    virtual ~ChoiceBase() noexcept {}
+public:
+    ChoiceBase() {}
     virtual ~ChoiceBase() noexcept {}
 
     // make non-copyable
@@ -27,14 +35,23 @@ public:
     ChoiceBase( ChoiceBase && ) = delete;
     ChoiceBase & operator = ( ChoiceBase && ) = delete;
 
-    // base methods
-    bool same_alt( Alt * ) noexcept;
-    bool try_select() noexcept;
-    void maybe_wakeup() noexcept;
-
     // interface
+    virtual bool is_ready( Alt * ) const noexcept = 0;
+    virtual bool try_complete() noexcept = 0;
+    virtual void run_func() const noexcept = 0;
+
+private:
     virtual void enter() noexcept = 0;
     virtual void leave() noexcept = 0;
+};
+
+} // namespace alt
+PROXC_NAMESPACE_END
+
+    // interface
+    virtual bool is_ready( Alt * ) const noexcept = 0;
+    virtual bool try_complete() noexcept = 0;
+    virtual void run_func() const noexcept = 0;
     virtual bool try_complete() noexcept = 0;
     virtual bool is_ready() const noexcept = 0;
     virtual void run_func() const noexcept = 0;

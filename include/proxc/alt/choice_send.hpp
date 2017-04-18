@@ -3,8 +3,9 @@
 
 #include <proxc/config.hpp>
 
-#include <proxc/alt/choice_base.hpp>
+#include <proxc/context.hpp>
 #include <proxc/channel.hpp>
+#include <proxc/alt/choice_base.hpp>
 #include <proxc/detail/delegate.hpp>
 
 PROXC_NAMESPACE_BEGIN
@@ -49,6 +50,13 @@ public:
         , item_{ std::move( item ) }
         , fn_{ std::move( fn ) }
     {}
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+
+    ~ChoiceSend() {}
+=======
+>>>>>>> merge
 
     ~ChoiceSend() {}
 
@@ -61,6 +69,7 @@ public:
     {
         tx_.alt_leave();
     }
+>>>>>>> origin/diploma
 
     bool is_ready() const noexcept
     {
@@ -77,6 +86,22 @@ public:
     {
         fn_();
     }
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+
+    void enter() noexcept
+    {
+        tx_.alt_enter( end_ );
+    }
+
+    void leave() noexcept
+    {
+        tx_.alt_leave();
+    }
+=======
+>>>>>>> origin/diploma
+>>>>>>> merge
 };
 
 } // namespace alt
