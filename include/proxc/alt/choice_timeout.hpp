@@ -14,11 +14,12 @@ namespace alt {
 class ChoiceTimeout : public ChoiceBase
 {
 public:
-    using FnType = detail::delegate< void( void ) >;
+    using FnT = detail::delegate< void( void ) >;
 
 private:
     std::chrono::steady_clock::time_point    time_point_;
-    FnType                                   fn_;
+
+    FnT    fn_;
 
 public:
     ChoiceTimeout( Alt * alt )
@@ -30,7 +31,7 @@ public:
     template<typename Rep, typename Period>
     ChoiceTimeout( Alt * alt,
                    std::chrono::duration< Rep, Period > const & duration,
-                   FnType fn )
+                   FnT fn )
         : ChoiceBase{ alt }
         , time_point_{ std::chrono::steady_clock::now() + duration }
         , fn_{ std::move( fn ) }
@@ -39,14 +40,13 @@ public:
     template<typename Clock, typename Dur>
     ChoiceTimeout( Alt * alt,
                    std::chrono::time_point< Clock, Dur > const & time_point,
-                   FnType fn )
+                   FnT fn )
         : ChoiceBase{ alt }
         , time_point_{ time_point }
         , fn_{ std::move( fn ) }
     {}
 
     ~ChoiceTimeout() {}
-<<<<<<< HEAD
 
     void enter() noexcept
     { /* FIXME */ }
@@ -54,18 +54,6 @@ public:
     void leave() noexcept
     { /* FIXME */ }
 
-=======
-
-<<<<<<< HEAD
-=======
-    void enter() noexcept
-    { /* FIXME */ }
-
-    void leave() noexcept
-    { /* FIXME */ }
-
->>>>>>> origin/diploma
->>>>>>> merge
     bool is_ready() const noexcept
     {
         return ( time_point_ != std::chrono::steady_clock::time_point::min() )
@@ -89,18 +77,6 @@ public:
     {
         return time_point_ < time_point;
     }
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-
-    void enter() noexcept
-    {}
-
-    void leave() noexcept
-    {}
-=======
->>>>>>> origin/diploma
->>>>>>> merge
 };
 
 } // namespace alt

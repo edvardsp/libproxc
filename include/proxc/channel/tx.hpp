@@ -30,15 +30,16 @@ template<typename T> class Rx;
 // Tx
 ////////////////////////////////////////////////////////////////////////////////
 
-template<typename T>
+template<typename ItemT>
 class Tx
 {
 public:
-    using ItemType = T;
+    using Id = detail::ChannelId;
 
 private:
-    using ChanType = detail::ChannelImpl< ItemType >;
-    using ChanPtr = std::shared_ptr< ChanType >;
+    using ChanT = detail::ChannelImpl< ItemT >;
+    using EndT = detail::ChanEnd< ItemT >;
+    using ChanPtr = std::shared_ptr< ChanT >;
 
     ChanPtr    chan_{ nullptr };
 
@@ -59,6 +60,11 @@ public:
     Tx( Tx && ) = default;
     Tx & operator = ( Tx && ) = default;
 
+    Id get_id() const noexcept
+    {
+        return Id{ chan_.get() };
+    }
+
     bool is_closed() const noexcept
     {
         return chan_->is_closed();
@@ -71,43 +77,43 @@ public:
     }
 
     // normal send operations
-    OpResult send( ItemType const & item ) noexcept
+    OpResult send( ItemT const & item ) noexcept
     {
-        ChanEnd tx{ Scheduler::running() };
-        ItemType i{ item };
-        return chan_->send( tx, i );
+        ItemT i{ item };
+        EndT tx{ Scheduler::running(), i };
+        return chan_->send( tx );
     }
 
-    OpResult send( ItemType && item ) noexcept
+    OpResult send( ItemT && item ) noexcept
     {
-        ChanEnd tx{ Scheduler::running() };
-        ItemType i{ std::move( item ) };
-        return chan_->send( tx, i );
+        ItemT i{ std::move( item ) };
+        EndT tx{ Scheduler::running(), i };
+        return chan_->send( tx );
     }
 
     // send operations with timepoint timeout
     template<typename Clock, typename Dur>
-    OpResult send_until( ItemType && item,
+    OpResult send_until( ItemT && item,
                          std::chrono::time_point< Clock, Dur > const & time_point
     ) noexcept
     {
-        ChanEnd tx{ Scheduler::running() };
-        return chan_->send_until( tx, item, time_point );
+        EndT tx{ Scheduler::running(), item };
+        return chan_->send_until( tx, time_point );
     }
 
     template<typename Clock, typename Dur>
-    OpResult send_until( ItemType const & item,
+    OpResult send_until( ItemT const & item,
                          std::chrono::time_point< Clock, Dur > const & time_point
     ) noexcept
     {
-        ChanEnd tx{ Scheduler::running() };
-        ItemType i{ item };
-        return chan_->send_until( tx, i, time_point );
+        ItemT i{ item };
+        EndT tx{ Scheduler::running(), i };
+        return chan_->send_until( tx, time_point );
     }
 
     // send operations with duration timeout
     template<typename Rep, typename Period>
-    OpResult send_for( ItemType && item,
+    OpResult send_for( ItemT && item,
                        std::chrono::duration< Rep, Period > const & duration
     ) noexcept
     {
@@ -116,13 +122,12 @@ public:
     }
 
     template<typename Rep, typename Period>
-    OpResult send_for( ItemType const & item,
+    OpResult send_for( ItemT const & item,
                        std::chrono::duration< Rep, Period > const & duration
     ) noexcept
     {
         auto time_point = std::chrono::steady_clock::now() + duration;
-        ItemType i{ item };
-        return send_until( std::move( i ), time_point );
+        return send_until( item, time_point );
     }
 
 
@@ -135,9 +140,9 @@ private:
     friend std::tuple< Tx< U >, Rx< U > >
     create() noexcept;
 
-    friend class ::proxc::alt::ChoiceSend< T >;
+    friend class ::proxc::alt::ChoiceSend< ItemT >;
 
-    void alt_enter( ChanEnd & tx ) noexcept
+    void alt_enter( EndT & tx ) noexcept
     {
         chan_->alt_send_enter( tx );
     }
@@ -147,14 +152,14 @@ private:
         chan_->alt_send_leave();
     }
 
-    bool alt_ready( Alt * alt ) const noexcept
+    bool alt_ready() const noexcept
     {
-        return chan_->alt_send_ready( alt );
+        return chan_->alt_send_ready();
     }
 
-    AltResult alt_send( ItemType & item ) noexcept
+    AltResult alt_send() noexcept
     {
-        return chan_->alt_send( item );
+        return chan_->alt_send();
     }
 };
 

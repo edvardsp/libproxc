@@ -15,48 +15,41 @@ template<typename T>
 class ChoiceSend : public ChoiceBase
 {
 public:
-    using ItemType = T;
-    using TxType = channel::Tx< ItemType >;
-    using FnType = detail::delegate< void( void ) >;
+    using ItemT = T;
+    using TxT = channel::Tx< ItemT >;
+    using EndT = channel::detail::ChanEnd< ItemT >;
+    using FnT = detail::delegate< void( void ) >;
 
 private:
-    channel::ChanEnd    end_;
-
-    TxType &    tx_;
-    ItemType    item_;
-    FnType      fn_;
+    TxT &    tx_;
+    ItemT    item_;
+    EndT     end_;
+    FnT      fn_;
 
 public:
-    ChoiceSend( Alt * alt,
-                Context * ctx,
-                TxType & tx,
-                ItemType const & item,
-                FnType fn )
+    ChoiceSend( Alt *         alt,
+                Context *     ctx,
+                TxT &         tx,
+                ItemT const & item,
+                FnT           fn )
         : ChoiceBase{ alt }
-        , end_{ ctx, this }
         , tx_{ tx }
         , item_{ item }
+        , end_{ ctx, item_, this }
         , fn_{ std::move( fn ) }
     {}
 
-    ChoiceSend( Alt * alt,
+    ChoiceSend( Alt *     alt,
                 Context * ctx,
-                TxType & tx,
-                ItemType && item,
-                FnType fn )
+                TxT &     tx,
+                ItemT &&  item,
+                FnT       fn )
         : ChoiceBase{ alt }
-        , end_{ ctx, this }
         , tx_{ tx }
         , item_{ std::move( item ) }
+        , end_{ ctx, item_, this }
         , fn_{ std::move( fn ) }
     {}
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-
-    ~ChoiceSend() {}
-=======
->>>>>>> merge
 
     ~ChoiceSend() {}
 
@@ -69,16 +62,15 @@ public:
     {
         tx_.alt_leave();
     }
->>>>>>> origin/diploma
 
     bool is_ready() const noexcept
     {
-        return tx_.alt_ready( this );
+        return tx_.alt_ready();
     }
 
     bool try_complete() noexcept
     {
-        auto res = tx_.alt_send( item_ );
+        auto res = tx_.alt_send();
         return res == channel::AltResult::Ok;
     }
 
@@ -86,22 +78,6 @@ public:
     {
         fn_();
     }
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-
-    void enter() noexcept
-    {
-        tx_.alt_enter( end_ );
-    }
-
-    void leave() noexcept
-    {
-        tx_.alt_leave();
-    }
-=======
->>>>>>> origin/diploma
->>>>>>> merge
 };
 
 } // namespace alt

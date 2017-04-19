@@ -34,42 +34,17 @@ template<typename ItemT>
 struct alignas(cache_alignment) ChanEnd
 {
     Context *            ctx_;
-<<<<<<< HEAD
     ItemT &              item_;
-    alt::ChoiceBase *    alt_;
-    ChanEnd( Context * ctx,
-             ItemT & item,
-             alt::ChoiceBase * alt = nullptr )
-        : ctx_{ ctx }
-        , item_{ item }
-        , alt_{ alt }
-    {}
-};
-
-=======
-<<<<<<< HEAD
     alt::ChoiceBase *    alt_choice_;
-    ChanEnd( Context * ctx, alt::ChoiceBase * alt_choice = nullptr )
-        : ctx_{ ctx }, alt_choice_{ alt_choice }
-    {}
-};
-
-namespace detail {
-
-=======
-    ItemT &              item_;
-    alt::ChoiceBase *    alt_;
     ChanEnd( Context * ctx,
              ItemT & item,
-             alt::ChoiceBase * alt = nullptr )
+             alt::ChoiceBase * alt_choice = nullptr )
         : ctx_{ ctx }
         , item_{ item }
-        , alt_{ alt }
+        , alt_choice_{ alt_choice }
     {}
 };
 
->>>>>>> origin/diploma
->>>>>>> merge
 ////////////////////////////////////////////////////////////////////////////////
 // ChannelImpl
 ////////////////////////////////////////////////////////////////////////////////
@@ -78,8 +53,9 @@ template<typename T>
 class ChannelImpl
 {
 public:
-    using ItemT = T;
-    using EndT  = ChanEnd< ItemT >;
+    using ItemT   = T;
+    using EndT    = ChanEnd< ItemT >;
+    using ChoiceT = alt::ChoiceBase;
 
 private:
     Spinlock    splk_{};
@@ -89,11 +65,6 @@ private:
     alignas(cache_alignment) std::atomic< EndT * >    tx_end_{ nullptr };
     alignas(cache_alignment) std::atomic< bool >      tx_consumed_{ false };
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-=======
->>>>>>> merge
     alignas(cache_alignment) std::atomic< EndT * >    rx_end_{ nullptr };
     alignas(cache_alignment) std::atomic< bool >      rx_consumed_{ false };
 
@@ -101,29 +72,30 @@ private:
 
     struct alignas(cache_alignment) SyncGuard
     {
-        bool                  status_{ false };
+        bool                  clash_{ false };
         std::atomic_flag &    alt_sync_;
         SyncGuard( std::atomic_flag & alt_sync ) noexcept
             : alt_sync_{ alt_sync }
         {
-            status_ = ! alt_sync_.test_and_set( std::memory_order_acquire );
+            clash_ = alt_sync_.test_and_set( std::memory_order_acquire );
         }
         ~SyncGuard() noexcept
         {
-            if ( status_ ) {
+            if ( ! clash_ ) {
                 alt_sync_.clear( std::memory_order_release );
             }
         }
         bool clashed() const noexcept
         {
-            return ! status_;
+            return clash_;
         }
     };
 
->>>>>>> origin/diploma
 public:
     ChannelImpl()
     {
+        // this must be done in the constructor, as atomic_flag
+        // does not support braced initialization
         alt_sync_.clear( std::memory_order_release );
     }
     ~ChannelImpl() noexcept;
@@ -139,42 +111,38 @@ public:
     bool has_rx_() const noexcept;
 
     // normal send and receieve methods
-    OpResult send( EndT &, ItemT & ) noexcept;
+    OpResult send( EndT & ) noexcept;
 
-    OpResult recv( EndT &, ItemT & ) noexcept;
+    OpResult recv( EndT & ) noexcept;
 
     // send and receive methods with duration timeout
     template<typename Rep, typename Period>
     OpResult send_for( EndT &,
-                       ItemT &,
                        std::chrono::duration< Rep, Period > const & ) noexcept;
 
     template<typename Rep, typename Period>
     OpResult recv_for( EndT &,
-                       ItemT &,
                        std::chrono::duration< Rep, Period > const & ) noexcept;
 
     // send and receive methods with timepoint timeout
     template<typename Clock, typename Dur>
     OpResult send_until( EndT &,
-                         ItemT &,
                          std::chrono::time_point< Clock, Dur > const & ) noexcept;
 
     template<typename Clock, typename Dur>
     OpResult recv_until( EndT &,
-                         ItemT &,
                          std::chrono::time_point< Clock, Dur > const & ) noexcept;
 
     // send and receive methods for alting
     void alt_send_enter( EndT & ) noexcept;
     void alt_send_leave() noexcept;
-    bool alt_send_ready( Alt * ) const noexcept;
-    AltResult alt_send( ItemT & ) noexcept;
+    bool alt_send_ready() const noexcept;
+    AltResult alt_send() noexcept;
 
     void alt_recv_enter( EndT & ) noexcept;
     void alt_recv_leave() noexcept;
-    bool alt_recv_ready( Alt * ) const noexcept;
-    AltResult alt_recv( ItemT & ) noexcept;
+    bool alt_recv_ready() const noexcept;
+    AltResult alt_recv() noexcept;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -202,41 +170,18 @@ void ChannelImpl< T >::close() noexcept
     closed_.store( true, std::memory_order_release );
     EndT * tx = tx_end_.exchange( nullptr, std::memory_order_acq_rel );
     if ( tx != nullptr ) {
-<<<<<<< HEAD
-        alt::ChoiceBase * alt_choice = tx->alt_choice_;
+        ChoiceT * alt_choice = tx->alt_choice_;
         if ( alt_choice != nullptr ) {
             alt_choice->maybe_wakeup();
-=======
-<<<<<<< HEAD
-        // FIXME: call item destructor?
-        if ( tx->alt_choice_ != nullptr ) {
-            tx->alt_choice_->maybe_wakeup();
-=======
-        alt::ChoiceBase * alt_choice = tx->alt_choice_;
-        if ( alt_choice != nullptr ) {
-            alt_choice->maybe_wakeup();
->>>>>>> origin/diploma
->>>>>>> merge
         } else {
             Scheduler::self()->schedule( tx->ctx_ );
         }
     }
     EndT * rx = rx_end_.exchange( nullptr, std::memory_order_acq_rel );
     if ( rx != nullptr ) {
-<<<<<<< HEAD
-        alt::ChoiceBase * alt_choice = tx->alt_choice_;
+        ChoiceT * alt_choice = rx->alt_choice_;
         if ( alt_choice != nullptr ) {
             alt_choice->maybe_wakeup();
-=======
-<<<<<<< HEAD
-        if ( rx->alt_ != nullptr ) {
-            rx->alt_choice_->maybe_wakeup();
-=======
-        alt::ChoiceBase * alt_choice = tx->alt_choice_;
-        if ( alt_choice != nullptr ) {
-            alt_choice->maybe_wakeup();
->>>>>>> origin/diploma
->>>>>>> merge
         } else {
             Scheduler::self()->schedule( rx->ctx_ );
         }
@@ -256,10 +201,10 @@ bool ChannelImpl< T >::has_rx_() const noexcept
 }
 
 template<typename T>
-OpResult ChannelImpl< T >::send( EndT & tx, ItemT & item ) noexcept
+OpResult ChannelImpl< T >::send( EndT & tx ) noexcept
 {
-    BOOST_ASSERT( tx_end_.load( std::memory_order_relaxed ) == nullptr );
-    BOOST_ASSERT( payload_.load( std::memory_order_relaxed ) == nullptr );
+    BOOST_ASSERT( ! has_tx_() );
+    BOOST_ASSERT( ! tx_consumed_.load( std::memory_order_relaxed ) );
 
     std::unique_lock< Spinlock > lk{ splk_ };
 
@@ -267,194 +212,74 @@ OpResult ChannelImpl< T >::send( EndT & tx, ItemT & item ) noexcept
         return OpResult::Closed;
     }
 
-    tx_end_.store( std::addressof( tx ), std::memory_order_release );
-    Payload payload{ item };
-    payload_.store( std::addressof( payload ), std::memory_order_release );
-
-<<<<<<< HEAD
-    EndT * rx = rx_end_.load( std::memory_order_acquire );
+    EndT * rx = rx_end_.exchange( nullptr, std::memory_order_acq_rel );
     if ( rx != nullptr ) {
-        alt::ChoiceBase * alt_choice = rx->alt_choice_;
-        if ( alt_choice != nullptr ) {
-=======
-<<<<<<< HEAD
-    ChanEnd * rx = rx_end_.exchange( nullptr, std::memory_order_acquire );
-    if ( rx != nullptr ) {
-        alt::ChoiceBase * alt_choice = rx->alt_choice_;
-        if ( alt_choice != nullptr ) {
-            // Rx is alting, and is maybe waiting.
-            // Winning the selection does not matter,
-            // as Rx completes the transaction either way.
-            (void)alt_choice->try_select();
-
-        } else {
-=======
-    EndT * rx = rx_end_.load( std::memory_order_acquire );
-    if ( rx != nullptr ) {
-        alt::ChoiceBase * alt_choice = rx->alt_choice_;
-        if ( alt_choice != nullptr ) {
->>>>>>> merge
-            // doesn't care whether its selected or not
-            (void)alt_choice->try_select();
-        } else {
-            rx_end_.store( nullptr, std::memory_order_release );
->>>>>>> origin/diploma
+        ChoiceT * alt_choice = rx->alt_choice_;
+        if ( alt_choice == nullptr || alt_choice->try_select() ) {
+            rx->item_ = std::move( tx.item_ );
+            rx_consumed_.store( true, std::memory_order_release );
             Scheduler::self()->schedule( rx->ctx_ );
+            return OpResult::Ok;
         }
     }
 
-    Scheduler::self()->wait( & lk );
-<<<<<<< HEAD
-    // Rx consumed item
-    // tx_end_ and payload_ zeroed by Rx
-=======
-    // Rx has consumed item
-    // tx_end_ and payload_ should be zeroed by Rx
-<<<<<<< HEAD
-=======
->>>>>>> origin/diploma
->>>>>>> merge
-    BOOST_ASSERT( tx_end_.load( std::memory_order_acquire ) == nullptr );
-    BOOST_ASSERT( payload_.load( std::memory_order_acquire ) == nullptr );
-    return OpResult::Ok;
+    tx_end_.store( std::addressof( tx ), std::memory_order_release );
+    Scheduler::self()->wait( std::addressof( lk ) );
+    return ( tx_consumed_.exchange( false, std::memory_order_acq_rel ) )
+        ? OpResult::Ok
+        : OpResult::Closed ;
 }
 
 template<typename T>
-OpResult ChannelImpl< T >::recv( EndT & rx, ItemT & item ) noexcept
+OpResult ChannelImpl< T >::recv( EndT & rx ) noexcept
 {
-    BOOST_ASSERT( rx_end_.load( std::memory_order_relaxed ) == nullptr );
+    BOOST_ASSERT( ! has_rx_() );
+    BOOST_ASSERT( ! rx_consumed_.load( std::memory_order_relaxed ) );
 
     std::unique_lock< Spinlock > lk{ splk_ };
 
-    for (;;) {
-        if ( is_closed() ) {
-            return OpResult::Closed;
-        }
-
-<<<<<<< HEAD
-        EndT * tx = tx_end_.load( std::memory_order_acquire );
-        if ( tx != nullptr ) {
-            bool tx_ready = false;
-            auto alt_choice = tx->alt_choice_;
-            if ( alt_choice != nullptr ) {
-                // Tx is alting, must try to win selection
-                if ( alt_choice->try_select() ) {
-                    // "won" the selection, wakeup alt and
-                    // wait for tx to set payload.
-                    alt_choice->maybe_wakeup();
-                    Scheduler::self()->wait( & lk, true );
-                    // payload is now set.
-                } else {
-                    // "lost" the selection, wait until the same alting Tx
-                    // or another Tx wakes up Rx.
-                }
-
-            } else {
-                // Normal Tx, continue as normal
-                tx_ready = true;
-            }
-
-
-            if ( tx_ready ) {
-                tx_end_.store( nullptr, std::memory_order_release );
-                auto payload = payload_.exchange( nullptr, std::memory_order_release );
-                BOOST_ASSERT( payload != nullptr );
-                // item must be consumed before scheduling tx
-=======
-<<<<<<< HEAD
-        ChanEnd * tx = tx_end_.load( std::memory_order_acquire );
-        if ( tx != nullptr ) {
-            alt::ChoiceBase * alt_choice = tx->alt_choice_;
-            bool tx_ready = false;
-            if ( alt_choice != nullptr ) {
-                // Alting Tx, try to "win" the selection
-                // FIXME: unlock lk when calling try_select?
-                if ( alt_choice->try_select() ) {
-                    // "won" the selection, wait for Alting Tx
-                    // to store payload
-                    rx_end_.store( std::addressof( rx ), std::memory_order_release );
-                    Scheduler::self()->wait( & lk, true );
-                    // can now complete transaction
-                    tx_ready = true;
-                } else {
-                    // "lost" the selection, or denied access.
-                    // wait for either the same alting Tx or another
-                    // Tx wakes up Rx.
-                }
-            } else {
-                // Normal Tx, complete transaction
-                tx_ready = true;
-            }
-
-            if ( tx_ready ) {
-                Payload * payload = payload_.exchange( nullptr, std::memory_order_acquire );
-                tx_end_.store( nullptr, std::memory_order_release );
-                // item must be moved before Tx is scheduled
-=======
-        EndT * tx = tx_end_.load( std::memory_order_acquire );
-        if ( tx != nullptr ) {
-            bool tx_ready = false;
-            auto alt_choice = tx->alt_choice_;
-            if ( alt_choice != nullptr ) {
-                // Tx is alting, must try to win selection
-                if ( alt_choice->try_select() ) {
-                    // "won" the selection, wakeup alt and
-                    // wait for tx to set payload.
-                    alt_choice->maybe_wakeup();
-                    Scheduler::self()->wait( & lk, true );
-                    // payload is now set.
-                } else {
-                    // "lost" the selection, wait until the same alting Tx
-                    // or another Tx wakes up Rx.
-                }
-
-            } else {
-                // Normal Tx, continue as normal
-                tx_ready = true;
-            }
-
-
-            if ( tx_ready ) {
-                tx_end_.store( nullptr, std::memory_order_release );
-                auto payload = payload_.exchange( nullptr, std::memory_order_release );
-                BOOST_ASSERT( payload != nullptr );
-                // item must be consumed before scheduling tx
->>>>>>> origin/diploma
->>>>>>> merge
-                item = std::move( payload->item_ );
-                Scheduler::self()->schedule( tx->ctx_ );
-                return OpResult::Ok;
-            }
-        }
-        // Wait for Tx to wakeup Rx
-        rx_end_.store( std::addressof( rx ), std::memory_order_release );
-        Scheduler::self()->wait( & lk, true );
-        BOOST_ASSERT( rx_end_.load( std::memory_order_acquire ) == nullptr );
+    if ( is_closed() ) {
+        return OpResult::Closed;
     }
+
+    EndT * tx = tx_end_.exchange( nullptr, std::memory_order_acq_rel );
+    if ( tx != nullptr ) {
+        ChoiceT * alt_choice = tx->alt_choice_;
+        if ( alt_choice == nullptr || alt_choice->try_select() ) {
+            rx.item_ = std::move( tx->item_ );
+            tx_consumed_.store( true, std::memory_order_release );
+            Scheduler::self()->schedule( tx->ctx_ );
+            return OpResult::Ok;
+        }
+    }
+
+    rx_end_.store( std::addressof( rx ), std::memory_order_release );
+    Scheduler::self()->wait( std::addressof( lk ) );
+    return ( rx_consumed_.exchange( false, std::memory_order_acq_rel ) )
+        ? OpResult::Ok
+        : OpResult::Closed ;
 }
 
 template<typename T>
 template<typename Rep, typename Period>
 OpResult ChannelImpl< T >::send_for(
     EndT & tx,
-    ItemT & item,
     std::chrono::duration< Rep, Period > const & duration
 ) noexcept
 {
     auto timepoint = std::chrono::steady_clock::now() + duration;
-    return send_until( tx, item, timepoint );
+    return send_until( tx, timepoint );
 }
 
 template<typename T>
 template<typename Clock, typename Dur>
 OpResult ChannelImpl< T >::send_until(
     EndT & tx,
-    ItemT & item,
     std::chrono::time_point< Clock, Dur > const & time_point
 ) noexcept
 {
-    BOOST_ASSERT( tx_end_.load( std::memory_order_relaxed ) == nullptr );
-    BOOST_ASSERT( payload_.load( std::memory_order_relaxed ) == nullptr );
+    BOOST_ASSERT( ! has_tx_() );
+    BOOST_ASSERT( ! tx_consumed_.load( std::memory_order_relaxed ) );
 
     std::unique_lock< Spinlock > lk{ splk_ };
 
@@ -462,87 +287,45 @@ OpResult ChannelImpl< T >::send_until(
         return OpResult::Closed;
     }
 
-    tx_end_.store( std::addressof( tx ), std::memory_order_release );
-    Payload payload{ item };
-    payload_.store( std::addressof( payload ), std::memory_order_release );
-
-<<<<<<< HEAD
-    EndT * rx = rx_end_.load( std::memory_order_acquire );
+    EndT * rx = rx_end_.exchange( nullptr, std::memory_order_acq_rel );
     if ( rx != nullptr ) {
-        alt::ChoiceBase * alt_choice = rx->alt_choice_;
-        if ( alt_choice != nullptr ) {
-=======
-<<<<<<< HEAD
-    ChanEnd * rx = rx_end_.exchange( nullptr, std::memory_order_acquire );
-    if ( rx != nullptr ) {
-        alt::ChoiceBase * alt_choice = rx->alt_choice_;
-        if ( alt_choice != nullptr ) {
-            // Rx is alting, and is maybe waiting.
-            // Winning the selection does not matter,
-            // as Rx completes the transaction either way.
-            (void)alt_choice->try_select();
-
-=======
-    EndT * rx = rx_end_.load( std::memory_order_acquire );
-    if ( rx != nullptr ) {
-        alt::ChoiceBase * alt_choice = rx->alt_choice_;
-        if ( alt_choice != nullptr ) {
->>>>>>> merge
-            // doesn't care whether its selected or not, as Rx
-            // wakes up Tx when payload is consumed. Tx does not care
-            // whether its this alting Rx or another Rx which consumes it.
-            (void)alt_choice->try_select();
-<<<<<<< HEAD
-=======
->>>>>>> origin/diploma
->>>>>>> merge
-        } else {
-            rx_end_.store( nullptr, std::memory_order_release );
+        ChoiceT * alt_choice = rx->alt_choice_;
+        if ( alt_choice == nullptr || alt_choice->try_select() ) {
+            rx->item_ = std::move( tx.item_ );
+            rx_consumed_.store( true, std::memory_order_release );
             Scheduler::self()->schedule( rx->ctx_ );
+            return OpResult::Ok;
         }
     }
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-    Scheduler::self()->wait( & lk );
-    // Rx consumed item
-    // tx_end_ and payload_ zeroed by Rx
-=======
->>>>>>> merge
-    if ( ! Scheduler::self()->wait_until( time_point, & lk, true ) ) {
-        tx_end_.store( nullptr, std::memory_order_release );
-        payload_.store( nullptr, std::memory_order_release );
+    tx_end_.store( std::addressof( tx ), std::memory_order_release );
+    bool timeout = Scheduler::self()->wait_until( time_point, std::addressof( lk ), true );
+    tx_end_.store( nullptr, std::memory_order_release );
+
+    if ( tx_consumed_.exchange( false, std::memory_order_acq_rel ) ) {
+        return OpResult::Ok;
+    } else if ( timeout ) {
         return OpResult::Timeout;
+    } else {
+        return OpResult::Closed;
     }
-    // Rx has consumed item
-    // tx_end_ and payload_ should be zeroed by Rx
-<<<<<<< HEAD
-=======
->>>>>>> origin/diploma
->>>>>>> merge
-    BOOST_ASSERT( tx_end_.load( std::memory_order_acquire ) == nullptr );
-    BOOST_ASSERT( payload_.load( std::memory_order_acquire ) == nullptr );
-    return OpResult::Ok;
 }
 
 template<typename T>
 template<typename Rep, typename Period>
 OpResult ChannelImpl< T >::recv_for(
     EndT & rx,
-    ItemT & item,
     std::chrono::duration< Rep, Period > const & duration
 ) noexcept
 {
     auto timepoint = std::chrono::steady_clock::now() + duration;
-    return recv_until( rx, item, timepoint );
+    return recv_until( rx, timepoint );
 }
 
 template<typename T>
 template<typename Clock, typename Dur>
 OpResult ChannelImpl< T >::recv_until(
     EndT & rx,
-    ItemT & item,
     std::chrono::time_point< Clock, Dur > const & time_point
 ) noexcept
 {
@@ -550,69 +333,40 @@ OpResult ChannelImpl< T >::recv_until(
 
     std::unique_lock< Spinlock > lk{ splk_ };
 
-<<<<<<< HEAD
-=======
-    for (;;) {
-        if ( is_closed() ) {
-            return OpResult::Closed;
-        }
-
-        EndT * tx = tx_end_.load( std::memory_order_acquire );
-        if ( tx != nullptr ) {
-            bool tx_ready = false;
-            auto alt_choice = tx->alt_choice_;
-            if ( alt_choice != nullptr ) {
-                // Tx is alting, must try to win selection
-                if ( alt_choice->try_select() ) {
-                    // "won" the selection, wakeup alt and
-                    // wait for tx to set payload. do not timeout here,
-                    // as the actual transaction was agreed on before
-                    // the timeout occured.
-                    alt_choice->maybe_wakeup();
-                    Scheduler::self()->wait( & lk, true );
-                    // payload is now set.
-                } else {
-                    // "lost" the selection, wait until the same alting Tx
-                    // or another Tx wakes up Rx.
-                }
-
-            } else {
-                // Normal Tx, continue as normal
-                tx_ready = true;
-            }
-
-
-            if ( tx_ready ) {
-                tx_end_.store( nullptr, std::memory_order_release );
-                auto payload = payload_.exchange( nullptr, std::memory_order_release );
-                BOOST_ASSERT( payload != nullptr );
-                // item must be consumed before scheduling tx
-                item = std::move( payload->item_ );
-                Scheduler::self()->schedule( tx->ctx_ );
-                return OpResult::Ok;
-            }
-        }
-
-        // wait because no Tx, or Alt Tx has not synced
-        rx_end_.store( std::addressof( rx ), std::memory_order_release );
-        if ( ! Scheduler::self()->wait_until( time_point, & lk, true ) ) {
-            rx_end_.store( nullptr, std::memory_order_release );
-            return OpResult::Timeout;
-        }
-        // Tx should be ready
+    if ( is_closed() ) {
+        return OpResult::Closed;
     }
->>>>>>> origin/diploma
+
+    EndT * tx = tx_end_.exchange( nullptr, std::memory_order_acq_rel );
+    if ( tx != nullptr ) {
+        ChoiceT * alt_choice = tx->alt_choice_;
+        if ( alt_choice == nullptr || alt_choice->try_select() ) {
+            rx.item_ = std::move( tx->item_ );
+            tx_consumed_.store( true, std::memory_order_release );
+            Scheduler::self()->schedule( tx->ctx_ );
+            return OpResult::Ok;
+        }
+    }
+
+    rx_end_.store( std::addressof( rx ), std::memory_order_release );
+    bool timeout = Scheduler::self()->wait_until( time_point, std::addressof( lk ), true );
+    rx_end_.store( nullptr, std::memory_order_release );
+
+    if ( rx_consumed_.exchange( false, std::memory_order_acq_rel ) ) {
+        return OpResult::Ok;
+    } else if ( timeout ) {
+        return OpResult::Timeout;
+    } else {
+        return OpResult::Closed;
+    }
 }
 
 template<typename T>
 void ChannelImpl< T >::alt_send_enter( EndT & tx ) noexcept
 {
-    // FIXME: commented out for now, as this does not allow multiple sends
-    // from the same alt. Might delete this assert.
-    /* BOOST_ASSERT( tx_end_.load( std::memory_order_relaxed ) == nullptr ); */
-    BOOST_ASSERT( payload_.load( std::memory_order_relaxed ) == nullptr );
-
-    std::unique_lock< Spinlock > lk{ splk_ };
+    BOOST_ASSERT( tx_end_.load( std::memory_order_relaxed ) == nullptr );
+    BOOST_ASSERT( ! tx_consumed_.load( std::memory_order_relaxed ) );
+    // no spinlock
     tx_end_.store( std::addressof( tx ), std::memory_order_release );
 }
 
@@ -621,49 +375,27 @@ void ChannelImpl< T >::alt_send_leave() noexcept
 {
     std::unique_lock< Spinlock > lk{ splk_ };
     tx_end_.store( nullptr, std::memory_order_release );
-<<<<<<< HEAD
-    payload_.store( nullptr, std::memory_order_acquire );
-=======
-<<<<<<< HEAD
-=======
-    payload_.store( nullptr, std::memory_order_acquire );
->>>>>>> origin/diploma
->>>>>>> merge
+    tx_consumed_.store( false, std::memory_order_release );
 }
 
 template<typename T>
-bool ChannelImpl< T >::alt_send_ready( Alt * alt ) const noexcept
+bool ChannelImpl< T >::alt_send_ready() const noexcept
 {
-    BOOST_ASSERT( alt != nullptr );
-
-    std::unique_lock< Spinlock > lk{ splk_ };
-
     if ( is_closed() ) {
         return false;
     }
-<<<<<<< HEAD
-    EndT * rx = rx_end_.load( std::memory_order_acquire );
-    alt::ChoiceBase * alt_choice = rx->alt_choice_;
-    return ( rx != nullptr ) &&
-           ( ! alt_choice->same_alt( alt ) );
-=======
-<<<<<<< HEAD
-    auto rx = rx_end_.load( std::memory_order_acquire );
-    return ( rx != nullptr ) &&
-           ( rx->alt_choice_ != nullptr || rx->alt_choice_->same_alt( alt ) );
-=======
-    EndT * rx = rx_end_.load( std::memory_order_acquire );
-    alt::ChoiceBase * alt_choice = rx->alt_choice_;
-    return ( rx != nullptr ) &&
-           ( ! alt_choice->same_alt( alt ) );
->>>>>>> origin/diploma
->>>>>>> merge
+    return rx_end_.load( std::memory_order_acquire ) != nullptr;
 }
 
 template<typename T>
-AltResult ChannelImpl< T >::alt_send( ItemT & item ) noexcept
+AltResult ChannelImpl< T >::alt_send() noexcept
 {
-    BOOST_ASSERT( tx_end_.load( std::memory_order_relaxed ) != nullptr );
+    SyncGuard guard{ alt_sync_ };
+    if ( guard.clashed() ) {
+        return AltResult::SyncFailed;
+    }
+
+    BOOST_ASSERT( has_tx_() );
 
     std::unique_lock< Spinlock > lk{ splk_ };
 
@@ -671,33 +403,32 @@ AltResult ChannelImpl< T >::alt_send( ItemT & item ) noexcept
         return AltResult::Closed;
     }
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-=======
->>>>>>> merge
     EndT * rx = rx_end_.load( std::memory_order_acquire );
-    if ( rx == nullptr ) {
-        return AltResult::NoEnd;
-    }
+    if ( rx != nullptr ) {
+        ChoiceT * alt_choice = rx->alt_choice_;
+        if ( alt_choice == nullptr || alt_choice->try_select() ) {
+            EndT * tx = tx_end_.exchange( nullptr, std::memory_order_release );
+            rx_end_.store( nullptr, std::memory_order_release );
+            rx->item_ = std::move( tx->item_ );
+            rx_consumed_.store( true, std::memory_order_release );
+            Scheduler::self()->schedule( rx->ctx_ );
+            return AltResult::Ok;
 
-    alt::ChoiceBase * alt_choice = rx->alt_choice_;
-    if ( alt_choice != nullptr ) {
+        } else {
+            return AltResult::SelectFailed;
+        }
 
     } else {
-
+        return AltResult::NoEnd;
     }
->>>>>>> origin/diploma
 }
 
 template<typename T>
 void ChannelImpl< T >::alt_recv_enter( EndT & rx ) noexcept
 {
-    // FIXME: commented out for now, as this does not allow multiple recvs
-    // from the same alt. Might delete this alter.
-    /* BOOST_ASSERT( rx_end_.load( std::memory_order_relaxed ) == nullptr ); */
-
-    std::unique_lock< Spinlock > lk{ splk_ };
+    BOOST_ASSERT( rx_end_.load( std::memory_order_relaxed ) == nullptr );
+    BOOST_ASSERT( ! rx_consumed_.load( std::memory_order_relaxed ) );
+    // no spinlock
     rx_end_.store( std::addressof( rx ), std::memory_order_release );
 }
 
@@ -706,35 +437,27 @@ void ChannelImpl< T >::alt_recv_leave() noexcept
 {
     std::unique_lock< Spinlock > lk{ splk_ };
     rx_end_.store( nullptr, std::memory_order_release );
+    rx_consumed_.store( false, std::memory_order_release );
 }
 
 template<typename T>
-bool ChannelImpl< T >::alt_recv_ready( Alt * alt ) const noexcept
+bool ChannelImpl< T >::alt_recv_ready() const noexcept
 {
-    BOOST_ASSERT( alt != nullptr );
-
-    std::unique_lock< Spinlock > lk{ splk_ };
-
     if ( is_closed() ) {
         return false;
     }
-    auto tx = tx_end_.load( std::memory_order_acquire );
-    return ( tx != nullptr ) &&
-<<<<<<< HEAD
-           ( tx->alt_ != alt );
-=======
-<<<<<<< HEAD
-           ( tx->alt_choice_ != nullptr || tx->alt_choice_->same_alt( alt ) );
-=======
-           ( tx->alt_ != alt );
->>>>>>> origin/diploma
->>>>>>> merge
+    return tx_end_.load( std::memory_order_acquire ) != nullptr;
 }
 
 template<typename T>
-AltResult ChannelImpl< T >::alt_recv( ItemT & item ) noexcept
+AltResult ChannelImpl< T >::alt_recv() noexcept
 {
-    BOOST_ASSERT( rx_end_.load( std::memory_order_relaxed ) != nullptr );
+    SyncGuard guard{ alt_sync_ };
+    if ( guard.clashed() ) {
+        return AltResult::SyncFailed;
+    }
+
+    BOOST_ASSERT( has_rx_() );
 
     std::unique_lock< Spinlock > lk{ splk_ };
 
@@ -742,7 +465,48 @@ AltResult ChannelImpl< T >::alt_recv( ItemT & item ) noexcept
         return AltResult::Closed;
     }
 
+    EndT * tx = tx_end_.load( std::memory_order_acquire );
+    if ( tx != nullptr ) {
+        ChoiceT * alt_choice = tx->alt_choice_;
+        if ( alt_choice == nullptr || alt_choice->try_select() ) {
+            EndT * rx = rx_end_.exchange( nullptr, std::memory_order_release );
+            tx_end_.store( nullptr, std::memory_order_release );
+            rx->item_ = std::move( tx->item_ );
+            tx_consumed_.store( true, std::memory_order_release );
+            Scheduler::self()->schedule( tx->ctx_ );
+            return AltResult::Ok;
+
+        } else {
+            return AltResult::SelectFailed;
+        }
+
+    } else {
+        return AltResult::NoEnd;
+    }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// ChannelId
+////////////////////////////////////////////////////////////////////////////////
+
+class ChannelId
+{
+private:
+    void *    ptr_{ nullptr };
+public:
+    template<typename ItemT>
+    ChannelId( ChannelImpl< ItemT > * chan )
+        : ptr_{ static_cast< void *>( chan ) }
+    {}
+    bool operator == ( ChannelId const & other ) const noexcept { return ptr_ == other.ptr_; }
+    bool operator != ( ChannelId const & other ) const noexcept { return ptr_ != other.ptr_; }
+    bool operator <= ( ChannelId const & other ) const noexcept { return ptr_ <= other.ptr_; }
+    bool operator >= ( ChannelId const & other ) const noexcept { return ptr_ >= other.ptr_; }
+    bool operator <  ( ChannelId const & other ) const noexcept { return ptr_  < other.ptr_; }
+    bool operator >  ( ChannelId const & other ) const noexcept { return ptr_  > other.ptr_; }
+    explicit operator bool() const noexcept { return ptr_ != nullptr; }
+    bool operator ! () const noexcept { return ptr_ == nullptr; }
+};
 
 } // namespace detail
 } // namespace channel

@@ -17,35 +17,28 @@ template<typename T>
 class ChoiceRecv : public ChoiceBase
 {
 public:
-    using ItemType = T;
-    using RxType = channel::Rx< ItemType >;
-    using FnType = detail::delegate< void( ItemType ) >;
+    using ItemT = T;
+    using RxT   = channel::Rx< ItemT >;
+    using EndT  = channel::detail::ChanEnd< ItemT >;
+    using FnT   = detail::delegate< void( ItemT ) >;
 
 private:
-    channel::ChanEnd    end_;
-
-    RxType &     rx_;
-    FnType       fn_;
-    ItemType     item_;
+    RxT &    rx_;
+    ItemT    item_;
+    EndT     end_;
+    FnT      fn_;
 
 public:
-    ChoiceRecv( Alt * alt,
+    ChoiceRecv( Alt *     alt,
                 Context * ctx,
-                RxType & rx,
-                FnType fn )
+                RxT &     rx,
+                FnT       fn )
         : ChoiceBase{ alt }
-        , end_{ ctx, this }
         , rx_{ rx }
-        , fn_{ std::move( fn ) }
         , item_{}
+        , end_{ ctx, item_, this }
+        , fn_{ std::move( fn ) }
     {}
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-
-    ~ChoiceRecv() {}
-=======
->>>>>>> merge
 
     ~ChoiceRecv() {}
 
@@ -58,16 +51,15 @@ public:
     {
         rx_.alt_leave();
     }
->>>>>>> origin/diploma
 
     bool is_ready() const noexcept
     {
-        return rx_.alt_ready( this );
+        return rx_.alt_ready();
     }
 
     bool try_complete() noexcept
     {
-        auto res = rx_.alt_recv( item_ );
+        auto res = rx_.alt_recv();
         return res == channel::AltResult::Ok;
     }
 
@@ -75,22 +67,6 @@ public:
     {
         fn_( std::move( item_ ) );
     }
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-
-    void enter() noexcept
-    {
-        rx_.alt_enter( end_ );
-    }
-
-    void leave() noexcept
-    {
-        rx_.alt_leave();
-    }
-=======
->>>>>>> origin/diploma
->>>>>>> merge
 };
 
 } // namespace alt

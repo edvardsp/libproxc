@@ -136,9 +136,6 @@ public:
     void wakeup_waiting_on( Context * ) noexcept;
     void cleanup_terminated() noexcept;
 
-    static void wait_alt( Alt * ) noexcept;
-    static bool wakeup_alt( alt::ChoiceBase * ) noexcept;
-
     void print_debug() noexcept;
 
 private:

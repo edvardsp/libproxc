@@ -177,7 +177,7 @@ void test_alting_triangle()
     auto ch1 = channel::create< T >();
     auto ch2 = channel::create< T >();
     auto ch3 = channel::create< T >();
-    std::size_t num = 1;
+    std::size_t num = 1000;
 
     parallel(
         proc( [num]( channel::Tx< T > tx, channel::Rx< T > rx )
@@ -185,12 +185,12 @@ void test_alting_triangle()
             std::size_t n_tx = 0, n_rx = 0;
             while ( n_tx < num || n_rx < num ) {
                 Alt()
-                    .send_if( n_tx < num,
-                        tx, Obj{ n_tx },
-                        [&n_tx]{ std::cout << "alt1 tx\n"; ++n_tx; } )
-                    .recv_if( n_rx < num,
-                        rx,
-                        [&n_rx]( Obj ){ std::cout << "alt1 rx\n"; ++n_rx; } )
+                    .recv_if( n_rx < num, rx,
+                        [&n_rx]( Obj o ){ 
+                            throw_assert_equ( o, n_rx++, "items should match" );
+                        } )
+                    .send_if( n_tx < num, tx, Obj{ n_tx },
+                        [&n_tx]{ ++n_tx; } )
                     .select();
             }
         }, channel::get_tx( ch1 ), channel::get_rx( ch2 ) ),
@@ -199,12 +199,12 @@ void test_alting_triangle()
             std::size_t n_tx = 0, n_rx = 0;
             while ( n_tx < num || n_rx < num ) {
                 Alt()
-                    .send_if( n_tx < num,
-                        tx, Obj{ n_tx },
-                        [&n_tx]{ std::cout << "alt2 tx\n"; ++n_tx; } )
-                    .recv_if( n_rx < num,
-                        rx,
-                        [&n_rx]( Obj ){ std::cout << "alt2 rx\n"; ++n_rx; } )
+                    .recv_if( n_rx < num, rx,
+                        [&n_rx]( Obj o ){
+                            throw_assert_equ( o, n_rx++, "items should match" );
+                        } )
+                    .send_if( n_tx < num, tx, Obj{ n_tx },
+                        [&n_tx]{ ++n_tx; } )
                     .select();
             }
         }, channel::get_tx( ch2 ), channel::get_rx( ch3 ) ),
@@ -213,12 +213,12 @@ void test_alting_triangle()
             std::size_t n_tx = 0, n_rx = 0;
             while ( n_tx < num || n_rx < num ) {
                 Alt()
-                    .send_if( n_tx < num,
-                        tx, Obj{ n_tx },
-                        [&n_tx]{ std::cout << "alt3 tx\n"; ++n_tx; } )
-                    .recv_if( n_rx < num,
-                        rx,
-                        [&n_rx]( Obj ){ std::cout << "alt3 rx\n"; ++n_rx; } )
+                    .recv_if( n_rx < num, rx,
+                        [&n_rx]( Obj o ){
+                            throw_assert_equ( o, n_rx++, "items should match" );
+                        } )
+                    .send_if( n_tx < num, tx, Obj{ n_tx },
+                        [&n_tx]{ ++n_tx; } )
                     .select();
             }
         }, channel::get_tx( ch3 ), channel::get_rx( ch1 ) )
@@ -271,12 +271,12 @@ void test_simple_ex()
 
 int main()
 {
-    /* test_all_cases(); */
-    /* test_single_send_case(); */
-    /* test_single_recv_case(); */
-    /* test_two_alt_single_case(); */
+    test_all_cases();
+    test_single_send_case();
+    test_single_recv_case();
+    test_two_alt_single_case();
     test_alting_triangle();
-    /* test_simple_ex(); */
+    test_simple_ex();
 
     return 0;
 }

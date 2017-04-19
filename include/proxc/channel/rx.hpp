@@ -18,7 +18,7 @@ class Alt;
 
 namespace alt {
 
-template<typename T> 
+template<typename T>
 class ChoiceRecv;
 
 } // namespace alt
@@ -32,15 +32,16 @@ template<typename T> class Tx;
 // Rx
 ////////////////////////////////////////////////////////////////////////////////
 
-template<typename T>
+template<typename ItemT>
 class Rx
 {
 public:
-    using ItemType = T;
+    using Id = detail::ChannelId;
 
 private:
-    using ChanType = detail::ChannelImpl< ItemType >;
-    using ChanPtr = std::shared_ptr< ChanType >;
+    using ChanT = detail::ChannelImpl< ItemT >;
+    using EndT  = detail::ChanEnd< ItemT >;
+    using ChanPtr = std::shared_ptr< ChanT >;
 
     ChanPtr    chan_{ nullptr };
 
@@ -61,6 +62,11 @@ public:
     Rx( Rx && )               = default;
     Rx & operator = ( Rx && ) = default;
 
+    Id get_id() const noexcept
+    {
+        return Id{ chan_.get() };
+    }
+
     bool is_closed() const noexcept
     {
         return chan_->is_closed();
@@ -73,15 +79,25 @@ public:
     }
 
     // normal recv operations
-    OpResult recv( ItemType & item ) noexcept
+    OpResult recv( ItemT & item ) noexcept
     {
-        ChanEnd rx{ Scheduler::running() };
-        return chan_->recv( rx, item );
+        EndT rx{ Scheduler::running(), item };
+        return chan_->recv( rx );
+    }
+
+    // recv operation with timepoint timeout
+    template<typename Clock, typename Dur>
+    OpResult recv_until( ItemT & item,
+                         std::chrono::time_point< Clock, Dur > const & time_point
+    ) noexcept
+    {
+        EndT rx{ Scheduler::running(), item };
+        return chan_->recv_until( rx, time_point );
     }
 
     // recv operation with duration timeout
     template<typename Rep, typename Period>
-    OpResult recv_for( ItemType & item,
+    OpResult recv_for( ItemT & item,
                        std::chrono::duration< Rep, Period > const & duration
     ) noexcept
     {
@@ -89,15 +105,6 @@ public:
         return recv_until( item, time_point );
     }
 
-    // recv operation with timepoint timeout
-    template<typename Clock, typename Dur>
-    OpResult recv_until( ItemType & item,
-                         std::chrono::time_point< Clock, Dur > const & time_point
-    ) noexcept
-    {
-        ChanEnd rx{ Scheduler::running() };
-        return chan_->recv_until( rx, item, time_point );
-    }
 
 private:
     Rx( ChanPtr ptr )
@@ -108,9 +115,9 @@ private:
     friend std::tuple< Tx< U >, Rx< U > >
     create() noexcept;
 
-    friend class ::proxc::alt::ChoiceRecv< T >;
+    friend class ::proxc::alt::ChoiceRecv< ItemT >;
 
-    void alt_enter( ChanEnd & rx ) noexcept
+    void alt_enter( EndT & rx ) noexcept
     {
         chan_->alt_recv_enter( rx );
     }
@@ -120,39 +127,40 @@ private:
         chan_->alt_recv_leave();
     }
 
-    bool alt_ready( Alt * alt ) const noexcept
+    bool alt_ready() const noexcept
     {
-        return chan_->alt_recv_ready( alt );
+        return chan_->alt_recv_ready();
     }
 
-    AltResult alt_recv( ItemType & item ) noexcept
+    AltResult alt_recv() noexcept
     {
-        return chan_->alt_recv( item );
+        return chan_->alt_recv();
     }
 
 public:
     class Iterator
         : public std::iterator<
             std::input_iterator_tag,
-            typename std::remove_reference< ItemType >::type
+            typename std::remove_reference< ItemT >::type
           >
     {
     private:
-        using StorageType = typename std::aligned_storage<
-            sizeof( ItemType ), alignof( ItemType )
+        using StorageT = typename std::aligned_storage<
+            sizeof( ItemT ), alignof( ItemT )
         >::type;
+        using RxT = Rx< ItemT >;
 
-        Rx< T > *      rx_{ nullptr };
-        StorageType    storage_;
+        RxT *       rx_{ nullptr };
+        StorageT    storage_;
 
         void increment() noexcept
         {
             BOOST_ASSERT( rx_ != nullptr );
-            ItemType item{};
+            ItemT item{};
             auto res = rx_->recv( item );
             if ( res == OpResult::Ok ) {
                 auto addr = static_cast< void * >( std::addressof( storage_ ) );
-                ::new (addr) ItemType{ std::move( item ) };
+                ::new (addr) ItemT{ std::move( item ) };
             } else {
                 rx_ = nullptr;
             }
@@ -164,7 +172,7 @@ public:
 
         Iterator() noexcept = default;
 
-        explicit Iterator( Rx< T > * rx ) noexcept
+        explicit Iterator( Rx< ItemT > * rx ) noexcept
             : rx_{ rx }
         { increment(); }
 
@@ -196,25 +204,25 @@ public:
         Iterator operator ++ ( int ) = delete;
 
         Ref operator * () noexcept
-        { return * reinterpret_cast< ItemType * >( std::addressof( storage_ ) ); }
+        { return * reinterpret_cast< ItemT * >( std::addressof( storage_ ) ); }
 
         Ptr operator -> () noexcept
-        { return reinterpret_cast< ItemType * >( std::addressof( storage_ ) ); }
+        { return reinterpret_cast< ItemT * >( std::addressof( storage_ ) ); }
     };
 };
 
-template<typename T>
-typename Rx< T >::Iterator
-begin( Rx< T > & chan )
+template<typename ItemT>
+typename Rx< ItemT >::Iterator
+begin( Rx< ItemT > & chan )
 {
-    return typename Rx< T >::Iterator( & chan );
+    return typename Rx< ItemT >::Iterator( & chan );
 }
 
-template<typename T>
-typename Rx< T >::Iterator
-end( Rx< T > & )
+template<typename ItemT>
+typename Rx< ItemT >::Iterator
+end( Rx< ItemT > & )
 {
-    return typename Rx< T >::Iterator();
+    return typename Rx< ItemT >::Iterator();
 }
 
 } // namespace channel

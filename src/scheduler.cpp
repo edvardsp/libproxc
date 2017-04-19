@@ -321,19 +321,6 @@ void Scheduler::wakeup_sleep() noexcept
     }
 }
 
-void Scheduler::wait_alt( Alt * alt ) noexcept
-{
-    BOOST_ASSERT( alt != nullptr );
-    alt->maybe_wait();
-}
-
-bool Scheduler::wakeup_alt( alt::ChoiceBase * choice ) noexcept
-{
-    BOOST_ASSERT( choice != nullptr );
-    auto alt = choice->alt_;
-    return alt->try_wakeup( choice );
-}
-
 void Scheduler::wakeup_waiting_on(Context * ctx) noexcept
 {
     BOOST_ASSERT(   ctx != nullptr );
@@ -394,9 +381,6 @@ void Scheduler::resolve_ctx_switch_data( CtxSwitchData * data ) noexcept
     if ( data != nullptr ) {
         if ( data->ctx_ != nullptr ) {
             schedule( data->ctx_ );
-        }
-        if ( data->alt_ != nullptr ) {
-
         }
         if ( data->splk_ != nullptr ) {
             data->splk_->unlock();

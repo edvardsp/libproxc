@@ -1,5 +1,5 @@
 
-void chan_send( chan, end, item )
+void chan_send( chan, end )
 {
     lk = chan.spinlock;
 
@@ -8,15 +8,17 @@ void chan_send( chan, end, item )
     }
 
     rx_end = pop( chan.rx_end );
-    if ( rx_end != nullptr || ( rx_end.alt == nullptr || rx_end.alt.try_select( blocking ) ) )
+    if ( rx_end != nullptr && ( rx_end.alt == nullptr || rx_end.alt.try_select( blocking ) ) )
     {
-        rx_end.item = move( item );
+        // item must be consumed and consumed flag set to true
+        // before rx is scheduled.
+        rx_end.item = move( end.item );
         chan.rx_consumed = true;
         scehdule( rx_end.ctx );
         return Ok;
     }
 
-    chan.tx_end = { running_ctx, item };
+    chan.tx_end = end;
     wait( lk );
     // Tx has consumed item if rx_consumed set true,
     // else the channel is closed. The reasoning is that
@@ -25,12 +27,12 @@ void chan_send( chan, end, item )
     // the channel might have been closed immediately after the
     // operation completed, the operation will be registered by
     // the boolean flag.
-    return ( chan.rx_consumed.exchange( false ) )
+    return ( chan.tx_consumed.exchange( false ) )
         ? Ok
         : Closed ;
 }
 
-void chan_recv( chan, end, item & )
+void chan_recv( chan, end )
 {
     lk = chan.spinlock;
 
@@ -41,13 +43,15 @@ void chan_recv( chan, end, item & )
     tx_end = pop( chan.tx_end );
     if ( tx_end != nullptr && ( tx_end.alt == nullptr || tx_end.alt.try_select( blocking ) ) )
     {
-        item = move( tx_end.item );
+        // item must be consumed and consumed flag set to true
+        // before rx is scheduled.
+        end.item = move( tx_end.item );
         chan.tx_consumed = true;
         scehdule( tx_end.ctx );
         return Ok;
     }
 
-    chan.rx_end = { running_ctx, item };
+    chan.rx_end = end;
     wait( lk );
     // Tx has consumed item if rx_consumed set true,
     // else the channel is closed. The reasoning is that
@@ -69,6 +73,9 @@ void enter( chan, end )
 
 void leave( chan )
 {
+    if ( chan.{tx/rx}_end == nullptr ) {
+        return;
+    }
     // spinlock here to ensure the channel end is not
     // used after the alting process has ended.
     lk = chan.spinlock;
@@ -88,7 +95,7 @@ bool ready( chan )
     // is and should be done by the alt before entering happens
 }
 
-bool chan_alt_send( chan, item )
+bool chan_alt_send( chan )
 {
     // this is to avoid deadlocks when both Tx and Rx is alting.
     // SyncGuard will try to test-and-set the atomic flag. If
