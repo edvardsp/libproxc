@@ -112,7 +112,7 @@ bool chan_alt_send( chan, item )
 
     rx_end = chan.rx_end;
     if ( rx_end != nullptr ) {
-        if ( rx_end.alt == nullptr || rx_end.alt.try_select( non_blocking ) ) {
+        if ( rx_end.alt == nullptr || rx_end.alt.try_select( blocking ) ) {
             // Rx is either not alting, or it is alting and
             // it "won" the selection. Either way, complete the
             // operation.
@@ -157,7 +157,7 @@ bool chan_alt_recv( chan, item )
 
     tx_end = chan.tx_end;
     if ( tx_end != nullptr ) {
-        if ( tx_end.alt == nullptr || tx_end.alt.try_select( non_blocking ) ) {
+        if ( tx_end.alt == nullptr || tx_end.alt.try_select( blocking ) ) {
             // Tx is either not alting, or it is alting and
             // it "won" the selection. Either way, complete the
             // operation.
