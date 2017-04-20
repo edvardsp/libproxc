@@ -13,16 +13,16 @@
 PROXC_NAMESPACE_BEGIN
 
 // intrusive_ptr friend methods
-void intrusive_ptr_add_ref(Context * ctx) noexcept
+void intrusive_ptr_add_ref( Context * ctx ) noexcept
 {
-    BOOST_ASSERT(ctx != nullptr);
+    BOOST_ASSERT( ctx != nullptr );
     ++ctx->use_count_;
 }
 
-void intrusive_ptr_release(Context * ctx) noexcept
+void intrusive_ptr_release( Context * ctx ) noexcept
 {
-    BOOST_ASSERT(ctx != nullptr);
-    if (--ctx->use_count_ != 0) { return; }
+    BOOST_ASSERT( ctx != nullptr );
+    if ( --ctx->use_count_ != 0 ) { return; }
 
     // If context new allocated => delete
     delete ctx;
@@ -30,23 +30,23 @@ void intrusive_ptr_release(Context * ctx) noexcept
 }
 
 // Context methods
-Context::Context(context::MainType)
+Context::Context( context::MainType )
     : type_{ Type::Main }
     , ctx_{ boost::context::execution_context::current() }
 {
 }
 
-Context::Context(context::SchedulerType, EntryFn && fn)
+Context::Context( context::SchedulerType, EntryFn && fn )
     : type_{ Type::Scheduler }
     , entry_fn_{ std::move( fn ) }
-    , ctx_{ [this](void * vp) { trampoline_(vp); } }
+    , ctx_{ [this]( void * vp ) { trampoline_( vp ); } }
 {
 }
 
-Context::Context(context::WorkType, EntryFn && fn)
+Context::Context( context::WorkType, EntryFn && fn )
     : type_{ Type::Work }
     , entry_fn_{ std::move( fn ) }
-    , ctx_{ [this](void * vp) { trampoline_(vp); } }
+    , ctx_{ [this]( void * vp ) { trampoline_( vp ); } }
     , use_count_{ 1 }
 {
 }
@@ -64,17 +64,17 @@ Context::~Context() noexcept
 
 Context::Id Context::get_id() const noexcept
 {
-    return Id{ const_cast< Context * >(this) };
+    return Id{ const_cast< Context * >( this ) };
 }
 
 void * Context::resume( void * vp ) noexcept
 {
-    return ctx_(vp);
+    return ctx_( vp );
 }
 
-bool Context::is_type(Type type) const noexcept
+bool Context::is_type( Type type ) const noexcept
 {
-    return (static_cast<int>(type) & static_cast<int>(type_)) != 0;
+    return ( static_cast< int >( type ) & static_cast< int >( type_ ) ) != 0;
 }
 
 bool Context::has_terminated() noexcept
@@ -86,12 +86,13 @@ void Context::print_debug() noexcept
 {
     std::cout << "    Context id : " << get_id() << std::endl;
     std::cout << "      -> type  : ";
-    switch (type_) {
+    switch ( type_ ) {
     case Type::None:      std::cout << "None"; break;
     case Type::Main:      std::cout << "Main"; break;
     case Type::Scheduler: std::cout << "Scheduler"; break;
     case Type::Work:      std::cout << "Work"; break;
-    default:              std::cout << "(invalid)"; break;
+    case Type::Process: case Type::Static:
+                          std::cout << "(invalid)"; break;
     }
     std::cout << std::endl;
     std::cout << "      -> Links :" << std::endl;
@@ -101,20 +102,20 @@ void Context::print_debug() noexcept
     if ( is_linked< hook::Sleep >() )      std::cout << "         | Sleep" << std::endl;
     if ( is_linked< hook::Terminated >() ) std::cout << "         | Terminated" << std::endl;
     std::cout << "      -> wait queue:" << std::endl;
-    for (auto& ctx : wait_queue_) {
+    for ( auto& ctx : wait_queue_ ) {
         std::cout << "         | " << ctx.get_id() << std::endl;
     }
 }
 
-void Context::trampoline_(void * vp)
+void Context::trampoline_( void * vp )
 {
-    BOOST_ASSERT(entry_fn_ != nullptr);
-    entry_fn_(vp);
-    BOOST_ASSERT_MSG(false, "unreachable: Context should not return from entry_func_().");
+    BOOST_ASSERT( entry_fn_ != nullptr );
+    entry_fn_( vp );
+    BOOST_ASSERT_MSG( false, "unreachable: Context should not return from entry_func_( ).");
     throw UnreachableError{ std::make_error_code( std::errc::state_not_recoverable ), "unreachable" };
 }
 
-void Context::wait_for(Context * ctx) noexcept
+void Context::wait_for( Context * ctx ) noexcept
 {
     BOOST_ASSERT(   ctx != nullptr );
     BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );

@@ -63,32 +63,32 @@ public:
         Context *    ptr_{ nullptr };
 
     public:
-        Id(Context * ctx) noexcept : ptr_{ ctx } {}
+        Id( Context * ctx ) noexcept : ptr_{ ctx } {}
 
-        bool operator == (Id const & other) const noexcept { return ptr_ == other.ptr_; }
-        bool operator != (Id const & other) const noexcept { return ptr_ != other.ptr_; }
-        bool operator <= (Id const & other) const noexcept { return ptr_ <= other.ptr_; }
-        bool operator >= (Id const & other) const noexcept { return ptr_ >= other.ptr_; }
-        bool operator <  (Id const & other) const noexcept { return ptr_ < other.ptr_; }
-        bool operator >  (Id const & other) const noexcept { return ptr_ > other.ptr_; }
+        bool operator == ( Id const & other ) const noexcept { return ptr_ == other.ptr_; }
+        bool operator != ( Id const & other ) const noexcept { return ptr_ != other.ptr_; }
+        bool operator <= ( Id const & other ) const noexcept { return ptr_ <= other.ptr_; }
+        bool operator >= ( Id const & other ) const noexcept { return ptr_ >= other.ptr_; }
+        bool operator <  ( Id const & other ) const noexcept { return ptr_ < other.ptr_; }
+        bool operator >  ( Id const & other ) const noexcept { return ptr_ > other.ptr_; }
 
         explicit operator bool() const noexcept { return ptr_ != nullptr; }
         bool operator ! () const noexcept { return ptr_ == nullptr; }
 
         template<typename CharT, typename TraitsT>
         friend std::basic_ostream< CharT, TraitsT > &
-        operator << (std::basic_ostream< CharT, TraitsT > & os, Id const & id)
+        operator << ( std::basic_ostream< CharT, TraitsT > & os, Id const & id )
         {
-            if (id) { return os << id.ptr_; }
-            else    { return os << "invalid id"; }
+            if ( id ) { return os << id.ptr_; }
+            else      { return os << "invalid id"; }
         }
     };
 
     using ContextType = boost::context::execution_context;
     using TimePointType = std::chrono::steady_clock::time_point;
 
-    using SchedulerFn = std::function< void(void *) >;
-    using EntryFn     = detail::delegate< void(void *) >;
+    using SchedulerFn = std::function< void( void * ) >;
+    using EntryFn     = detail::delegate< void( void * ) >;
 
 private:
     Type    type_;
@@ -98,8 +98,8 @@ private:
     ContextType    ctx_;
 
     // intrusive_ptr friend methods and counter
-    friend void intrusive_ptr_add_ref(Context * ctx) noexcept;
-    friend void intrusive_ptr_release(Context * ctx) noexcept;
+    friend void intrusive_ptr_add_ref( Context * ctx ) noexcept;
+    friend void intrusive_ptr_release( Context * ctx ) noexcept;
     std::size_t    use_count_{ 0 };
 
 public:
@@ -120,28 +120,28 @@ public:
 
 public:
     // constructors and destructor
-    explicit Context(context::MainType);
-    explicit Context(context::SchedulerType, EntryFn &&);
-    explicit Context(context::WorkType, EntryFn &&);
+    explicit Context( context::MainType );
+    explicit Context( context::SchedulerType, EntryFn && );
+    explicit Context( context::WorkType, EntryFn && );
 
     ~Context() noexcept;
 
     // make non copy-able
-    Context(Context const &)             = delete;
-    Context & operator=(Context const &) = delete;
+    Context( Context const & )             = delete;
+    Context & operator=( Context const & ) = delete;
 
     // general methods
     Id get_id() const noexcept;
     void * resume( void * = nullptr ) noexcept;
 
-    bool is_type(Type) const noexcept;
+    bool is_type( Type ) const noexcept;
     bool has_terminated() noexcept;
 
     void print_debug() noexcept;
 
 private:
     [[noreturn]]
-    void trampoline_(void *);
+    void trampoline_( void * );
 
     // Intrusive hook methods
 private:
@@ -152,12 +152,12 @@ public:
     template<typename Hook>
     bool is_linked() noexcept;
     template<typename ... Ts>
-    void link(boost::intrusive::list< Ts ... > & list) noexcept;
+    void link( boost::intrusive::list< Ts ... > & list ) noexcept;
     template<typename ... Ts>
-    void link(boost::intrusive::multiset< Ts ... > & set) noexcept;
+    void link( boost::intrusive::multiset< Ts ... > & set ) noexcept;
     template<typename Hook>
     void unlink() noexcept;
-    void wait_for(Context *) noexcept;
+    void wait_for( Context * ) noexcept;
 };
 
 // Intrusive list methods.
@@ -168,14 +168,14 @@ bool Context::is_linked() noexcept
 }
 
 template<typename ... Ts>
-void Context::link(boost::intrusive::list< Ts ... > & list) noexcept
+void Context::link( boost::intrusive::list< Ts ... > & list ) noexcept
 {
     BOOST_ASSERT( ! is_linked< typename boost::intrusive::list< Ts ... >::value_traits::hook_type >() );
     list.push_back( *this);
 }
 
 template<typename ... Ts>
-void Context::link(boost::intrusive::multiset< Ts ... > & list) noexcept
+void Context::link( boost::intrusive::multiset< Ts ... > & list ) noexcept
 {
     BOOST_ASSERT( ! is_linked< typename boost::intrusive::multiset< Ts ... >::value_traits::hook_type >() );
     list.insert( *this);

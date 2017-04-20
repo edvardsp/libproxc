@@ -70,7 +70,7 @@ public:
 private:
     struct time_point_cmp_
     {
-        bool operator()(Context const & left, Context const & right) const noexcept
+        bool operator()( Context const & left, Context const & right ) const noexcept
         { return left.time_point_ < right.time_point_; }
     };
 
@@ -113,13 +113,13 @@ public:
     ~Scheduler();
 
     // make non copy-able
-    Scheduler(Scheduler const &)             = delete;
-    Scheduler & operator=(Scheduler const &) = delete;
+    Scheduler( Scheduler const & )             = delete;
+    Scheduler & operator=( Scheduler const & ) = delete;
 
 
     // general methods
     template<typename Fn, typename ... Args>
-    static boost::intrusive_ptr< Context > make_work(Fn && fn, Args && ... args) noexcept;
+    static boost::intrusive_ptr< Context > make_work( Fn && fn, Args && ... args ) noexcept;
 
     void wait() noexcept;
     void wait( Context * ) noexcept;
@@ -154,38 +154,39 @@ private:
     // actual context switch
     void resume_( Context *, CtxSwitchData * ) noexcept;
     // scheduler context loop
-    void run_(void *) noexcept;
+    void run_( void * ) noexcept;
 
     template<typename Fn, typename Tpl>
     [[noreturn]]
-    static void trampoline(Fn &&, Tpl &&, void *);
+    static void trampoline( Fn &&, Tpl &&, void * );
 };
 
 template<typename Fn, typename ... Args>
-boost::intrusive_ptr< Context > Scheduler::make_work(Fn && fn, Args && ... args) noexcept
+boost::intrusive_ptr< Context > Scheduler::make_work( Fn && fn, Args && ... args ) noexcept
 {
-    static_assert(traits::is_callable< Fn(Args ...) >::value, "function is not callable with given arguments");
-    auto func = [fn = std::move(fn),
-                 tpl = std::make_tuple( std::forward< Args >(args) ... )]
-                (void * vp) mutable
-                { trampoline( std::move(fn), std::move(tpl), vp ); };
+    static_assert( traits::is_callable< Fn( Args ... ) >::value, 
+        "function is not callable with given arguments" );
+    auto func = [fn = std::move( fn ),
+                 tpl = std::make_tuple( std::forward< Args >( args ) ... )]
+                ( void * vp ) mutable
+                { trampoline( std::move( fn ), std::move( tpl ), vp ); };
     return boost::intrusive_ptr< Context >{
-        new Context{ context::work_type, std::move(func) } };
+        new Context{ context::work_type, std::move( func ) } };
 }
 
 template<typename Fn, typename Tpl>
-void Scheduler::trampoline(Fn && fn_, Tpl && tpl_, void * vp)
+void Scheduler::trampoline( Fn && fn_, Tpl && tpl_, void * vp )
 {
     CtxSwitchData * data = static_cast< CtxSwitchData * >( vp );
     Scheduler::self()->resolve_ctx_switch_data( data );
     {
         Fn fn{ std::move( fn_ ) };
         Tpl tpl{ std::move( tpl_ ) };
-        detail::apply( std::move(fn), std::move(tpl) );
+        detail::apply( std::move( fn ), std::move( tpl ) );
     }
     auto self = Scheduler::self();
-    self->terminate(self->running_);
-    BOOST_ASSERT_MSG(false, "unreachable: should not return from scheduler trampoline().");
+    self->terminate( self->running_ );
+    BOOST_ASSERT_MSG( false, "unreachable: should not return from scheduler trampoline( ).");
     throw UnreachableError{};
 }
 
