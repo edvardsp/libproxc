@@ -33,7 +33,7 @@ public:
 
     // Interface methods
     virtual void restart() noexcept = 0;
-    virtual bool expired() const noexcept = 0;
+    virtual bool expired() noexcept = 0;
 };
 
 class Egg final : public Interface
@@ -47,39 +47,41 @@ public:
         : Interface{ ClockT::now() + duration }
         , duration_{ duration }
     {}
-        
+
     void restart() noexcept
     {
         time_point_ = ClockT::now() + duration_;
     }
 
-    bool expired() const noexcept
+    bool expired() noexcept
     {
         return ClockT::now() >= time_point_;
     }
 
 };
 
-class Rep final : public Interface
+class Repeat final : public Interface
 {
 private:
     DurationT     duration_;
 
 public:
     template<class Rep, class Period>
-    Rep( std::chrono::duration< Rep, Period > const & duration )
-        : Interface{ ClockT::now() }
+    Repeat( std::chrono::duration< Rep, Period > const & duration )
+        : Interface{ ClockT::now() + duration }
         , duration_{ duration }
     {}
 
     void restart() noexcept
-    {
-        time_point_ += duration_;
-    }
+    { /* do nothing */ }
 
-    bool expired() const noexcept
+    bool expired() noexcept
     {
-        return ClockT::now() >= time_point_;
+        bool timeout = ( ClockT::now() >= time_point_ );
+        if ( timeout ) {
+            time_point_ += duration_;
+        }
+        return timeout;
     }
 };
 
@@ -95,7 +97,7 @@ public:
     void restart() noexcept
     { /* do nothing */ }
 
-    bool expired() const noexcept
+    bool expired() noexcept
     {
         return ClockT::now() >= time_point_;
     }
