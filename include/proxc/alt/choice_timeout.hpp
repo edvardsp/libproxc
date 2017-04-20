@@ -16,9 +16,9 @@ class ChoiceTimeout : public ChoiceBase
 public:
     using FnT = detail::delegate< void( void ) >;
 
-private:
     std::chrono::steady_clock::time_point    time_point_;
 
+private:
     FnT    fn_;
 
 public:

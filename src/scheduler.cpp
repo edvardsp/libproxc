@@ -8,7 +8,6 @@
 #include <proxc/context.hpp>
 #include <proxc/scheduler.hpp>
 #include <proxc/alt/alt.hpp>
-#include <proxc/alt/choice_base.hpp>
 
 #include <proxc/scheduling_policy/policy_base.hpp>
 #include <proxc/scheduling_policy/round_robin.hpp>
@@ -132,12 +131,12 @@ void Scheduler::wait( Context * ctx ) noexcept
     resume( std::addressof( data ) );
 }
 
-void Scheduler::wait( std::unique_lock< Spinlock > * splk, bool lock ) noexcept
+void Scheduler::wait( std::unique_lock< Spinlock > & splk, bool lock ) noexcept
 {
-    CtxSwitchData data{ splk };
+    CtxSwitchData data{ std::addressof( splk ) };
     resume( std::addressof( data ) );
-    if ( lock && splk != nullptr ) {
-        splk->lock();
+    if ( lock ) {
+        splk.lock();
     }
 }
 
@@ -152,14 +151,39 @@ bool Scheduler::wait_until( TimePointType const & time_point, Context * ctx ) no
     return sleep_until( time_point, std::addressof( data ) );
 }
 
-bool Scheduler::wait_until( TimePointType const & time_point, std::unique_lock< Spinlock > * splk, bool lock ) noexcept
+bool Scheduler::wait_until( TimePointType const & time_point, std::unique_lock< Spinlock > & splk, bool lock ) noexcept
 {
-    CtxSwitchData data{ splk };
+    CtxSwitchData data{ std::addressof( splk ) };
     auto ret = sleep_until( time_point, std::addressof( data ) );
-    if ( ! ret && lock && splk != nullptr ) {
-        splk->lock();
+    if ( ! ret && lock ) {
+        splk.lock();
     }
     return ret;
+}
+
+void Scheduler::alt_wait( Alt * alt, std::unique_lock< Spinlock > & splk, bool lock ) noexcept
+{
+    BOOST_ASSERT(   alt != nullptr );
+    BOOST_ASSERT(   running_->alt_ == nullptr );
+    BOOST_ASSERT(   running_->is_linked< hook::Work >() );
+    BOOST_ASSERT( ! running_->is_linked< hook::Ready >() );
+    BOOST_ASSERT( ! running_->is_linked< hook::Sleep >() );
+    BOOST_ASSERT( ! running_->is_linked< hook::AltSleep >() );
+    BOOST_ASSERT( ! running_->is_linked< hook::Terminated >() );
+
+    if ( alt->timeout_ ) {
+        running_->alt_ = alt;
+        running_->time_point_ = alt->timeout_->time_point_;
+        running_->link( alt_sleep_queue_ );
+    }
+
+    CtxSwitchData data{ std::addressof( splk ) };
+    resume( std::addressof( data ) );
+    if ( lock ) {
+        splk.lock();
+    }
+    running_->alt_ = nullptr;
+    running_->time_point_ = TimePointType::max();
 }
 
 void Scheduler::resume( CtxSwitchData * data ) noexcept
@@ -303,9 +327,9 @@ bool Scheduler::sleep_until( TimePointType const & time_point, CtxSwitchData * d
 void Scheduler::wakeup_sleep() noexcept
 {
     auto now = ClockType::now();
-    auto sleep_end = sleep_queue_.end();
-    for ( auto it = sleep_queue_.begin(); it != sleep_end; ) {
-        auto ctx = &( *it );
+    auto sleep_it = sleep_queue_.begin();
+    while ( sleep_it != sleep_queue_.end() ) {
+        auto ctx = &( *sleep_it );
 
         BOOST_ASSERT(   ctx->is_type( Context::Type::Process ) );
         BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
@@ -316,9 +340,29 @@ void Scheduler::wakeup_sleep() noexcept
         if ( ctx->time_point_ > now ) {
             break;
         }
-        it = sleep_queue_.erase( it );
-        ctx->time_point_ = ( TimePointType::max )();
+        sleep_it = sleep_queue_.erase( sleep_it );
+        ctx->time_point_ = TimePointType::max();
         schedule( ctx );
+    }
+    auto alt_sleep_it = alt_sleep_queue_.begin();
+    while ( alt_sleep_it != alt_sleep_queue_.end() ) {
+        auto ctx = &( *alt_sleep_it );
+
+        BOOST_ASSERT(   ctx->is_type( Context::Type::Process ) );
+        BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
+        BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
+        BOOST_ASSERT(   ctx->alt_ != nullptr );
+
+        // Keep advancing the queue if deadline is reached,
+        // break if not.
+        if ( ctx->time_point_ > now ) {
+            break;
+        }
+        alt_sleep_it = alt_sleep_queue_.erase( alt_sleep_it );
+        ctx->time_point_ = TimePointType::max();
+        if ( ctx->alt_->try_timeout() ) {
+            schedule( ctx );
+        }
     }
 }
 

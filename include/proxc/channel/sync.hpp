@@ -224,7 +224,7 @@ OpResult ChannelImpl< T >::send( EndT & tx ) noexcept
     }
 
     tx_end_.store( std::addressof( tx ), std::memory_order_release );
-    Scheduler::self()->wait( std::addressof( lk ) );
+    Scheduler::self()->wait( lk );
     return ( tx_consumed_.exchange( false, std::memory_order_acq_rel ) )
         ? OpResult::Ok
         : OpResult::Closed ;
@@ -254,7 +254,7 @@ OpResult ChannelImpl< T >::recv( EndT & rx ) noexcept
     }
 
     rx_end_.store( std::addressof( rx ), std::memory_order_release );
-    Scheduler::self()->wait( std::addressof( lk ) );
+    Scheduler::self()->wait( lk );
     return ( rx_consumed_.exchange( false, std::memory_order_acq_rel ) )
         ? OpResult::Ok
         : OpResult::Closed ;
@@ -299,7 +299,7 @@ OpResult ChannelImpl< T >::send_until(
     }
 
     tx_end_.store( std::addressof( tx ), std::memory_order_release );
-    bool timeout = Scheduler::self()->wait_until( time_point, std::addressof( lk ), true );
+    bool timeout = Scheduler::self()->wait_until( time_point, lk, true );
     tx_end_.store( nullptr, std::memory_order_release );
 
     if ( tx_consumed_.exchange( false, std::memory_order_acq_rel ) ) {
@@ -349,7 +349,7 @@ OpResult ChannelImpl< T >::recv_until(
     }
 
     rx_end_.store( std::addressof( rx ), std::memory_order_release );
-    bool timeout = Scheduler::self()->wait_until( time_point, std::addressof( lk ), true );
+    bool timeout = Scheduler::self()->wait_until( time_point, lk, true );
     rx_end_.store( nullptr, std::memory_order_release );
 
     if ( rx_consumed_.exchange( false, std::memory_order_acq_rel ) ) {

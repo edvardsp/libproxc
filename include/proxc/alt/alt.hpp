@@ -67,6 +67,7 @@ private:
     std::map< ChannelId, ChoiceAudit >    ch_audit_;
 
     friend class alt::ChoiceBase;
+    friend class Scheduler;
 
 public:
     Alt();
@@ -157,6 +158,7 @@ private:
     ChoiceT * select_n( std::vector< ChoiceT * > & ) noexcept;
 
     bool try_select( ChoiceT * ) noexcept;
+    bool try_timeout() noexcept;
     void maybe_wakeup() noexcept;
 };
 

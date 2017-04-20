@@ -35,7 +35,7 @@ void Alt::select()
     }
 
     // if timeout choice has been set, add to choices
-    if ( timeout_ ) {
+    if ( timeout_ && timeout_->is_ready() ) {
         choices.push_back( timeout_.get() );
     }
 
@@ -69,7 +69,7 @@ auto Alt::select_1( ChoiceT * choice ) noexcept
         selected_.store( choice, std::memory_order_release );
 
     } else {
-        Scheduler::self()->wait( std::addressof( lk ), true );
+        Scheduler::self()->alt_wait( this, lk, true );
     }
 
     choice->leave();
@@ -113,7 +113,7 @@ auto Alt::select_n( std::vector< ChoiceT * > & choices ) noexcept
         }
     }
     if ( selected == nullptr ) {
-        Scheduler::self()->wait( std::addressof( lk ), true );
+        Scheduler::self()->alt_wait( this, lk, true );
         // one or more choices should be ready,
         // and selected_ should be set. If set,
         // this is the winning choice.
@@ -136,6 +136,24 @@ bool Alt::try_select( ChoiceT * choice ) noexcept
     return selected_.compare_exchange_strong(
         expected,
         choice,
+        std::memory_order_acq_rel,
+        std::memory_order_relaxed
+    );
+}
+
+bool Alt::try_timeout() noexcept
+{
+    // FIXME: necessary with spinlock? This is called by
+    // Scheduler, which means the Alting process is already
+    // waiting. spinlocking on try_select() is used to force
+    // ready choices to wait for the alting process to go to
+    // wait before trying to set selected_.
+    std::unique_lock< Spinlock > lk{ splk_ };
+
+    ChoiceT * expected = nullptr;
+    return selected_.compare_exchange_strong(
+        expected,
+        timeout_.get(),
         std::memory_order_acq_rel,
         std::memory_order_relaxed
     );

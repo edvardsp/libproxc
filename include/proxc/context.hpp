@@ -24,6 +24,7 @@ namespace hook = detail::hook;
 
 // forward declaration
 class Scheduler;
+class Alt;
 
 namespace detail {
 
@@ -103,7 +104,8 @@ private:
     std::size_t    use_count_{ 0 };
 
 public:
-    TimePointType time_point_{ TimePointType::max() };
+    TimePointType     time_point_{ TimePointType::max() };
+    Alt *             alt_{ nullptr };
 
     // Intrusive hooks
     hook::Ready         ready_{};
@@ -115,7 +117,9 @@ public:
     // Wait queue must be context specific, as this differs from
     // from context to context
     hook::Wait    wait_{};
-    using WaitQueue = detail::queue::ListQueue< Context, detail::hook::Wait, & Context::wait_ >;
+    using WaitQueue = detail::queue::ListQueue<
+        Context, detail::hook::Wait, & Context::wait_
+    >;
     WaitQueue     wait_queue_{};
 
 public:

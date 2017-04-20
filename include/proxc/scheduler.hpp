@@ -123,11 +123,13 @@ public:
 
     void wait() noexcept;
     void wait( Context * ) noexcept;
-    void wait( std::unique_lock< Spinlock > *, bool lock = false ) noexcept;
+    void wait( std::unique_lock< Spinlock > &, bool lock = false ) noexcept;
 
     bool wait_until( TimePointType const & ) noexcept;
     bool wait_until( TimePointType const &, Context * ) noexcept;
-    bool wait_until( TimePointType const &, std::unique_lock< Spinlock > *, bool lock = false ) noexcept;
+    bool wait_until( TimePointType const &, std::unique_lock< Spinlock > &, bool lock = false ) noexcept;
+
+    void alt_wait( Alt *, std::unique_lock< Spinlock > &, bool lock = false ) noexcept;
 
     void resume( CtxSwitchData * = nullptr ) noexcept;
     void resume( Context *, CtxSwitchData * = nullptr ) noexcept;
@@ -164,7 +166,7 @@ private:
 template<typename Fn, typename ... Args>
 boost::intrusive_ptr< Context > Scheduler::make_work( Fn && fn, Args && ... args ) noexcept
 {
-    static_assert( traits::is_callable< Fn( Args ... ) >::value, 
+    static_assert( traits::is_callable< Fn( Args ... ) >::value,
         "function is not callable with given arguments" );
     auto func = [fn = std::move( fn ),
                  tpl = std::make_tuple( std::forward< Args >( args ) ... )]
