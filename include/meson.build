@@ -8,6 +8,7 @@ install_headers(
     'proxc/process.hpp',
     'proxc/scheduler.hpp',
     'proxc/spinlock.hpp',
+    'proxc/timer.hpp',
     'proxc/this_proc.hpp',
     'proxc/traits.hpp',
     'proxc/version.hpp',

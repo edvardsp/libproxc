@@ -11,7 +11,8 @@ tests = [
     ['spsc_queue',           ['test_spsc_queue.cpp']],
     ['parallel',             ['test_parallel.cpp']],
     ['process',              ['test_process.cpp']],
-    ['alt',                  ['test_alt.cpp']]
+    ['alt',                  ['test_alt.cpp']],
+    ['timer',               ['test_timer.cpp']]
 ]
 
 foreach t : tests
