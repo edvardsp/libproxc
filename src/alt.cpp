@@ -1,4 +1,8 @@
 
+#include <memory>
+#include <random>
+#include <vector>
+
 #include <proxc/config.hpp>
 
 #include <proxc/alt/alt.hpp>
@@ -17,16 +21,30 @@ Alt::Alt()
 
 void Alt::select()
 {
+    std::vector< ChoiceT * > choices;
+    for ( auto& kv : ch_vec_ ) {
+        State state = ch_state_[ kv.first ];
+        if ( state != State::Clash ) {
+            static thread_local std::minstd_rand rng{ std::random_device{}() };
+            auto& vec = kv.second;
+            auto size = vec.size();
+            auto ind = ( size > 1 )
+                ? std::uniform_int_distribution< std::size_t >{ 0, size-1 }( rng )
+                : 0 ;
+            choices.push_back( vec[ ind ] );
+        }
+    }
+
     // if timeout choice has been set, add to choices
     if ( timeout_ ) {
-        choices_.emplace_back( timeout_.release() );
+        choices.push_back( timeout_.get() );
     }
 
     alt::ChoiceBase * selected;
-    switch ( choices_.size() ) {
+    switch ( choices.size() ) {
     case 0:  select_0(); // never returns
-    case 1:  selected = select_1(); break;
-    default: selected = select_n(); break;
+    case 1:  selected = select_1( *choices.begin() ); break;
+    default: selected = select_n( choices ); break;
     }
 
     BOOST_ASSERT( selected != nullptr );
@@ -41,12 +59,10 @@ void Alt::select_0()
     throw UnreachableError{};
 }
 
-auto Alt::select_1() noexcept
+auto Alt::select_1( ChoiceT * choice ) noexcept
     -> ChoiceT *
 {
     std::unique_lock< Spinlock > lk{ splk_ };
-
-    ChoiceT * choice = choices_.begin()->get();
 
     choice->enter();
     if ( choice->is_ready() && choice->try_complete() ) {
@@ -60,22 +76,22 @@ auto Alt::select_1() noexcept
     return choice;
 }
 
-auto Alt::select_n() noexcept
+auto Alt::select_n( std::vector< ChoiceT * > & choices ) noexcept
     -> ChoiceT *
 {
     std::vector< ChoiceT * > ready;
     // FIXME: reserve? and if so, at what size?
-    ready.reserve( choices_.size() );
+    ready.reserve( choices.size() );
 
     std::unique_lock< Spinlock > lk{ splk_ };
 
-    for ( auto& choice : choices_ ) {
+    for ( auto& choice : choices ) {
         choice->enter();
     }
 
-    for ( auto& choice : choices_ ) {
+    for ( auto& choice : choices ) {
         if ( choice->is_ready() ) {
-            ready.push_back( choice.get() );
+            ready.push_back( choice );
         }
     }
 
@@ -102,7 +118,7 @@ auto Alt::select_n() noexcept
         selected = selected_.load( std::memory_order_release );
     }
 
-    for ( auto& choice : choices_ ) {
+    for ( auto& choice : choices ) {
         choice->leave();
     }
     selected_.store( nullptr, std::memory_order_release );

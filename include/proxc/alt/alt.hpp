@@ -47,14 +47,14 @@ private:
     alignas(cache_alignment) std::atomic< ChoiceT * >    selected_{ nullptr };
     alignas(cache_alignment) std::atomic< bool >            wakeup_{ false };
 
-    using SmallVec = boost::container::small_vector< ChoiceT *, 8 >;
+    using SmallVec = boost::container::small_vector< ChoiceT *, 4 >; // FIXME: magic numbers
     enum class State {
         Tx,
         Rx,
         Clash,
     };
-    std::map< ChannelId, State >       choices_ptr_;
-    std::map< ChannelId, SmallVec >    choices_vec_;
+    std::map< ChannelId, State >         ch_state_;
+    std::map< ChannelId, SmallVec >    ch_vec_;
 
     friend class alt::ChoiceBase;
 
@@ -141,8 +141,8 @@ public:
 private:
     [[noreturn]]
     void      select_0();
-    ChoiceT * select_1() noexcept;
-    ChoiceT * select_n() noexcept;
+    ChoiceT * select_1( ChoiceT * ) noexcept;
+    ChoiceT * select_n( std::vector< ChoiceT * > & ) noexcept;
 
     bool try_select( ChoiceT * ) noexcept;
     void maybe_wakeup() noexcept;
@@ -158,33 +158,24 @@ Alt & Alt::send(
 {
     if ( ! tx.is_closed() ) {
         ChannelId id = tx.get_id();
-        auto state_it = choices_ptr_.find( id );
-        if ( state_it == choices_ptr_.end() ) {
-            choices_ptr_[ id ] = State::Tx;
-            auto cp = std::make_unique< alt::ChoiceSend< ItemT > >(
+        auto state_it = ch_state_.find( id );
+        if ( state_it == ch_state_.end() || state_it->second == State::Tx ) {
+            auto pc = std::make_unique< alt::ChoiceSend< ItemT > >(
                 this,
                 ctx_,
                 tx,
                 std::move( item ),
                 std::forward< typename alt::ChoiceSend< ItemT >::FnT >( fn )
             );
-            SmallVec v = { cp.get() };
-            choices_vec_[ id ] = std::move( v );
-            choices_.push_back( std::move( cp ) );
-
-        } else if ( state_it->second == State::Tx ) {
-            auto cp = std::make_unique< alt::ChoiceSend< ItemT > >(
-                this,
-                ctx_,
-                tx,
-                std::move( item ),
-                std::forward< typename alt::ChoiceSend< ItemT >::FnT >( fn )
-            );
-            choices_vec_[ id ].push_back( cp.get() );
-            choices_.push_back( std::move( cp ) );
-
+            if ( state_it == ch_state_.end() ) {
+                ch_state_[ id ] = State::Tx;
+                ch_vec_[ id ] = SmallVec{ pc.get() };
+            } else { // state == State::Tx;
+                ch_vec_[ id ].push_back( pc.get() );
+            }
+            choices_.push_back( std::move( pc ) );
         } else {
-            choices_ptr_[ id ] = State::Clash;
+            ch_state_[ id ] = State::Clash;
         }
     }
     return *this;
@@ -198,14 +189,26 @@ Alt & Alt::send(
 ) noexcept
 {
     if ( ! tx.is_closed() ) {
-        choices_.push_back(
-            std::make_unique< alt::ChoiceSend< ItemT > >(
+        ChannelId id = tx.get_id();
+        auto state_it = ch_state_.find( id );
+        if ( state_it == ch_state_.end() || state_it->second == State::Tx ) {
+            auto pc = std::make_unique< alt::ChoiceSend< ItemT > >(
                 this,
                 ctx_,
                 tx,
                 item,
                 std::forward< typename alt::ChoiceSend< ItemT >::FnT >( fn )
-            ) );
+            );
+            if ( state_it == ch_state_.end() ) {
+                ch_state_[ id ] = State::Tx;
+                ch_vec_[ id ] = SmallVec{ pc.get() };
+            } else { // state == State::Tx;
+                ch_vec_[ id ].push_back( pc.get() );
+            }
+            choices_.push_back( std::move( pc ) );
+        } else {
+            ch_state_[ id ] = State::Clash;
+        }
     }
     return *this;
 }
@@ -251,13 +254,25 @@ Alt & Alt::recv(
 ) noexcept
 {
     if ( ! rx.is_closed() ) {
-        choices_.push_back(
-            std::make_unique< alt::ChoiceRecv< ItemT > >(
+        ChannelId id = rx.get_id();
+        auto state_it = ch_state_.find( id );
+        if ( state_it == ch_state_.end() || state_it->second == State::Rx ) {
+            auto pc = std::make_unique< alt::ChoiceRecv< ItemT > >(
                 this,
                 ctx_,
                 rx,
                 std::forward< typename alt::ChoiceRecv< ItemT >::FnT >( fn )
-            ) );
+            );
+            if ( state_it == ch_state_.end() ) {
+                ch_state_[ id ] = State::Rx;
+                ch_vec_[ id ] = SmallVec{ pc.get() };
+            } else { // state == State::Rx;
+                ch_vec_[ id ].push_back( pc.get() );
+            }
+            choices_.push_back( std::move( pc ) );
+        } else {
+            ch_state_[ id ] = State::Clash;
+        }
     }
     return *this;
 }
