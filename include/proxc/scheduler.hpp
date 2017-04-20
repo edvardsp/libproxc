@@ -74,9 +74,19 @@ private:
         { return left.time_point_ < right.time_point_; }
     };
 
-    using WorkQueue  = detail::queue::ListQueue< Context, detail::hook::Work, & Context::work_ >;
-    using SleepQueue = detail::queue::SetQueue< Context, detail::hook::Sleep, & Context::sleep_, time_point_cmp_ >;
-    using TerminatedQueue = detail::queue::ListQueue< Context, detail::hook::Terminated, & Context::terminated_ >;
+    using WorkQueue = detail::queue::ListQueue<
+        Context, detail::hook::Work, & Context::work_
+    >;
+    using SleepQueue = detail::queue::SetQueue<
+        Context, detail::hook::Sleep, & Context::sleep_, time_point_cmp_
+    >;
+    // FIXME: correct cmp functor?
+    using AltSleepQueue = detail::queue::SetQueue<
+        Context, detail::hook::AltSleep, & Context::alt_sleep_, time_point_cmp_
+    >;
+    using TerminatedQueue = detail::queue::ListQueue<
+        Context, detail::hook::Terminated, & Context::terminated_
+    >;
 
     std::unique_ptr< PolicyType >    policy_;
 
@@ -87,6 +97,7 @@ private:
 
     WorkQueue          work_queue_{};
     SleepQueue         sleep_queue_{};
+    AltSleepQueue      alt_sleep_queue_{};
     TerminatedQueue    terminated_queue_{};
 
     bool    exit_{ false };

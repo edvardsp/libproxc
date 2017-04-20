@@ -109,6 +109,7 @@ public:
     hook::Ready         ready_{};
     hook::Work          work_{};
     hook::Sleep         sleep_{};
+    hook::AltSleep      alt_sleep_{};
     hook::Terminated    terminated_{};
 
     // Wait queue must be context specific, as this differs from

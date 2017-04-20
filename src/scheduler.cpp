@@ -99,6 +99,7 @@ Scheduler::~Scheduler()
 
     BOOST_ASSERT( work_queue_.empty() );
     BOOST_ASSERT( sleep_queue_.empty() );
+    BOOST_ASSERT( alt_sleep_queue_.empty() );
     BOOST_ASSERT( terminated_queue_.empty() );
 }
 

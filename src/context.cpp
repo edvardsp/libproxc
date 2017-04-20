@@ -126,6 +126,7 @@ template<> detail::hook::Ready      & Context::get_hook_() noexcept { return rea
 template<> detail::hook::Work       & Context::get_hook_() noexcept { return work_; }
 template<> detail::hook::Wait       & Context::get_hook_() noexcept { return wait_; }
 template<> detail::hook::Sleep      & Context::get_hook_() noexcept { return sleep_; }
+template<> detail::hook::AltSleep   & Context::get_hook_() noexcept { return alt_sleep_; }
 template<> detail::hook::Terminated & Context::get_hook_() noexcept { return terminated_; }
 
 PROXC_NAMESPACE_END
