@@ -1,6 +1,7 @@
 
 examples = [
-    ['concurrent_sieve', ['concurrent_sieve.cpp']]
+    ['concurrent_sieve',     ['concurrent_sieve.cpp']],
+    ['concurrent_fibonacci', ['concurrent_fibonacci.cpp']]
 ]
 
 foreach e : examples
