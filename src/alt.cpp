@@ -22,16 +22,15 @@ Alt::Alt()
 void Alt::select()
 {
     std::vector< ChoiceT * > choices;
-    for ( auto& kv : ch_vec_ ) {
-        State state = ch_state_[ kv.first ];
-        if ( state != State::Clash ) {
+    for ( const auto& kv : ch_audit_ ) {
+        auto& audit = kv.second;
+        if ( audit.state_ != ChoiceAudit::State::Clash ) {
             static thread_local std::minstd_rand rng{ std::random_device{}() };
-            auto& vec = kv.second;
-            auto size = vec.size();
+            auto size = audit.vec_.size();
             auto ind = ( size > 1 )
                 ? std::uniform_int_distribution< std::size_t >{ 0, size-1 }( rng )
                 : 0 ;
-            choices.push_back( vec[ ind ] );
+            choices.push_back( audit.vec_[ ind ] );
         }
     }
 
@@ -65,11 +64,14 @@ auto Alt::select_1( ChoiceT * choice ) noexcept
     std::unique_lock< Spinlock > lk{ splk_ };
 
     choice->enter();
+
     if ( choice->is_ready() && choice->try_complete() ) {
         selected_.store( choice, std::memory_order_release );
+
     } else {
         Scheduler::self()->wait( std::addressof( lk ), true );
     }
+
     choice->leave();
     selected_.store( nullptr, std::memory_order_release );
 
@@ -85,11 +87,11 @@ auto Alt::select_n( std::vector< ChoiceT * > & choices ) noexcept
 
     std::unique_lock< Spinlock > lk{ splk_ };
 
-    for ( auto& choice : choices ) {
+    for ( const auto& choice : choices ) {
         choice->enter();
     }
 
-    for ( auto& choice : choices ) {
+    for ( const auto& choice : choices ) {
         if ( choice->is_ready() ) {
             ready.push_back( choice );
         }
@@ -102,7 +104,7 @@ auto Alt::select_n( std::vector< ChoiceT * > & choices ) noexcept
             std::shuffle( ready.begin(), ready.end(), rng );
         }
 
-        for ( auto& choice : ready ) {
+        for ( const auto& choice : ready ) {
             if ( choice->try_complete() ) {
                 selected_.store( choice, std::memory_order_release );
                 selected = choice;
@@ -118,7 +120,7 @@ auto Alt::select_n( std::vector< ChoiceT * > & choices ) noexcept
         selected = selected_.load( std::memory_order_release );
     }
 
-    for ( auto& choice : choices ) {
+    for ( const auto& choice : choices ) {
         choice->leave();
     }
     selected_.store( nullptr, std::memory_order_release );

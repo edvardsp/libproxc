@@ -8,4 +8,5 @@
 #include <proxc/this_proc.hpp>
 #include <proxc/channel/sync.hpp>
 #include <proxc/channel/op.hpp>
+#include <proxc/alt/alt.hpp>
 

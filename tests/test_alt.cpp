@@ -1,4 +1,5 @@
 
+#include <chrono>
 #include <iostream>
 #include <vector>
 
@@ -171,6 +172,20 @@ void test_two_alt_single_case()
     );
 }
 
+void test_multiple_tx_rx_same_chan()
+{
+    using T = Obj;
+    channel::Tx< T > tx;
+    channel::Rx< T > rx;
+    std::tie( tx, rx ) = channel::create< T >();
+
+    Alt()
+        .send( tx, T{ 3 } )
+        .recv( rx )
+        .timeout( std::chrono::milliseconds( 1 ) )
+        .select();
+}
+
 void test_alting_triangle()
 {
     using T = Obj;
@@ -186,7 +201,7 @@ void test_alting_triangle()
             while ( n_tx < num || n_rx < num ) {
                 Alt()
                     .recv_if( n_rx < num, rx,
-                        [&n_rx]( Obj o ){ 
+                        [&n_rx]( Obj o ){
                             throw_assert_equ( o, n_rx++, "items should match" );
                         } )
                     .send_if( n_tx < num, tx, Obj{ n_tx },
@@ -275,6 +290,7 @@ int main()
     test_single_send_case();
     test_single_recv_case();
     test_two_alt_single_case();
+    /* test_multiple_tx_rx_same_chan(); */
     test_alting_triangle();
     test_simple_ex();
 

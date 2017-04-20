@@ -47,14 +47,24 @@ private:
     alignas(cache_alignment) std::atomic< ChoiceT * >    selected_{ nullptr };
     alignas(cache_alignment) std::atomic< bool >            wakeup_{ false };
 
-    using SmallVec = boost::container::small_vector< ChoiceT *, 4 >; // FIXME: magic numbers
-    enum class State {
-        Tx,
-        Rx,
-        Clash,
+    template<typename T, std::size_t N>
+    using SmallVec = boost::container::small_vector< T, N >;
+
+    struct ChoiceAudit
+    {
+        enum class State {
+            Tx,
+            Rx,
+            Clash,
+        };
+        State                       state_;
+        SmallVec< ChoiceT *, 4 >    vec_; // FIXME: magic numbers
+        ChoiceAudit() = default;
+        ChoiceAudit( State state, ChoiceT * choice )
+            : state_{ state }, vec_{ choice }
+        {}
     };
-    std::map< ChannelId, State >         ch_state_;
-    std::map< ChannelId, SmallVec >    ch_vec_;
+    std::map< ChannelId, ChoiceAudit >    ch_audit_;
 
     friend class alt::ChoiceBase;
 
@@ -135,7 +145,9 @@ public:
                       std::chrono::duration< Rep, Period > const &,
                       alt::ChoiceTimeout::FnT = []{} ) noexcept;
 
-    // consumes alt and determines which choice to select
+    // consumes alt and determines which choice to select.
+    // the chosen choice completes the operation, and an
+    // optional corresponding closure is executed.
     void select();
 
 private:
@@ -158,8 +170,9 @@ Alt & Alt::send(
 {
     if ( ! tx.is_closed() ) {
         ChannelId id = tx.get_id();
-        auto state_it = ch_state_.find( id );
-        if ( state_it == ch_state_.end() || state_it->second == State::Tx ) {
+        auto audit_it = ch_audit_.find( id );
+        if ( audit_it == ch_audit_.end()
+            || audit_it->second.state_ == ChoiceAudit::State::Tx ) {
             auto pc = std::make_unique< alt::ChoiceSend< ItemT > >(
                 this,
                 ctx_,
@@ -167,15 +180,17 @@ Alt & Alt::send(
                 std::move( item ),
                 std::forward< typename alt::ChoiceSend< ItemT >::FnT >( fn )
             );
-            if ( state_it == ch_state_.end() ) {
-                ch_state_[ id ] = State::Tx;
-                ch_vec_[ id ] = SmallVec{ pc.get() };
+            if ( audit_it == ch_audit_.end() ) {
+                ch_audit_[ id ] = ChoiceAudit{
+                    ChoiceAudit::State::Tx,
+                    pc.get()
+                };
             } else { // state == State::Tx;
-                ch_vec_[ id ].push_back( pc.get() );
+                ch_audit_[ id ].vec_.push_back( pc.get() );
             }
             choices_.push_back( std::move( pc ) );
         } else {
-            ch_state_[ id ] = State::Clash;
+            ch_audit_[ id ].state_ = ChoiceAudit::State::Clash;
         }
     }
     return *this;
@@ -190,24 +205,27 @@ Alt & Alt::send(
 {
     if ( ! tx.is_closed() ) {
         ChannelId id = tx.get_id();
-        auto state_it = ch_state_.find( id );
-        if ( state_it == ch_state_.end() || state_it->second == State::Tx ) {
+        auto audit_it = ch_audit_.find( id );
+        if ( audit_it == ch_audit_.end()
+            || audit_it->second.state_ == ChoiceAudit::State::Tx ) {
             auto pc = std::make_unique< alt::ChoiceSend< ItemT > >(
                 this,
                 ctx_,
                 tx,
-                item,
+                std::move( item ),
                 std::forward< typename alt::ChoiceSend< ItemT >::FnT >( fn )
             );
-            if ( state_it == ch_state_.end() ) {
-                ch_state_[ id ] = State::Tx;
-                ch_vec_[ id ] = SmallVec{ pc.get() };
+            if ( audit_it == ch_audit_.end() ) {
+                ch_audit_[ id ] = ChoiceAudit{
+                    ChoiceAudit::State::Tx,
+                    pc.get()
+                };
             } else { // state == State::Tx;
-                ch_vec_[ id ].push_back( pc.get() );
+                ch_audit_[ id ].vec_.push_back( pc.get() );
             }
             choices_.push_back( std::move( pc ) );
         } else {
-            ch_state_[ id ] = State::Clash;
+            ch_audit_[ id ].state_ = ChoiceAudit::State::Clash;
         }
     }
     return *this;
@@ -255,23 +273,26 @@ Alt & Alt::recv(
 {
     if ( ! rx.is_closed() ) {
         ChannelId id = rx.get_id();
-        auto state_it = ch_state_.find( id );
-        if ( state_it == ch_state_.end() || state_it->second == State::Rx ) {
+        auto audit_it = ch_audit_.find( id );
+        if ( audit_it == ch_audit_.end()
+            || audit_it->second.state_ == ChoiceAudit::State::Rx ) {
             auto pc = std::make_unique< alt::ChoiceRecv< ItemT > >(
                 this,
                 ctx_,
                 rx,
                 std::forward< typename alt::ChoiceRecv< ItemT >::FnT >( fn )
             );
-            if ( state_it == ch_state_.end() ) {
-                ch_state_[ id ] = State::Rx;
-                ch_vec_[ id ] = SmallVec{ pc.get() };
+            if ( audit_it == ch_audit_.end() ) {
+                ch_audit_[ id ] = ChoiceAudit{
+                    ChoiceAudit::State::Rx,
+                    pc.get()
+                };
             } else { // state == State::Rx;
-                ch_vec_[ id ].push_back( pc.get() );
+                ch_audit_[ id ].vec_.push_back( pc.get() );
             }
             choices_.push_back( std::move( pc ) );
         } else {
-            ch_state_[ id ] = State::Clash;
+            ch_audit_[ id ].state_ = ChoiceAudit::State::Clash;
         }
     }
     return *this;
