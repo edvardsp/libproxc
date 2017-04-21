@@ -5,7 +5,7 @@
 
 #include <proxc/config.hpp>
 
-#include <proxc/alt/alt.hpp>
+#include <proxc/alt.hpp>
 #include <proxc/channel.hpp>
 #include <proxc/parallel.hpp>
 

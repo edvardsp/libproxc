@@ -5,9 +5,9 @@
 
 #include <proxc/config.hpp>
 
+#include <proxc/alt.hpp>
 #include <proxc/context.hpp>
 #include <proxc/scheduler.hpp>
-#include <proxc/alt/alt.hpp>
 
 #include <proxc/scheduling_policy/policy_base.hpp>
 #include <proxc/scheduling_policy/round_robin.hpp>

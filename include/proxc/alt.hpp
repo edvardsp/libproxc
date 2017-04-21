@@ -21,14 +21,10 @@
 #include <proxc/alt/choice_base.hpp>
 #include <proxc/alt/choice_send.hpp>
 #include <proxc/alt/choice_recv.hpp>
-#include <proxc/alt/choice_timeout.hpp>
 
 #include <boost/assert.hpp>
 
 PROXC_NAMESPACE_BEGIN
-namespace detail {
-
-} // namespace detail
 
 class Alt
 {
