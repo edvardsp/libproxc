@@ -7,61 +7,73 @@ using namespace proxc;
 template<typename T> using Tx = channel::Tx< T >;
 template<typename T> using Rx = channel::Rx< T >;
 
-void fib_0( Tx< long > out2 )
+
+void fib_0( Tx< std::size_t > out )
 {
-    while( ! out2.is_closed() ) {
-        out2.send( long{ 0 } );
+    out.send( std::size_t{ 0 } );
+}
+
+void fib_1( Tx< std::size_t > out1, Tx< std::size_t > out2 )
+{
+    out1.send( std::size_t{ 1 } );
+    if ( ! out2.is_closed() ) {
+        out2.send( std::size_t{ 1 } );
     }
 }
 
-void fib_1( Tx< long > out1, Tx< long > out2 )
-{
-    while( ! out1.is_closed() || ! out2.is_closed() ) {
-        Alt()
-            .send( out1, long{ 1 } )
-            .send( out2, long{ 1 } )
-            .select();
-    }
-}
 
-void fib_n( Tx< long > out1, Tx< long > out2,
-            Rx< long > in1,  Rx< long > in2 )
+void fib_n( Tx< std::size_t > out1, Tx< std::size_t > out2,
+            Rx< std::size_t > in1,  Rx< std::size_t > in2 )
 {
-    long nm1{}, nm2{};
+    std::size_t nm1{}, nm2{};
     in1.recv( nm1 );
     in2.recv( nm2 );
-    long n = nm1 + nm2;
-    while( ! out1.is_closed() || ! out2.is_closed() ) {
-        Alt()
-            .send( out1, n )
-            .send( out2, n )
-            .select();
+    std::size_t n = nm1 + nm2;
+    out1.send( n );
+    if ( ! out2.is_closed() ) {
+        out2.send( n );
     }
 }
 
-int main()
+std::size_t fib( const std::size_t n )
 {
-    const long n = 80;
+    if      ( n == 0 ) { return 0; }
+    else if ( n == 1 ) { return 1; }
 
-    auto chs = channel::create_n< long >( n * 2 + 1 );
+    auto chs = channel::create_n< std::size_t >( 2 * n + 1 );
     auto txs = std::move( std::get<0>( chs ) );
     auto rxs = std::move( std::get<1>( chs ) );
 
+    rxs[ 2 * n ].close();
+    rxs[ 2 * n - 2 ].close();
+    
+    std::size_t result{};
     parallel(
         proc( fib_0, std::move( txs[ 0 ] ) ),
         proc( fib_1, std::move( txs[ 1 ] ), std::move( txs[ 2 ] ) ),
-        proc_for( long{ 0 }, n - 1,
+        proc_for( std::size_t{ 0 }, n - 1,
             [&txs,&rxs]( auto i ){
                 fib_n( std::move( txs[ 2*i+3 ] ), std::move( txs[ 2*i+4 ] ),
                        std::move( rxs[ 2*i+0 ] ), std::move( rxs[ 2*i+1 ] ) );
             } ),
         proc(
-            [n]( Rx< long > rx ){
-                long m{};
-                rx.recv( m );
-                std::cout << "Fib " << n << ": " << m << std::endl;
+            [&result]( Rx< std::size_t > rx ){
+                rx.recv( result );
             }, std::move( rxs[ 2*n-1 ] )
         )
+    );
+    return result;
+}
+
+int main()
+{
+    const std::size_t n = 50;
+    parallel(
+        proc_for( std::size_t{ 0 }, n,
+            []( auto i ) {
+                auto result = fib( i );
+                std::cout << "Fib " << i << ": " << result << std::endl;
+            } )
     );
 
     return 0;
