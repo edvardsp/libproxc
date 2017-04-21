@@ -22,6 +22,10 @@ void test_all_cases()
     auto tx = channel::get_tx( tx_ch );
     auto rx = channel::get_rx( rx_ch );
 
+    timer::Egg egg{ std::chrono::milliseconds( 1 ) };
+    timer::Repeat rep{ std::chrono::microseconds( 100 ) };
+    timer::Xx xx{ std::chrono::steady_clock::now() + std::chrono::milliseconds( 10 ) };
+
     int item = 42;
 
     Alt()
@@ -45,12 +49,12 @@ void test_all_cases()
             tx, item )
         .send(
             tx, 2,
-            []() {
+            []{
                 // some work
             } )
         .send(
             tx, item,
-            []() {
+            [] {
                 // some work
             } )
         .send_if( true,
@@ -59,36 +63,42 @@ void test_all_cases()
             tx, item)
         .send_if( true,
             tx, 4,
-            []() {
+            []{
 
             } )
         .send_if( true,
             tx, item,
-            []() {
+            [] {
 
             } )
-        .timeout( std::chrono::steady_clock::now() )
-        .timeout( std::chrono::steady_clock::now(),
-            [](){
+        .timeout( egg )
+        .timeout( egg,
+            []{
                  // some work
             } )
-        .timeout( std::chrono::milliseconds(100) )
-        .timeout( std::chrono::milliseconds(100),
-            [](){
+        .timeout( rep )
+        .timeout( rep,
+            []{
                 // some work
             } )
-        .timeout_if( true,
-            std::chrono::steady_clock::now() )
-        .timeout_if( true,
-            std::chrono::steady_clock::now(),
-            [](){
+        .timeout( xx )
+        .timeout( xx,
+            []{
+                // some work
+            } )
+        .timeout_if( true, egg )
+        .timeout_if( true, egg,
+            []{
                  // some work
             } )
-        .timeout_if( true,
-            std::chrono::milliseconds(100) )
-        .timeout_if( true,
-            std::chrono::milliseconds(100),
-            [](){
+        .timeout_if( true, rep )
+        .timeout_if( true, rep,
+            []{
+                // some work
+            } )
+        .timeout_if( true, xx )
+        .timeout_if( true, xx,
+            []{
                 // some work
             } )
         .select();
@@ -147,9 +157,15 @@ void test_single_recv_case()
 
 void test_single_timeout()
 {
-    /* Alt() */
-    /*     .timeout() */
-    /*     .select(); */
+    timer::Egg egg{ std::chrono::milliseconds( 1 ) };
+    bool timedout = false;
+    Alt()
+        .timeout( egg,
+            [&timedout]{
+                timedout = true;
+            } )
+        .select();
+    throw_assert( timedout, "should have timedout" );
 }
 
 void test_two_alt_single_case()
@@ -189,7 +205,7 @@ void test_multiple_tx_rx_same_chan()
     Alt()
         .send( tx, T{ 3 } )
         .recv( rx )
-        .timeout( std::chrono::milliseconds( 1 ) )
+        /* .timeout( std::chrono::milliseconds( 1 ) ) */
         .select();
 }
 

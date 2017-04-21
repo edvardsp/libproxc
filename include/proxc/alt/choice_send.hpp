@@ -18,7 +18,7 @@ public:
     using ItemT = T;
     using TxT = channel::Tx< ItemT >;
     using EndT = channel::detail::ChanEnd< ItemT >;
-    using FnT = detail::delegate< void( void ) >;
+    using FnT = proxc::detail::delegate< void( void ) >;
 
 private:
     TxT &    tx_;

@@ -20,7 +20,7 @@ public:
     using ItemT = T;
     using RxT   = channel::Rx< ItemT >;
     using EndT  = channel::detail::ChanEnd< ItemT >;
-    using FnT   = detail::delegate< void( ItemT ) >;
+    using FnT   = proxc::detail::delegate< void( ItemT ) >;
 
 private:
     RxT &    rx_;

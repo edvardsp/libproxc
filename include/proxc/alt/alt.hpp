@@ -14,6 +14,7 @@
 
 #include <proxc/context.hpp>
 #include <proxc/channel.hpp>
+#include <proxc/timer.hpp>
 #include <proxc/exceptions.hpp>
 #include <proxc/spinlock.hpp>
 #include <proxc/detail/delegate.hpp>
@@ -32,20 +33,24 @@ namespace detail {
 class Alt
 {
 private:
-    using ChoiceT = alt::ChoiceBase;
+    using ChoiceT   = alt::ChoiceBase;
     using ChoicePtr = std::unique_ptr< ChoiceT >;
 
     using ChannelId = channel::detail::ChannelId;
 
-    std::vector< ChoicePtr >                     choices_;
-    std::unique_ptr< alt::ChoiceTimeout >        timeout_{ nullptr };
+    using TimePointT = Context::TimePointType;
+    using TimerFnT   = detail::delegate< void( void ) >;
+
+    std::vector< ChoicePtr >    choices_{};
+
+    TimePointT      time_point_{ TimePointT::max() };
+    TimerFnT        timer_fn_{ []{} };
 
     Context *    ctx_;
+    Spinlock     splk_;
 
-    Spinlock splk_;
-
+    alignas(cache_alignment) std::atomic_flag            select_flag_;
     alignas(cache_alignment) std::atomic< ChoiceT * >    selected_{ nullptr };
-    alignas(cache_alignment) std::atomic< bool >            wakeup_{ false };
 
     template<typename T, std::size_t N>
     using SmallVec = boost::container::small_vector< T, N >;
@@ -58,7 +63,7 @@ private:
             Clash,
         };
         State                       state_;
-        SmallVec< ChoiceT *, 4 >    vec_; // FIXME: magic numbers
+        SmallVec< ChoiceT *, 4 >    vec_; // FIXME: magic number
         ChoiceAudit() = default;
         ChoiceAudit( State state, ChoiceT * choice )
             : state_{ state }, vec_{ choice }
@@ -123,28 +128,23 @@ public:
                    typename alt::ChoiceRecv< ItemT >::FnT && = []( ItemT ){} ) noexcept;
 
     // timeout without guard
-    template<typename Clock, typename Dur>
+    template< typename Timer
+            , typename = typename std::enable_if<
+                traits::is_timer< Timer >::value
+            >::type >
     PROXC_WARN_UNUSED
-    Alt & timeout( std::chrono::time_point< Clock, Dur > const &,
-                   alt::ChoiceTimeout::FnT = []{} ) noexcept;
-
-    template<typename Rep, typename Period>
-    PROXC_WARN_UNUSED
-    Alt & timeout( std::chrono::duration< Rep, Period > const &,
-                   alt::ChoiceTimeout::FnT = []{} ) noexcept;
+    Alt & timeout( Timer const &,
+                   TimerFnT = []{} ) noexcept;
 
     // timeout with guard
-    template<typename Clock, typename Dur>
+    template< typename Timer
+            , typename = typename std::enable_if<
+                traits::is_timer< Timer >::value
+            >::type >
     PROXC_WARN_UNUSED
     Alt & timeout_if( bool,
-                      std::chrono::time_point< Clock, Dur > const &,
-                      alt::ChoiceTimeout::FnT = []{} ) noexcept;
-
-    template<typename Rep, typename Period>
-    PROXC_WARN_UNUSED
-    Alt & timeout_if( bool,
-                      std::chrono::duration< Rep, Period > const &,
-                      alt::ChoiceTimeout::FnT = []{} ) noexcept;
+                      Timer const &,
+                      TimerFnT = []{} ) noexcept;
 
     // consumes alt and determines which choice to select.
     // the chosen choice completes the operation, and an
@@ -152,10 +152,9 @@ public:
     void select();
 
 private:
-    [[noreturn]]
-    void      select_0();
-    ChoiceT * select_1( ChoiceT * ) noexcept;
-    ChoiceT * select_n( std::vector< ChoiceT * > & ) noexcept;
+    bool select_0();
+    bool select_1( ChoiceT * ) noexcept;
+    bool select_n( std::vector< ChoiceT * > & ) noexcept;
 
     bool try_select( ChoiceT * ) noexcept;
     bool try_timeout() noexcept;
@@ -311,62 +310,38 @@ Alt & Alt::recv_if(
     return ( guard )
         ? recv( rx,
                 std::forward< typename alt::ChoiceRecv< ItemT >::FnT >( fn ) )
-        : *this
-        ;
+        : *this ;
 }
 
 // timeout without guard
-template<typename Clock, typename Dur>
+template< typename Timer
+        , typename >
 Alt & Alt::timeout(
-    std::chrono::time_point< Clock, Dur > const & time_point,
-    alt::ChoiceTimeout::FnT fn
+    Timer const & tmi,
+    TimerFnT fn
 ) noexcept
 {
-    if ( ! timeout_ || ! timeout_->is_less( time_point ) ) {
-        timeout_.reset( new alt::ChoiceTimeout{ this, time_point, std::move( fn ) } );
+    Timer new_timer{ tmi };
+    new_timer.reset();
+    if ( new_timer.get() < time_point_ ) {
+        time_point_ = new_timer.get();
+        timer_fn_ = std::move( fn );
     }
     return *this;
 }
 
-template<typename Rep, typename Period>
-Alt & Alt::timeout(
-    std::chrono::duration< Rep, Period > const & duration,
-    alt::ChoiceTimeout::FnT fn
-) noexcept
-{
-    return timeout(
-        std::chrono::steady_clock::now() + duration,
-        std::move( fn )
-    );
-}
-
 // timeout with guard
-template<typename Clock, typename Dur>
+template< typename Timer
+        , typename >
 Alt & Alt::timeout_if(
     bool guard,
-    std::chrono::time_point< Clock, Dur > const & time_point,
-    alt::ChoiceTimeout::FnT fn
+    Timer const & tmi,
+    TimerFnT fn
 ) noexcept
 {
     return ( guard )
-        ? timeout( time_point,
-                   std::move( fn ) )
-        : *this
-        ;
-}
-
-template<typename Rep, typename Period>
-Alt & Alt::timeout_if(
-    bool guard,
-    std::chrono::duration< Rep, Period > const & duration,
-    alt::ChoiceTimeout::FnT fn
-) noexcept
-{
-    return ( guard )
-        ? timeout( std::chrono::steady_clock::now() + duration,
-                   std::move( fn ) )
-        : *this
-        ;
+        ? timeout( tmi, std::move( fn ) )
+        : *this ;
 }
 
 PROXC_NAMESPACE_END

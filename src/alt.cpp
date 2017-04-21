@@ -9,6 +9,7 @@
 #include <proxc/alt/choice_base.hpp>
 
 PROXC_NAMESPACE_BEGIN
+
 ////////////////////////////////////////////////////////////////////////////////
 // Alt impl
 ////////////////////////////////////////////////////////////////////////////////
@@ -17,6 +18,7 @@ Alt::Alt()
     : ctx_{ Scheduler::running() }
 {
     choices_.reserve( 8 );
+    select_flag_.clear( std::memory_order_relaxed );
 }
 
 void Alt::select()
@@ -34,32 +36,39 @@ void Alt::select()
         }
     }
 
-    // if timeout choice has been set, add to choices
-    if ( timeout_ && timeout_->is_ready() ) {
-        choices.push_back( timeout_.get() );
-    }
-
-    alt::ChoiceBase * selected;
+    bool timeout = false;
     switch ( choices.size() ) {
-    case 0:  select_0(); // never returns
-    case 1:  selected = select_1( *choices.begin() ); break;
-    default: selected = select_n( choices ); break;
+    case 0:  timeout = select_0();                   break;
+    case 1:  timeout = select_1( *choices.begin() ); break;
+    default: timeout = select_n( choices );          break;
     }
 
-    BOOST_ASSERT( selected != nullptr );
-    selected->run_func();
+    if ( timeout ) {
+        BOOST_ASSERT( time_point_ < TimePointT::max() );
+        timer_fn_();
+
+    } else {
+        auto selected = selected_.exchange( nullptr, std::memory_order_acq_rel );
+        BOOST_ASSERT( selected != nullptr );
+        selected->run_func();
+    }
 }
 
-void Alt::select_0()
+bool Alt::select_0()
 {
-    // suspend indefinitely, should never return
-    Scheduler::self()->wait();
-    BOOST_ASSERT_MSG( false, "unreachable" );
-    throw UnreachableError{};
+    if ( time_point_ < TimePointT::max() ) {
+        Scheduler::self()->wait_until( time_point_ );
+        return true;
+
+    } else {
+        // suspend indefinitely, should never return
+        Scheduler::self()->wait();
+        BOOST_ASSERT_MSG( false, "unreachable" );
+        throw UnreachableError{};
+    }
 }
 
-auto Alt::select_1( ChoiceT * choice ) noexcept
-    -> ChoiceT *
+bool Alt::select_1( ChoiceT * choice ) noexcept
 {
     std::unique_lock< Spinlock > lk{ splk_ };
 
@@ -73,13 +82,11 @@ auto Alt::select_1( ChoiceT * choice ) noexcept
     }
 
     choice->leave();
-    selected_.store( nullptr, std::memory_order_release );
 
-    return choice;
+    return selected_.load( std::memory_order_relaxed ) == nullptr;
 }
 
-auto Alt::select_n( std::vector< ChoiceT * > & choices ) noexcept
-    -> ChoiceT *
+bool Alt::select_n( std::vector< ChoiceT * > & choices ) noexcept
 {
     std::vector< ChoiceT * > ready;
     // FIXME: reserve? and if so, at what size?
@@ -97,7 +104,7 @@ auto Alt::select_n( std::vector< ChoiceT * > & choices ) noexcept
         }
     }
 
-    ChoiceT * selected = nullptr;
+    alt::ChoiceBase * selected = nullptr;
     if ( ! ready.empty() ) {
         if ( ready.size() > 1 ) {
             static thread_local std::mt19937 rng{ std::random_device{}() };
@@ -117,14 +124,14 @@ auto Alt::select_n( std::vector< ChoiceT * > & choices ) noexcept
         // one or more choices should be ready,
         // and selected_ should be set. If set,
         // this is the winning choice.
-        selected = selected_.load( std::memory_order_release );
+    } else {
+        selected_.store( selected, std::memory_order_release );
     }
 
     for ( const auto& choice : choices ) {
         choice->leave();
     }
-    selected_.store( nullptr, std::memory_order_release );
-    return selected;
+    return selected_.load( std::memory_order_relaxed ) == nullptr;
 }
 
 // called by external choices
@@ -132,13 +139,12 @@ bool Alt::try_select( ChoiceT * choice ) noexcept
 {
     std::unique_lock< Spinlock > lk{ splk_ };
 
-    ChoiceT * expected = nullptr;
-    return selected_.compare_exchange_strong(
-        expected,
-        choice,
-        std::memory_order_acq_rel,
-        std::memory_order_relaxed
-    );
+    if ( select_flag_.test_and_set( std::memory_order_acq_rel ) ) {
+        return false;
+    }
+
+    selected_.store( choice, std::memory_order_release );
+    return true;
 }
 
 bool Alt::try_timeout() noexcept
@@ -150,24 +156,15 @@ bool Alt::try_timeout() noexcept
     // wait before trying to set selected_.
     std::unique_lock< Spinlock > lk{ splk_ };
 
-    ChoiceT * expected = nullptr;
-    return selected_.compare_exchange_strong(
-        expected,
-        timeout_.get(),
-        std::memory_order_acq_rel,
-        std::memory_order_relaxed
-    );
+    return ! select_flag_.test_and_set( std::memory_order_acq_rel );
 }
 
 // called by external choices
 void Alt::maybe_wakeup() noexcept
 {
-    // FIXME: do i need a spinlock?
+    // FIXME: do i need a spinlock? do i need this method?
     /* std::unique_lock< Spinlock > lk{ splk_ }; */
 
-    if ( wakeup_.exchange( false, std::memory_order_acq_rel ) ) {
-        Scheduler::self()->schedule( ctx_ );
-    }
 }
 
 

@@ -2,8 +2,13 @@
 #pragma once
 
 #include <chrono>
+#include <memory>
+#include <type_traits>
+#include <utility>
 
 #include <proxc/config.hpp>
+
+#include <proxc/detail/delegate.hpp>
 
 PROXC_NAMESPACE_BEGIN
 namespace timer {
@@ -34,6 +39,13 @@ public:
     // Interface methods
     virtual void reset() noexcept = 0;
     virtual bool expired() noexcept = 0;
+
+    // base methods
+    friend bool operator < ( Interface const & lhs, Interface const & rhs ) noexcept
+    { return lhs.time_point_ < rhs.time_point_; }
+
+    TimePointT const & get() const noexcept
+    { return time_point_; }
 };
 
 // Single event, which expires after a given duration. The timer starts
@@ -110,5 +122,21 @@ public:
 };
 
 } // namespace timer
+
+namespace traits {
+
+template<typename Timer>
+struct is_timer
+    : std::integral_constant<
+        bool,
+        std::is_base_of<
+            timer::Interface,
+            typename std::decay< Timer >::type
+        >::value
+    >
+{};
+
+} // namespace traits
+
 PROXC_NAMESPACE_END
 

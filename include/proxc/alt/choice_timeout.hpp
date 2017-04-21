@@ -5,44 +5,32 @@
 
 #include <proxc/config.hpp>
 
+#include <proxc/timer.hpp>
 #include <proxc/alt/choice_base.hpp>
 #include <proxc/detail/delegate.hpp>
 
 PROXC_NAMESPACE_BEGIN
 namespace alt {
 
-class ChoiceTimeout : public ChoiceBase
+class ChoiceTimeout final : public ChoiceBase
 {
 public:
-    using FnT = detail::delegate< void( void ) >;
-
-    std::chrono::steady_clock::time_point    time_point_;
+    using FnT = proxc::detail::delegate< void( void ) >;
 
 private:
-    FnT    fn_;
+    std::chrono::steady_clock::time_point  time_point_;
+    FnT                                    fn_{ []{} };
 
 public:
     ChoiceTimeout( Alt * alt )
         : ChoiceBase{ alt }
-        , time_point_{ std::chrono::steady_clock::time_point::min() }
-        , fn_{ []{} }
     {}
 
-    template<typename Rep, typename Period>
     ChoiceTimeout( Alt * alt,
-                   std::chrono::duration< Rep, Period > const & duration,
+                   std::chrono::steady_clock::time_point  tp,
                    FnT fn )
         : ChoiceBase{ alt }
-        , time_point_{ std::chrono::steady_clock::now() + duration }
-        , fn_{ std::move( fn ) }
-    {}
-
-    template<typename Clock, typename Dur>
-    ChoiceTimeout( Alt * alt,
-                   std::chrono::time_point< Clock, Dur > const & time_point,
-                   FnT fn )
-        : ChoiceBase{ alt }
-        , time_point_{ time_point }
+        , time_point_{ tp }
         , fn_{ std::move( fn ) }
     {}
 
@@ -56,15 +44,12 @@ public:
 
     bool is_ready() const noexcept
     {
-        return ( time_point_ != std::chrono::steady_clock::time_point::min() )
-            ? std::chrono::steady_clock::now() >= time_point_
-            : false
-            ;
+        return false;
     }
 
     bool try_complete() noexcept
     {
-        return true;
+        return false;
     }
 
     void run_func() const noexcept
