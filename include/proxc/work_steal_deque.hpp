@@ -34,23 +34,23 @@ constexpr std::ptrdiff_t to_signed( std::size_t x ) noexcept
 //
 // Correct and Efﬁcient Work-Stealing for Weak Memory Models
 // http://www.di.ens.fr/~zappa/readings/ppopp13.pdf
-template<typename T>
+template<typename ItemT>
 class WorkStealDeque
 {
 public:
     static constexpr std::size_t default_capacity = 1024;
 
 private:
-    using ArrayType = detail::CircularArray< T * >;
+    using ArrayT = detail::CircularArray< ItemT * >;
 
     alignas(cache_alignment) std::atomic< std::size_t >    top_{ 0 };
     alignas(cache_alignment) std::atomic< std::size_t >    bottom_{ 0 };
-    alignas(cache_alignment) std::atomic< ArrayType * >    array_;
+    alignas(cache_alignment) std::atomic< ArrayT * >    array_;
     char padding_[cacheline_length];
 
 public:
     WorkStealDeque()
-        : array_{ new ArrayType{ default_capacity } }
+        : array_{ new ArrayT{ default_capacity } }
     {}
 
     ~WorkStealDeque() noexcept
@@ -90,7 +90,7 @@ public:
         delete new_array;
     }
 
-    void push(T * item)
+    void push(ItemT * item)
     {
         std::size_t bottom = bottom_.load( std::memory_order_relaxed );
         std::size_t top = top_.load( std::memory_order_acquire );
@@ -110,7 +110,7 @@ public:
         bottom_.store( bottom + 1, std::memory_order_relaxed );
     }
 
-    T * pop()
+    ItemT * pop()
     {
         std::size_t bottom = bottom_.load( std::memory_order_relaxed ) - 1;
         auto a = array_.load( std::memory_order_relaxed );
@@ -145,7 +145,7 @@ public:
         }
     }
 
-    T * steal()
+    ItemT * steal()
     {
         // Loop while CAS fails.
         while ( true ) {

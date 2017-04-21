@@ -40,7 +40,7 @@ bool RoundRobin::is_ready() const noexcept
 }
 
 template<>
-void RoundRobin::suspend_until(TimePointType const & time_point) noexcept
+void RoundRobin::suspend_until(TimePointT const & time_point) noexcept
 {
     std::unique_lock<std::mutex> lk{ mtx_ };
     cnd_.wait_until(lk, time_point,

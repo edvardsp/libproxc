@@ -85,8 +85,8 @@ public:
         }
     };
 
-    using ContextType = boost::context::execution_context;
-    using TimePointType = std::chrono::steady_clock::time_point;
+    using ContextT = boost::context::execution_context;
+    using TimePointT = std::chrono::steady_clock::time_point;
 
     using SchedulerFn = std::function< void( void * ) >;
     using EntryFn     = detail::delegate< void( void * ) >;
@@ -96,7 +96,7 @@ private:
     bool    has_terminated_{ false };
 
     EntryFn        entry_fn_{ nullptr };
-    ContextType    ctx_;
+    ContextT    ctx_;
 
     // intrusive_ptr friend methods and counter
     friend void intrusive_ptr_add_ref( Context * ctx ) noexcept;
@@ -104,7 +104,7 @@ private:
     std::size_t    use_count_{ 0 };
 
 public:
-    TimePointType     time_point_{ TimePointType::max() };
+    TimePointT     time_point_{ TimePointT::max() };
     Alt *             alt_{ nullptr };
 
     // Intrusive hooks

@@ -13,7 +13,7 @@
 #include "setup.hpp"
 
 using ms = std::chrono::milliseconds;
-using Clock = proxc::ClockType;
+using Clock = proxc::ClockT;
 
 using namespace proxc;
 

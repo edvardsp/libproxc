@@ -94,10 +94,10 @@ auto proc_for_impl( InputIt first, InputIt last, Fns && ... fns )
     static_assert( traits::are_callable_with_arg< typename InputIt::value_type, Fns ... >{},
         "Supplied functions does not have the correct function signature" );
 
-    using FnType = detail::delegate< void( typename InputIt::value_type ) >;
-    using ArrType = std::array< FnType, sizeof...(Fns) >;
+    using FnT = detail::delegate< void( typename InputIt::value_type ) >;
+    using ArrT = std::array< FnT, sizeof...(Fns) >;
 
-    auto fn_arr = ArrType{ { std::forward< Fns >( fns ) ... } };
+    auto fn_arr = ArrT{ { std::forward< Fns >( fns ) ... } };
     const std::size_t total_size = sizeof...(Fns) * std::distance( first, last );
     std::vector< Process > procs;
     procs.reserve( total_size );

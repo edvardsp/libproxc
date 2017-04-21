@@ -38,7 +38,7 @@ private:
 
     using ChannelId = channel::detail::ChannelId;
 
-    using TimePointT = Context::TimePointType;
+    using TimePointT = Context::TimePointT;
     using TimerFnT   = detail::delegate< void( void ) >;
 
     std::vector< ChoicePtr >    choices_{};

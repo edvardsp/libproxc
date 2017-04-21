@@ -33,7 +33,7 @@ private:
     static void init_(std::size_t num_workers);
 
 public:
-    using TimePointType = typename PolicyBase<T>::TimePointType;
+    using TimePointT = typename PolicyBase<T>::TimePointT;
 
     // 0 == num_cores
     WorkStealingPolicy(std::size_t num_workers = 0);
@@ -54,7 +54,7 @@ public:
 
     bool is_ready() const noexcept;
 
-    void suspend_until(TimePointType const &) noexcept;
+    void suspend_until(TimePointT const &) noexcept;
 
     void notify() noexcept;
 

@@ -202,11 +202,14 @@ void test_multiple_tx_rx_same_chan()
     channel::Rx< T > rx;
     std::tie( tx, rx ) = channel::create< T >();
 
+    bool timeout = false;
     Alt()
         .send( tx, T{ 3 } )
         .recv( rx )
-        /* .timeout( std::chrono::milliseconds( 1 ) ) */
+        .timeout( timer::Egg{ std::chrono::milliseconds( 1 ) },
+            [&timeout]{ timeout = true; })
         .select();
+    throw_assert( timeout, "should have timed out" );
 }
 
 void test_alting_triangle()
@@ -314,7 +317,7 @@ int main()
     test_single_recv_case();
     test_single_timeout();
     test_two_alt_single_case();
-    /* test_multiple_tx_rx_same_chan(); */
+    test_multiple_tx_rx_same_chan();
     test_alting_triangle();
     test_simple_ex();
 

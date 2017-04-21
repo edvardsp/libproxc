@@ -42,9 +42,9 @@ struct SchedulerInitializer;
 
 } // detail
 
-using PolicyType = scheduling_policy::PolicyBase<Context>;
-using ClockType = PolicyType::ClockType;
-using TimePointType = PolicyType::TimePointType;
+using PolicyT = scheduling_policy::PolicyBase<Context>;
+using ClockT = PolicyT::ClockT;
+using TimePointT = PolicyT::TimePointT;
 
 class Scheduler
 {
@@ -88,7 +88,7 @@ private:
         Context, detail::hook::Terminated, & Context::terminated_
     >;
 
-    std::unique_ptr< PolicyType >    policy_;
+    std::unique_ptr< PolicyT >    policy_;
 
     boost::intrusive_ptr< Context >    main_ctx_{};
     boost::intrusive_ptr< Context >    scheduler_ctx_{};
@@ -125,9 +125,9 @@ public:
     void wait( Context * ) noexcept;
     void wait( std::unique_lock< Spinlock > &, bool lock = false ) noexcept;
 
-    bool wait_until( TimePointType const & ) noexcept;
-    bool wait_until( TimePointType const &, Context * ) noexcept;
-    bool wait_until( TimePointType const &, std::unique_lock< Spinlock > &, bool lock = false ) noexcept;
+    bool wait_until( TimePointT const & ) noexcept;
+    bool wait_until( TimePointT const &, Context * ) noexcept;
+    bool wait_until( TimePointT const &, std::unique_lock< Spinlock > &, bool lock = false ) noexcept;
 
     void alt_wait( Alt *, std::unique_lock< Spinlock > &, bool lock = false ) noexcept;
 
@@ -143,7 +143,7 @@ public:
     void yield() noexcept;
     void join( Context * ) noexcept;
 
-    bool sleep_until( TimePointType const &, CtxSwitchData * = nullptr ) noexcept;
+    bool sleep_until( TimePointT const &, CtxSwitchData * = nullptr ) noexcept;
 
     void wakeup_sleep() noexcept;
     void wakeup_waiting_on( Context * ) noexcept;

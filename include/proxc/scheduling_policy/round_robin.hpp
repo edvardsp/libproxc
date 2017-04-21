@@ -26,7 +26,7 @@ private:
     bool                       flag_{ false };
 
 public:
-    using TimePointType = typename PolicyBase<T>::TimePointType;
+    using TimePointT = typename PolicyBase<T>::TimePointT;
 
     RoundRobinPolicy() = default;
 
@@ -39,7 +39,7 @@ public:
 
     bool is_ready() const noexcept;
 
-    void suspend_until(TimePointType const &) noexcept;
+    void suspend_until(TimePointT const &) noexcept;
 
     void notify() noexcept;
 };

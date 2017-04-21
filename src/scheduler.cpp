@@ -140,18 +140,18 @@ void Scheduler::wait( std::unique_lock< Spinlock > & splk, bool lock ) noexcept
     }
 }
 
-bool Scheduler::wait_until( TimePointType const & time_point ) noexcept
+bool Scheduler::wait_until( TimePointT const & time_point ) noexcept
 {
     return sleep_until( time_point );
 }
 
-bool Scheduler::wait_until( TimePointType const & time_point, Context * ctx ) noexcept
+bool Scheduler::wait_until( TimePointT const & time_point, Context * ctx ) noexcept
 {
     CtxSwitchData data{ ctx };
     return sleep_until( time_point, std::addressof( data ) );
 }
 
-bool Scheduler::wait_until( TimePointType const & time_point, std::unique_lock< Spinlock > & splk, bool lock ) noexcept
+bool Scheduler::wait_until( TimePointT const & time_point, std::unique_lock< Spinlock > & splk, bool lock ) noexcept
 {
     CtxSwitchData data{ std::addressof( splk ) };
     auto ret = sleep_until( time_point, std::addressof( data ) );
@@ -171,7 +171,7 @@ void Scheduler::alt_wait( Alt * alt, std::unique_lock< Spinlock > & splk, bool l
     BOOST_ASSERT( ! running_->is_linked< hook::AltSleep >() );
     BOOST_ASSERT( ! running_->is_linked< hook::Terminated >() );
 
-    if ( alt->time_point_ < TimePointType::max() ) {
+    if ( alt->time_point_ < TimePointT::max() ) {
         running_->alt_        = alt;
         running_->time_point_ = alt->time_point_;
         running_->link( alt_sleep_queue_ );
@@ -181,7 +181,7 @@ void Scheduler::alt_wait( Alt * alt, std::unique_lock< Spinlock > & splk, bool l
     resume( std::addressof( data ) );
 
     running_->alt_        = nullptr;
-    running_->time_point_ = TimePointType::max();
+    running_->time_point_ = TimePointT::max();
     if ( running_->is_linked< hook::AltSleep >() ) {
         running_->unlink< hook::AltSleep >();
     }
@@ -310,7 +310,7 @@ void Scheduler::join( Context * ctx ) noexcept
     }
 }
 
-bool Scheduler::sleep_until( TimePointType const & time_point, CtxSwitchData * data ) noexcept
+bool Scheduler::sleep_until( TimePointT const & time_point, CtxSwitchData * data ) noexcept
 {
     BOOST_ASSERT(   running_ != nullptr );
     BOOST_ASSERT(   running_->is_type( Context::Type::Process ) );
@@ -319,11 +319,11 @@ bool Scheduler::sleep_until( TimePointType const & time_point, CtxSwitchData * d
     BOOST_ASSERT( ! running_->is_linked< hook::Sleep >() );
     BOOST_ASSERT( ! running_->is_linked< hook::Terminated >() );
 
-    if (ClockType::now() < time_point) {
+    if (ClockT::now() < time_point) {
         running_->time_point_ = time_point;
         running_->link( sleep_queue_ );
         resume( data );
-        return ClockType::now() >= time_point;
+        return ClockT::now() >= time_point;
     } else {
         return true;
     }
@@ -331,7 +331,7 @@ bool Scheduler::sleep_until( TimePointType const & time_point, CtxSwitchData * d
 
 void Scheduler::wakeup_sleep() noexcept
 {
-    auto now = ClockType::now();
+    auto now = ClockT::now();
     auto sleep_it = sleep_queue_.begin();
     while ( sleep_it != sleep_queue_.end() ) {
         auto ctx = &( *sleep_it );
@@ -346,7 +346,7 @@ void Scheduler::wakeup_sleep() noexcept
             break;
         }
         sleep_it = sleep_queue_.erase( sleep_it );
-        ctx->time_point_ = TimePointType::max();
+        ctx->time_point_ = TimePointT::max();
         schedule( ctx );
     }
     auto alt_sleep_it = alt_sleep_queue_.begin();
@@ -364,7 +364,7 @@ void Scheduler::wakeup_sleep() noexcept
             break;
         }
         alt_sleep_it = alt_sleep_queue_.erase( alt_sleep_it );
-        ctx->time_point_ = TimePointType::max();
+        ctx->time_point_ = TimePointT::max();
         if ( ctx->alt_->try_timeout() ) {
             schedule( ctx );
         }
@@ -463,7 +463,7 @@ void Scheduler::run_( void * vp ) noexcept
             auto sleep_it = sleep_queue_.begin();
             auto suspend_time = ( sleep_it != sleep_queue_.end() )
                 ? sleep_it->time_point_
-                : ( PolicyType::TimePointType::max )();
+                : ( PolicyT::TimePointT::max )();
             policy_->suspend_until( suspend_time );
         }
     }
