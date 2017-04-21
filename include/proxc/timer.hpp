@@ -32,10 +32,12 @@ public:
     Interface & operator = ( Interface && ) = default;
 
     // Interface methods
-    virtual void restart() noexcept = 0;
+    virtual void reset() noexcept = 0;
     virtual bool expired() noexcept = 0;
 };
 
+// Single event, which expires after a given duration. The timer starts
+// when the timer is created. After expiration, the timer can be reset.
 class Egg final : public Interface
 {
 private:
@@ -48,7 +50,7 @@ public:
         , duration_{ duration }
     {}
 
-    void restart() noexcept
+    void reset() noexcept
     {
         time_point_ = ClockT::now() + duration_;
     }
@@ -60,6 +62,8 @@ public:
 
 };
 
+// Tick timer. Will expire continiously with an interval equal
+// to the supplied duration. Will reset itself after expiration.
 class Repeat final : public Interface
 {
 private:
@@ -72,7 +76,7 @@ public:
         , duration_{ duration }
     {}
 
-    void restart() noexcept
+    void reset() noexcept
     { /* do nothing */ }
 
     bool expired() noexcept
@@ -86,6 +90,8 @@ public:
 };
 
 // FIXME: better name
+// Single event. Will expire when the supplied time_point has been
+// reached. Cannot be reset when expired.
 class Xx final : public Interface
 {
 public:
@@ -94,7 +100,7 @@ public:
         : Interface{ time_point }
     {}
 
-    void restart() noexcept
+    void reset() noexcept
     { /* do nothing */ }
 
     bool expired() noexcept
