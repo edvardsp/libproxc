@@ -15,13 +15,30 @@ PROXC_NAMESPACE_BEGIN
 namespace channel {
 
 template<typename T>
+using TxVec = std::vector< Tx< T > >;
+template<typename T>
+using RxVec = std::vector< Rx< T > >;
+
+template<typename T>
 Tx< T > get_tx( std::tuple< Tx< T >, Rx< T > > & tpl )
 {
     return std::move( std::get< 0 >( tpl ) );
 }
 
 template<typename T>
+TxVec< T > get_tx( std::tuple< TxVec< T >, RxVec< T > > & tpl )
+{
+    return std::move( std::get< 0 >( tpl ) );
+}
+
+template<typename T>
 Rx< T > get_rx( std::tuple< Tx< T >, Rx< T > > & tpl )
+{
+    return std::move( std::get< 1 >( tpl ) );
+}
+
+template<typename T>
+RxVec< T > get_rx( std::tuple< TxVec< T >, RxVec< T > > & tpl )
 {
     return std::move( std::get< 1 >( tpl ) );
 }
@@ -34,10 +51,7 @@ std::tuple< Tx< T >, Rx< T > > create() noexcept
 }
 
 template<typename T>
-std::tuple<
-    std::vector< Tx< T > >,
-    std::vector< Rx< T > >
->
+std::tuple< TxVec< T >, RxVec< T > >
 create_n( const std::size_t n ) noexcept
 {
     std::vector< Tx< T > > txs;
