@@ -232,6 +232,9 @@ void Scheduler::schedule( Context * ctx ) noexcept
     if ( ctx->is_linked< hook::Sleep >() ) {
         ctx->unlink< hook::Sleep >();
     }
+    if ( ctx->is_linked< hook::AltSleep >() ) {
+        ctx->unlink< hook::AltSleep >();
+    }
 
     policy_->enqueue( ctx );
 }
