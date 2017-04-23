@@ -2,7 +2,9 @@
 #pragma once
 
 #include <chrono>
+#include <iterator>
 #include <memory>
+#include <type_traits>
 
 #include <proxc/config.hpp>
 
@@ -30,10 +32,17 @@ template<typename T> class Rx;
 // Tx
 ////////////////////////////////////////////////////////////////////////////////
 
-template<typename ItemT>
-class Tx
+namespace detail {
+
+struct TxBase {};
+
+} // namespace detail
+
+template<typename T>
+class Tx : public detail::TxBase
 {
 public:
+    using ItemT = typename std::decay< T >::type;
     using Id = detail::ChannelId;
 
 private:
@@ -164,5 +173,30 @@ private:
 };
 
 } // namespace channel
+
+namespace traits {
+
+template<typename Tx>
+struct is_tx
+    : std::integral_constant<
+        bool,
+        std::is_base_of<
+            channel::detail::TxBase,
+            Tx
+        >::value
+    >
+{};
+
+template<typename TxIt>
+struct is_tx_iterator
+    : std::integral_constant<
+        bool,
+        is_tx<
+            typename std::iterator_traits< TxIt >::value_type
+        >::value
+    >
+{};
+
+} // namespace traits
 PROXC_NAMESPACE_END
 

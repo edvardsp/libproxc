@@ -5,9 +5,7 @@
 
 #include <proxc/config.hpp>
 
-#include <proxc/alt.hpp>
-#include <proxc/channel.hpp>
-#include <proxc/parallel.hpp>
+#include <proxc.hpp>
 
 #include "setup.hpp"
 #include "obj.hpp"
@@ -195,6 +193,40 @@ void test_two_alt_single_case()
     );
 }
 
+void test_tx_rx_with_timeout()
+{
+    using ItemT = Obj;
+    auto ch = channel::create< ItemT >();
+    timer::Egg egg{ std::chrono::milliseconds( 1 ) };
+    parallel(
+        proc(
+        [&egg]( channel::Tx< ItemT > tx ) {
+            for ( int i = 0; i < 2; ++i ) {
+                bool ch_done = false;
+                Alt()
+                    .send( tx, ItemT{ 42 },
+                        [&ch_done]{ ch_done = true; } )
+                    .timeout( egg )
+                    .select();
+                throw_assert( ch_done, "tx should have been chosen" );
+                this_proc::yield();
+            }
+        }, channel::get_tx( ch ) ),
+        proc(
+        [&egg]( channel::Rx< ItemT > rx ) {
+            for ( int i = 0; i < 2; ++i ) {
+                bool ch_done = false;
+                Alt()
+                    .recv( rx,
+                        [&ch_done]( auto ){ ch_done = true; })
+                    .timeout( egg )
+                    .select();
+                throw_assert( ch_done, "rx should have been chosen" );
+            }
+        }, channel::get_rx( ch ) )
+    );
+}
+
 void test_multiple_tx_rx_same_chan()
 {
     using T = Obj;
@@ -310,16 +342,43 @@ void test_simple_ex()
     );
 }
 
+void test_replicate()
+{
+    using ItemT = Obj;
+    auto chs = channel::create_n< ItemT >( 30 );
+    auto txs = channel::get_tx( chs );
+    auto rxs = channel::get_rx( chs );
+
+    parallel(
+        proc( [&txs](){
+            std::array< ItemT, 30> items;
+            std::iota( items.begin(), items.end(), 0 );
+            Alt()
+                .send_for( txs.begin(), txs.end(),
+                    items.begin() )
+                .select();
+        } ),
+        proc( [&rxs](){
+            Alt()
+                .recv_for( rxs.begin(), rxs.end(),
+                    []( auto i ){ std::cout << "recv: " << i << std::endl; })
+                .select();
+        } )
+    );
+}
+
 int main()
 {
-    test_all_cases();
-    test_single_send_case();
-    test_single_recv_case();
-    test_single_timeout();
-    test_two_alt_single_case();
-    test_multiple_tx_rx_same_chan();
-    test_alting_triangle();
-    test_simple_ex();
+    /* test_all_cases(); */
+    /* test_single_send_case(); */
+    /* test_single_recv_case(); */
+    /* test_single_timeout(); */
+    /* test_two_alt_single_case(); */
+    /* test_tx_rx_with_timeout(); */
+    /* test_multiple_tx_rx_same_chan(); */
+    /* test_alting_triangle(); */
+    /* test_simple_ex(); */
+    test_replicate();
 
     return 0;
 }

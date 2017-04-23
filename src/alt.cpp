@@ -45,7 +45,9 @@ void Alt::select()
 
     if ( timeout ) {
         BOOST_ASSERT( time_point_ < TimePointT::max() );
-        timer_fn_();
+        if ( timer_fn_ ) {
+            timer_fn_();
+        }
 
     } else {
         auto selected = selected_.exchange( nullptr, std::memory_order_acq_rel );

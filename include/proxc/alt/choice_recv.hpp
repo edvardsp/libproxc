@@ -65,7 +65,9 @@ public:
 
     void run_func() const noexcept
     {
-        fn_( std::move( item_ ) );
+        if ( fn_ ) {
+            fn_( std::move( item_ ) );
+        }
     }
 };
 

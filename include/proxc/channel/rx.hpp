@@ -4,6 +4,7 @@
 #include <iterator>
 #include <memory>
 #include <tuple>
+#include <type_traits>
 
 #include <proxc/config.hpp>
 
@@ -32,10 +33,17 @@ template<typename T> class Tx;
 // Rx
 ////////////////////////////////////////////////////////////////////////////////
 
-template<typename ItemT>
-class Rx
+namespace detail {
+
+struct RxBase {};
+
+} // namespace detail
+
+template<typename T>
+class Rx : public detail::RxBase
 {
 public:
+    using ItemT = typename std::decay< T >::type;
     using Id = detail::ChannelId;
 
 private:
@@ -226,6 +234,30 @@ end( Rx< ItemT > & )
 }
 
 } // namespace channel
-PROXC_NAMESPACE_END
 
+namespace traits {
+
+template<typename Rx>
+struct is_rx
+    : std::integral_constant<
+        bool,
+        std::is_base_of<
+            channel::detail::RxBase,
+            Rx
+        >::value
+    >
+{};
+
+template<typename RxIt>
+struct is_rx_iterator
+    : std::integral_constant<
+        bool,
+        is_rx<
+            typename std::iterator_traits< RxIt >::value_type
+        >::value
+    >
+{};
+
+} // namespace traits
+PROXC_NAMESPACE_END
 

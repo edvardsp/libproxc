@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <random>
@@ -25,6 +26,9 @@
 #include <boost/assert.hpp>
 
 PROXC_NAMESPACE_BEGIN
+namespace detail {
+
+} // namespace detail
 
 class Alt
 {
@@ -34,13 +38,23 @@ private:
 
     using ChannelId = channel::detail::ChannelId;
 
+    template<typename EndT>
+    using ItemT = typename EndT::ItemT;
+    template<typename EndIt>
+    using EndT = typename std::iterator_traits< EndIt >::value_type;
+
+    template<typename Tx>
+    using TxFn = detail::delegate< void( void ) >;
+    template<typename Rx>
+    using RxFn = detail::delegate< void( ItemT< Rx > ) >;
+
     using TimePointT = Context::TimePointT;
-    using TimerFnT   = detail::delegate< void( void ) >;
+    using TimerFn = detail::delegate< void( void ) >;
 
     std::vector< ChoicePtr >    choices_{};
 
     TimePointT      time_point_{ TimePointT::max() };
-    TimerFnT        timer_fn_{ []{} };
+    TimerFn         timer_fn_{};
 
     Context *    ctx_;
     Spinlock     splk_;
@@ -83,45 +97,93 @@ public:
     Alt & operator = ( Alt && ) = delete;
 
     // send choice without guard
-    template<typename ItemT>
+    template< typename Tx
+            , typename = std::enable_if_t<
+                traits::is_tx< Tx >::value
+            > >
     PROXC_WARN_UNUSED
-    Alt & send( channel::Tx< ItemT > &,
-                ItemT &&,
-                typename alt::ChoiceSend< ItemT >::FnT && = []{} ) noexcept;
+    Alt & send( Tx & tx,
+                ItemT< Tx > && item,
+                TxFn< Tx > fn = TxFn< Tx >{} ) noexcept;
 
-    template<typename ItemT>
+    template< typename Tx
+            , typename = std::enable_if_t<
+                traits::is_tx< Tx >::value
+            > >
     PROXC_WARN_UNUSED
-    Alt & send( channel::Tx< ItemT > &,
-                ItemT const &,
-                typename alt::ChoiceSend< ItemT >::FnT && = []{} ) noexcept;
+    Alt & send( Tx & tx,
+                ItemT< Tx > const & item,
+                TxFn< Tx > fn = TxFn< Tx >{} ) noexcept;
 
     // send choice with guard
-    template<typename ItemT>
+    template< typename Tx
+            , typename = std::enable_if_t<
+                traits::is_tx< Tx >::value
+            > >
     PROXC_WARN_UNUSED
-    Alt & send_if( bool,
-                   channel::Tx< ItemT > &,
-                   ItemT &&,
-                   typename alt::ChoiceSend< ItemT >::FnT && = []{} ) noexcept;
+    Alt & send_if( bool guard,
+                   Tx & tx,
+                   ItemT< Tx > && item,
+                   TxFn< Tx > fn = TxFn< Tx >{} ) noexcept;
 
-    template<typename ItemT>
+    template< typename Tx
+            , typename = std::enable_if_t<
+                traits::is_tx< Tx >::value
+            > >
     PROXC_WARN_UNUSED
-    Alt & send_if( bool,
-                   channel::Tx< ItemT > &,
-                   ItemT const &,
-                   typename alt::ChoiceSend< ItemT >::FnT && = []{} ) noexcept;
+    Alt & send_if( bool guard,
+                   Tx & tx,
+                   ItemT< Tx > const & item,
+                   TxFn< Tx > fn = TxFn< Tx >{} ) noexcept;
+
+    // replicated send choice over item iterator
+    template< typename TxIt, typename ItemIt
+            , typename = std::enable_if_t<
+                traits::is_tx_iterator< TxIt >::value &&
+                traits::is_inputiterator< ItemIt >::value
+            > >
+    PROXC_WARN_UNUSED
+    Alt & send_for( TxIt tx_first, TxIt tx_last,
+                    ItemIt item_first,
+                    TxFn< EndT< TxIt > > fn = TxFn< EndT< TxIt > >{} ) noexcept;
+
+    // replicated send choice over single item
+    template< typename TxIt
+            , typename = std::enable_if_t<
+                traits::is_tx_iterator< TxIt >::value
+            > >
+    PROXC_WARN_UNUSED
+    Alt & send_for( TxIt tx_first, TxIt tx_last,
+                    ItemT< EndT< TxIt > > item,
+                    TxFn< EndT< TxIt > > fn = TxFn< EndT< TxIt > >{} ) noexcept;
 
     // recv choice without guard
-    template<typename ItemT>
+    template< typename Rx
+            , typename = std::enable_if_t<
+                traits::is_rx< Rx >::value
+            > >
     PROXC_WARN_UNUSED
-    Alt & recv( channel::Rx< ItemT > &,
-                typename alt::ChoiceRecv< ItemT >::FnT && = []( ItemT ){} ) noexcept;
+    Alt & recv( Rx & rx,
+                RxFn< Rx > fn = RxFn< Rx >{} ) noexcept;
 
     // recv choice with guard
-    template<typename ItemT>
+    template< typename Rx
+            , typename = std::enable_if_t<
+                traits::is_rx< Rx >::value
+            > >
     PROXC_WARN_UNUSED
-    Alt & recv_if( bool,
-                   channel::Rx< ItemT > &,
-                   typename alt::ChoiceRecv< ItemT >::FnT && = []( ItemT ){} ) noexcept;
+    Alt & recv_if( bool guard,
+                   Rx & rx,
+                   RxFn< Rx > fn = RxFn< Rx >{} ) noexcept;
+
+    // replicated recv choice
+    template< typename RxIt
+            , typename = std::enable_if_t<
+                traits::is_rx_iterator< RxIt >::value
+            > >
+    PROXC_WARN_UNUSED
+    Alt & recv_for( RxIt rx_first, RxIt rx_last,
+                    RxFn< EndT< RxIt > > fn = RxFn< EndT< RxIt > >{} ) noexcept;
 
     // timeout without guard
     template< typename Timer
@@ -130,7 +192,7 @@ public:
             >::type >
     PROXC_WARN_UNUSED
     Alt & timeout( Timer const &,
-                   TimerFnT = []{} ) noexcept;
+                   TimerFn fn = TimerFn{} ) noexcept;
 
     // timeout with guard
     template< typename Timer
@@ -140,7 +202,7 @@ public:
     PROXC_WARN_UNUSED
     Alt & timeout_if( bool,
                       Timer const &,
-                      TimerFnT = []{} ) noexcept;
+                      TimerFn = TimerFn{} ) noexcept;
 
     // consumes alt and determines which choice to select.
     // the chosen choice completes the operation, and an
@@ -158,11 +220,11 @@ private:
 };
 
 // send choice without guard
-template<typename ItemT>
+template<typename Tx, typename>
 Alt & Alt::send(
-    channel::Tx< ItemT > & tx,
-    ItemT && item,
-    typename alt::ChoiceSend< ItemT >::FnT && fn
+    Tx & tx,
+    ItemT< Tx > && item,
+    TxFn< Tx > fn
 ) noexcept
 {
     if ( ! tx.is_closed() ) {
@@ -170,12 +232,12 @@ Alt & Alt::send(
         auto audit_it = ch_audit_.find( id );
         if ( audit_it == ch_audit_.end()
             || audit_it->second.state_ == ChoiceAudit::State::Tx ) {
-            auto pc = std::make_unique< alt::ChoiceSend< ItemT > >(
+            auto pc = std::make_unique< alt::ChoiceSend< ItemT< Tx > > >(
                 this,
                 ctx_,
                 tx,
                 std::move( item ),
-                std::forward< typename alt::ChoiceSend< ItemT >::FnT >( fn )
+                std::move( fn )
             );
             if ( audit_it == ch_audit_.end() ) {
                 ch_audit_[ id ] = ChoiceAudit{
@@ -193,11 +255,11 @@ Alt & Alt::send(
     return *this;
 }
 
-template<typename ItemT>
+template<typename Tx, typename>
 Alt & Alt::send(
-    channel::Tx< ItemT > & tx,
-    ItemT const & item,
-    typename alt::ChoiceSend< ItemT >::FnT && fn
+    Tx & tx,
+    ItemT< Tx > const & item,
+    TxFn< Tx > fn
 ) noexcept
 {
     if ( ! tx.is_closed() ) {
@@ -205,12 +267,12 @@ Alt & Alt::send(
         auto audit_it = ch_audit_.find( id );
         if ( audit_it == ch_audit_.end()
             || audit_it->second.state_ == ChoiceAudit::State::Tx ) {
-            auto pc = std::make_unique< alt::ChoiceSend< ItemT > >(
+            auto pc = std::make_unique< alt::ChoiceSend< ItemT< Tx > > >(
                 this,
                 ctx_,
                 tx,
-                std::move( item ),
-                std::forward< typename alt::ChoiceSend< ItemT >::FnT >( fn )
+                item,
+                std::move( fn )
             );
             if ( audit_it == ch_audit_.end() ) {
                 ch_audit_[ id ] = ChoiceAudit{
@@ -229,43 +291,75 @@ Alt & Alt::send(
 }
 
 // send choice with guard
-template<typename ItemT>
+template<typename Tx, typename>
 Alt & Alt::send_if(
     bool guard,
-    channel::Tx< ItemT > & tx,
-    ItemT && item,
-    typename alt::ChoiceSend< ItemT >::FnT && fn
+    Tx & tx,
+    ItemT< Tx > && item,
+    TxFn< Tx > fn
 ) noexcept
 {
     return ( guard )
         ? send( tx,
                 std::move( item ),
-                std::forward< typename alt::ChoiceSend< ItemT >::FnT >( fn ) )
+                std::move( fn ) )
         : *this
         ;
 }
 
-template<typename ItemT>
+template<typename Tx, typename>
 Alt & Alt::send_if(
     bool guard,
-    channel::Tx< ItemT > & tx,
-    ItemT const & item,
-    typename alt::ChoiceSend< ItemT >::FnT && fn
+    Tx & tx,
+    ItemT< Tx > const & item,
+    TxFn< Tx > fn
 ) noexcept
 {
     return ( guard )
         ? send( tx,
                 item,
-                std::forward< typename alt::ChoiceSend< ItemT >::FnT >( fn ) )
+                std::move( fn ) )
         : *this
         ;
 }
 
+// replicated send choice over item iterator
+template<typename TxIt, typename ItemIt, typename>
+Alt & Alt::send_for(
+    TxIt   tx_first,   TxIt   tx_last,
+    ItemIt item_first,
+    TxFn< EndT< TxIt > > fn
+) noexcept
+{
+    for ( auto tx_it = tx_first;
+          tx_it != tx_last;
+          ++tx_it ) {
+        (void)send( *tx_it, *item_first++, fn );
+    }
+    return *this;
+}
+
+// replicated send choice over single item
+template<typename TxIt, typename>
+Alt & Alt::send_for(
+    TxIt tx_first, TxIt tx_last,
+    ItemT< EndT< TxIt > > item,
+    TxFn< EndT< TxIt > > fn
+) noexcept
+{
+    for ( auto tx_it = tx_first;
+          tx_it != tx_last;
+          ++tx_it ) {
+        (void)send( *tx_it, item, fn );
+    }
+    return *this;
+}
+
 // recv choice without guard
-template<typename ItemT>
+template<typename Rx, typename>
 Alt & Alt::recv(
-    channel::Rx< ItemT > & rx,
-    typename alt::ChoiceRecv< ItemT >::FnT && fn
+    Rx & rx,
+    RxFn< Rx > fn
 ) noexcept
 {
     if ( ! rx.is_closed() ) {
@@ -273,11 +367,11 @@ Alt & Alt::recv(
         auto audit_it = ch_audit_.find( id );
         if ( audit_it == ch_audit_.end()
             || audit_it->second.state_ == ChoiceAudit::State::Rx ) {
-            auto pc = std::make_unique< alt::ChoiceRecv< ItemT > >(
+            auto pc = std::make_unique< alt::ChoiceRecv< ItemT< Rx > > >(
                 this,
                 ctx_,
                 rx,
-                std::forward< typename alt::ChoiceRecv< ItemT >::FnT >( fn )
+                std::move( fn )
             );
             if ( audit_it == ch_audit_.end() ) {
                 ch_audit_[ id ] = ChoiceAudit{
@@ -296,17 +390,32 @@ Alt & Alt::recv(
 }
 
 // recv choice with guard
-template<typename ItemT>
+template<typename Rx, typename>
 Alt & Alt::recv_if(
     bool guard,
-    channel::Rx< ItemT > & rx,
-    typename alt::ChoiceRecv< ItemT >::FnT && fn
+    Rx & rx,
+    RxFn< Rx > fn
 ) noexcept
 {
     return ( guard )
         ? recv( rx,
-                std::forward< typename alt::ChoiceRecv< ItemT >::FnT >( fn ) )
+                std::move( fn ) )
         : *this ;
+}
+
+// replicated recv choice
+template<typename RxIt, typename>
+Alt & Alt::recv_for(
+    RxIt rx_first, RxIt rx_last,
+    RxFn< EndT< RxIt > > fn
+) noexcept
+{
+    for ( auto rx_it = rx_first;
+          rx_it != rx_last;
+          ++rx_it ) {
+        (void)recv( *rx_it, fn );
+    }
+    return *this;
 }
 
 // timeout without guard
@@ -314,7 +423,7 @@ template< typename Timer
         , typename >
 Alt & Alt::timeout(
     Timer const & tmi,
-    TimerFnT fn
+    TimerFn fn
 ) noexcept
 {
     Timer new_timer{ tmi };
@@ -332,7 +441,7 @@ template< typename Timer
 Alt & Alt::timeout_if(
     bool guard,
     Timer const & tmi,
-    TimerFnT fn
+    TimerFn fn
 ) noexcept
 {
     return ( guard )

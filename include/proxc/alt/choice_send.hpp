@@ -76,7 +76,9 @@ public:
 
     void run_func() const noexcept
     {
-        fn_();
+        if ( fn_ ) {
+            fn_();
+        }
     }
 };
 
