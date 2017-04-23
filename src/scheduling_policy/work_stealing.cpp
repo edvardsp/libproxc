@@ -1,12 +1,16 @@
 
-#include <proxc/config.hpp>
-
-#include <proxc/scheduling_policy/work_stealing.hpp>
-
 #include <algorithm>
 #include <mutex>
 #include <random>
 #include <thread>
+
+#include <proxc/config.hpp>
+
+#include <proxc/context.hpp>
+#include <proxc/scheduler.hpp>
+#include <proxc/scheduling_policy/work_stealing.hpp>
+
+#include <proxc/detail/num_cpus.hpp>
 
 #include <boost/assert.hpp>
 
@@ -21,23 +25,23 @@ template<>
 std::vector<WorkStealing *> WorkStealing::work_stealers_{};
 
 template<>
-void WorkStealing::init_(std::size_t num_workers)
+Barrier WorkStealing::barrier_{};
+
+template<>
+void WorkStealing::init_()
 {
-    num_workers_ = (num_workers == 0)
-        ? std::max(std::thread::hardware_concurrency(), 1u )
-        : num_workers;
-    work_stealers_.resize(num_workers_);
+    num_workers_ = ::proxc::detail::num_cpus();
+    work_stealers_.resize( num_workers_ );
 }
 
 template<>
-WorkStealing::WorkStealingPolicy(std::size_t num_workers)
+WorkStealing::WorkStealingPolicy()
 {
     static std::once_flag flag;
-    std::call_once(flag, & WorkStealing::init_, num_workers);
-    static std::atomic<std::size_t> n_id;
-    id_ = n_id.fetch_add(1, std::memory_order_relaxed);
+    std::call_once( flag, & WorkStealing::init_ );
+    static std::atomic<std::size_t> n_id{ 0 };
+    id_ = n_id.fetch_add(1, std::memory_order_acq_rel);
     work_stealers_[id_] = this;
-    BOOST_ASSERT((num_workers == 0) || (num_workers == num_workers_));
     BOOST_ASSERT(id_ < num_workers_);
 }
 
@@ -56,6 +60,7 @@ void WorkStealing::reserve(std::size_t capacity) noexcept
 template<>
 void WorkStealing::enqueue(Context * ctx) noexcept
 {
+    ctx->link( ready_queue_ );
     deque_.push(ctx);
 }
 
@@ -63,13 +68,16 @@ template<>
 Context * WorkStealing::pick_next() noexcept
 {
     auto ctx = deque_.pop();
-    if (ctx == nullptr && num_workers_ > 1) {
+    if ( ctx != nullptr ) {
+        ctx->unlink< hook::Ready >();
+
+    } else {
         static thread_local std::minstd_rand rng;
         std::size_t id{};
         do {
-            id = std::uniform_int_distribution<std::size_t>{0, num_workers_ - 1}(rng);
+            id = std::uniform_int_distribution< std::size_t >{ 0, num_workers_ - 1 }( rng );
         } while (id == id_);
-        ctx = work_stealers_[id]->steal();
+        /* ctx = work_stealers_[id]->steal(); */
     }
     return ctx;
 }
@@ -83,19 +91,13 @@ bool WorkStealing::is_ready() const noexcept
 template<>
 void WorkStealing::suspend_until(TimePointT const & time_point) noexcept
 {
-    std::unique_lock<std::mutex> lk{ mtx_ };
-    cnd_.wait_until(lk, time_point,
-        [this]{ return flag_; });
-    flag_ = false;
+    barrier_.wait_until( time_point );
 }
 
 template<>
 void WorkStealing::notify() noexcept
 {
-    std::unique_lock<std::mutex> lk{ mtx_ };
-    flag_ = true;
-    lk.unlock();
-    cnd_.notify_all();
+    barrier_.notify();
 }
 
 } // namespace detail

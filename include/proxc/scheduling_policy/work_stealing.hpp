@@ -1,21 +1,49 @@
 
 #pragma once
 
-#include <proxc/config.hpp>
-
-#include <proxc/context.hpp>
-#include <proxc/work_steal_deque.hpp>
-#include <proxc/scheduling_policy/policy_base.hpp>
-
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
 #include <vector>
 
+#include <proxc/config.hpp>
+
+#include <proxc/context.hpp>
+#include <proxc/scheduler.hpp>
+#include <proxc/work_steal_deque.hpp>
+#include <proxc/scheduling_policy/policy_base.hpp>
+
 PROXC_NAMESPACE_BEGIN
 
 namespace scheduling_policy {
 namespace detail {
+
+struct Barrier
+{
+    std::mutex                 mtx_;
+    std::condition_variable    cv_;
+    bool                       flag_{ false };
+
+    void wait() noexcept
+    {
+        std::unique_lock< std::mutex > lk{ mtx_ };
+        cv_.wait( lk, [this]{ return flag_; } );
+        flag_ = false;
+    }
+    void wait_until( std::chrono::steady_clock::time_point const & time_point ) noexcept
+    {
+        std::unique_lock< std::mutex > lk{ mtx_ };
+        cv_.wait_until( lk, time_point, [this]{ return flag_; } );
+        flag_ = false;
+    }
+    void notify() noexcept
+    {
+        std::unique_lock< std::mutex > lk{ mtx_ };
+        flag_ = true;
+        lk.unlock();
+        cv_.notify_all();
+    }
+};
 
 template<typename T>
 class WorkStealingPolicy : public PolicyBase<T>
@@ -24,19 +52,19 @@ private:
     static std::size_t                            num_workers_;
     static std::vector< WorkStealingPolicy * >    work_stealers_;
 
+    static Barrier    barrier_;
+
     std::size_t                   id_;
     proxc::WorkStealDeque< T >    deque_{};
-    std::mutex                    mtx_;
-    std::condition_variable       cnd_;
-    bool                          flag_{ false };
+    Scheduler::ReadyQueue         ready_queue_{};
 
-    static void init_(std::size_t num_workers);
+    static void init_();
 
 public:
     using TimePointT = typename PolicyBase<T>::TimePointT;
 
-    // 0 == num_cores
-    WorkStealingPolicy(std::size_t num_workers = 0);
+    WorkStealingPolicy();
+    ~WorkStealingPolicy() {}
 
     WorkStealingPolicy(WorkStealingPolicy const &) = delete;
     WorkStealingPolicy(WorkStealingPolicy &&)      = delete;

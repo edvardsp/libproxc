@@ -68,6 +68,8 @@ public:
     };
 
 private:
+    friend struct detail::SchedulerInitializer;
+
     struct time_point_cmp_
     {
         bool operator()( Context const & left, Context const & right ) const noexcept
@@ -109,7 +111,6 @@ public:
 
     // constructor and destructor
     Scheduler();
-
     ~Scheduler();
 
     // make non copy-able
@@ -153,6 +154,8 @@ public:
 
 private:
     void resolve_ctx_switch_data( CtxSwitchData * ) noexcept;
+    // called by main ctx in new threads when multi-core
+    void join_scheduler() noexcept;
     // actual context switch
     void resume_( Context *, CtxSwitchData * ) noexcept;
     // scheduler context loop

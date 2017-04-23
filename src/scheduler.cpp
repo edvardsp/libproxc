@@ -1,7 +1,11 @@
 
+#include <atomic>
+#include <condition_variable>
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <thread>
+#include <vector>
 
 #include <proxc/config.hpp>
 
@@ -11,6 +15,9 @@
 
 #include <proxc/scheduling_policy/policy_base.hpp>
 #include <proxc/scheduling_policy/round_robin.hpp>
+#include <proxc/scheduling_policy/work_stealing.hpp>
+
+#include <proxc/detail/num_cpus.hpp>
 
 #include <boost/assert.hpp>
 #include <boost/intrusive_ptr.hpp>
@@ -21,32 +28,84 @@ namespace hook = detail::hook;
 
 namespace detail {
 
+struct WaitGroup
+{
+    std::mutex                 mtx_;
+    std::condition_variable    cv_;
+    std::size_t                count_{ 0 };
+
+    void add( std::size_t count ) noexcept
+    { count_ = count; }
+
+    void wait() noexcept
+    {
+        std::unique_lock< std::mutex > lk{ mtx_ };
+        if ( --count_ == 0 ) {
+            lk.unlock();
+            cv_.notify_all();
+        } else {
+            cv_.wait( lk, [this]{ return count_ == 0; } );
+        }
+    }
+};
+
 struct SchedulerInitializer
 {
-    thread_local static Scheduler * self_;
-    thread_local static std::size_t counter_;
+    thread_local static Scheduler *      self_;
+    thread_local static std::size_t      self_counter_;
+
+    static std::atomic< std::size_t >    sched_counter_;
+    static std::thread::id               main_sched_;
+    static WaitGroup                     wg_;
+    static std::vector< std::thread >    sched_vec_;
 
     SchedulerInitializer()
     {
-        if ( counter_++ != 0 ) { return; }
+        if ( self_counter_++ == 0 ) {
+            auto scheduler = new Scheduler{};
+            self_ = scheduler;
+            BOOST_ASSERT( Scheduler::running()->is_type( Context::Type::Main ) );
 
-        auto scheduler = new Scheduler{};
-        self_ = scheduler;
-        BOOST_ASSERT( Scheduler::running()->is_type( Context::Type::Main ) );
+            if ( sched_counter_++ == 0 ) {
+                main_sched_ = std::this_thread::get_id();
+                auto num_sched = detail::num_cpus();
+                sched_vec_.reserve( num_sched - 1 );
+
+                wg_.add( num_sched );
+                WaitGroup * wg_ptr = & wg_;
+                for ( std::size_t i = 0; i < num_sched - 1; ++i ) {
+                    std::thread th{ [wg_ptr]{
+                        auto self = Scheduler::self();
+                        wg_ptr->wait();
+                        self->resume();
+                    } };
+                    th.detach();
+                }
+                wg_ptr->wait();
+            }
+        }
     }
 
     ~SchedulerInitializer()
     {
-        if ( --counter_ != 0 ) { return; }
+        if ( --self_counter_ == 0 ) {
+            if ( std::this_thread::get_id() == main_sched_ ) {
+            }
 
-        BOOST_ASSERT( Scheduler::running()->is_type( Context::Type::Main ) );
-        auto scheduler = self_;
-        delete scheduler;
+            BOOST_ASSERT( Scheduler::running()->is_type( Context::Type::Main ) );
+            auto scheduler = self_;
+            delete scheduler;
+        }
     }
 };
 
-thread_local Scheduler * SchedulerInitializer::self_{ nullptr };
-thread_local std::size_t SchedulerInitializer::counter_{ 0 };
+thread_local Scheduler *   SchedulerInitializer::self_{ nullptr };
+thread_local std::size_t   SchedulerInitializer::self_counter_{ 0 };
+
+std::atomic< std::size_t > SchedulerInitializer::sched_counter_{ 0 };
+std::thread::id            SchedulerInitializer::main_sched_;
+WaitGroup                  SchedulerInitializer::wg_{};
+std::vector< std::thread > SchedulerInitializer::sched_vec_{};
 
 } // namespace detail
 
@@ -65,7 +124,7 @@ Context * Scheduler::running() noexcept
 }
 
 Scheduler::Scheduler()
-    : policy_{ new scheduling_policy::RoundRobin{} }
+    : policy_{ new scheduling_policy::WorkStealing{} }
     , main_ctx_{ new Context{ context::main_type } }
     , scheduler_ctx_{ new Context{ context::scheduler_type,
         [this]( void * vp ) { run_( vp ); } } }
@@ -440,6 +499,14 @@ void Scheduler::resolve_ctx_switch_data( CtxSwitchData * data ) noexcept
         }
     }
 }
+
+
+// called by main ctx in new threads when multi-core
+void Scheduler::join_scheduler() noexcept
+{
+
+}
+
 // Scheduler context loop
 void Scheduler::run_( void * vp ) noexcept
 {

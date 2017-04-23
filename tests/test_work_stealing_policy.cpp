@@ -18,9 +18,9 @@ void test_enqueuing_and_pick_next(PolicyType & policy)
         auto work = policy.pick_next();
         throw_assert(work == nullptr, "work should be nullptr");
     }
-    
+
     throw_assert( ! policy.is_ready(), "policy should not be ready" );
-    
+
     policy.reserve(num_work);
     for (std::size_t i = 0; i < num_work; ++i) {
         policy.enqueue(new WorkType(proxc::context::work_type, [](void *){  }));
@@ -62,10 +62,10 @@ void test_suspend_until(PolicyType & policy)
 
 int main()
 {
-    proxc::scheduling_policy::WorkStealing policy{ 1 };
+    /* proxc::scheduling_policy::WorkStealing policy{ 1 }; */
 
-    test_enqueuing_and_pick_next(policy);
-    test_suspend_until(policy);
-    
+    /* test_enqueuing_and_pick_next(policy); */
+    /* test_suspend_until(policy); */
+
     return 0;
 }
