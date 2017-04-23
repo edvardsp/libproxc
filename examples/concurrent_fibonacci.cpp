@@ -46,7 +46,7 @@ std::size_t fib( const std::size_t n )
 
     rxs[ 2 * n ].close();
     rxs[ 2 * n - 2 ].close();
-    
+
     std::size_t result{};
     parallel(
         proc( fib_0, std::move( txs[ 0 ] ) ),
