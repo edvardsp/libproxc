@@ -24,8 +24,8 @@ std::size_t WorkStealing::num_workers_{ 0 };
 template<>
 std::vector<WorkStealing *> WorkStealing::work_stealers_{};
 
-template<>
-Barrier WorkStealing::barrier_{};
+/* template<> */
+/* Barrier WorkStealing::barrier_{}; */
 
 template<>
 void WorkStealing::init_()
@@ -52,16 +52,50 @@ Context * WorkStealing::steal() noexcept
 }
 
 template<>
-void WorkStealing::reserve(std::size_t capacity) noexcept
+void WorkStealing::reserve( std::size_t capacity ) noexcept
 {
-    deque_.reserve(capacity);
+    deque_.reserve( capacity );
+}
+
+
+template<>
+void WorkStealing::suspend_until(TimePointT const & time_point) noexcept
+{
+    if ( time_point == TimePointT::max() ) {
+        barrier_.wait();
+    } else {
+        barrier_.wait_until( time_point );
+    }
+}
+
+template<>
+void WorkStealing::notify() noexcept
+{
+    barrier_.notify();
+}
+
+template<>
+void WorkStealing::signal_enqueue() noexcept
+{
+    for ( const auto& stealers : work_stealers_ ) {
+        stealers->notify();
+    }
 }
 
 template<>
 void WorkStealing::enqueue(Context * ctx) noexcept
 {
-    ctx->link( ready_queue_ );
-    deque_.push(ctx);
+    BOOST_ASSERT( ctx != nullptr );
+    if ( ctx->is_type( Context::Type::Dynamic ) ) {
+        // can be stolen
+        Scheduler::self()->detach( ctx );
+        deque_.push( ctx );
+        /* signal_enqueue(); */
+
+    } else {
+        // cannot by stolen
+        ctx->link( ready_queue_ );
+    }
 }
 
 template<>
@@ -69,15 +103,22 @@ Context * WorkStealing::pick_next() noexcept
 {
     auto ctx = deque_.pop();
     if ( ctx != nullptr ) {
-        ctx->unlink< hook::Ready >();
+        Scheduler::self()->attach( ctx );
 
-    } else {
+    } else if ( ! ready_queue_.empty() ) {
+        ctx = std::addressof( ready_queue_.front() );
+        ready_queue_.pop_front();
+
+    } else if ( ctx == nullptr ) {
         static thread_local std::minstd_rand rng;
         std::size_t id{};
         do {
             id = std::uniform_int_distribution< std::size_t >{ 0, num_workers_ - 1 }( rng );
         } while (id == id_);
-        /* ctx = work_stealers_[id]->steal(); */
+        ctx = work_stealers_[id]->steal();
+        if ( ctx != nullptr ) {
+            Scheduler::self()->attach( ctx );
+        }
     }
     return ctx;
 }
@@ -86,18 +127,6 @@ template<>
 bool WorkStealing::is_ready() const noexcept
 {
     return ! deque_.is_empty();
-}
-
-template<>
-void WorkStealing::suspend_until(TimePointT const & time_point) noexcept
-{
-    barrier_.wait_until( time_point );
-}
-
-template<>
-void WorkStealing::notify() noexcept
-{
-    barrier_.notify();
 }
 
 } // namespace detail

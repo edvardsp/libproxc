@@ -57,9 +57,7 @@ public:
     Rx() = default;
     ~Rx()
     {
-        if ( chan_ ) {
-            chan_->close();
-        }
+        close();
     }
 
     // make non-copyable
@@ -82,8 +80,10 @@ public:
 
     void close() noexcept
     {
-        chan_->close();
-        chan_.reset();
+        if ( chan_ ) {
+            chan_->close();
+            chan_.reset();
+        }
     }
 
     // normal recv operations

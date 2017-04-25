@@ -110,9 +110,12 @@ void test_single_send_case()
         proc(
             [&ints]( channel::Tx< int > tx ) {
                 for ( auto& i : ints ) {
+                    bool tx_send = false;
                     Alt()
-                        .send( tx, i )
+                        .send( tx, i,
+                            [&tx_send]{ tx_send = true; } )
                         .select();
+                    throw_assert( tx_send, "tx should have been chosen" );
                 }
             }, channel::get_tx( ch ) ),
         proc(
@@ -369,16 +372,21 @@ void test_replicate()
 
 int main()
 {
+    std::size_t i = 0;
+    for (;;) {
     test_all_cases();
     test_single_send_case();
-    test_single_recv_case();
-    test_single_timeout();
-    test_two_alt_single_case();
-    test_tx_rx_with_timeout();
-    test_multiple_tx_rx_same_chan();
-    test_alting_triangle();
-    test_simple_ex();
-    test_replicate();
+    /* test_single_recv_case(); */
+    /* test_single_timeout(); */
+    /* test_two_alt_single_case(); */
+    /* test_tx_rx_with_timeout(); */
+    /* test_multiple_tx_rx_same_chan(); */
+    /* test_alting_triangle(); */
+    /* test_simple_ex(); */
+    /* test_replicate(); */
+    printf("stuck? %zu\r", i++);
+    fflush(stdout);
+    }
 
     return 0;
 }

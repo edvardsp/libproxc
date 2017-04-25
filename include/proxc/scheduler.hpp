@@ -4,6 +4,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <tuple>
 #include <utility>
 
@@ -15,6 +16,7 @@
 #include <proxc/scheduling_policy/policy_base.hpp>
 #include <proxc/detail/apply.hpp>
 #include <proxc/detail/hook.hpp>
+#include <proxc/detail/mpsc_queue.hpp>
 #include <proxc/detail/queue.hpp>
 
 #include <boost/intrusive_ptr.hpp>
@@ -49,7 +51,9 @@ using TimePointT = PolicyT::TimePointT;
 class Scheduler
 {
 public:
-    using ReadyQueue = detail::queue::ListQueue< Context, detail::hook::Ready, & Context::ready_ >;
+    using ReadyQueue = detail::queue::ListQueue<
+        Context, detail::hook::Ready, & Context::ready_
+    >;
 
     struct CtxSwitchData
     {
@@ -89,6 +93,7 @@ private:
     using TerminatedQueue = detail::queue::ListQueue<
         Context, detail::hook::Terminated, & Context::terminated_
     >;
+    using RemoteQueue = detail::queue::Mpsc< Context >;
 
     std::unique_ptr< PolicyT >    policy_;
 
@@ -97,12 +102,16 @@ private:
 
     Context *    running_{ nullptr };
 
+    Spinlock    splk_{};
+
     WorkQueue          work_queue_{};
     SleepQueue         sleep_queue_{};
     AltSleepQueue      alt_sleep_queue_{};
     TerminatedQueue    terminated_queue_{};
 
-    bool    exit_{ false };
+    RemoteQueue        remote_queue_{};
+
+    alignas(cache_alignment) std::atomic< bool > exit_{ false };
 
 public:
     // static methods
@@ -148,18 +157,25 @@ public:
 
     void wakeup_sleep() noexcept;
     void wakeup_waiting_on( Context * ) noexcept;
+    void transition_remote() noexcept;
     void cleanup_terminated() noexcept;
 
     void print_debug() noexcept;
 
 private:
     void resolve_ctx_switch_data( CtxSwitchData * ) noexcept;
+
+    void schedule_local_( Context * ) noexcept;
+    void schedule_remote_( Context * ) noexcept;
+
     // called by main ctx in new threads when multi-core
     void join_scheduler() noexcept;
+    void signal_exit() noexcept;
     // actual context switch
     void resume_( Context *, CtxSwitchData * ) noexcept;
     // scheduler context loop
-    void run_( void * ) noexcept;
+    [[noreturn]]
+    void run_( void * );
 
     template<typename Fn, typename Tpl>
     [[noreturn]]
@@ -189,9 +205,8 @@ void Scheduler::trampoline( Fn && fn_, Tpl && tpl_, void * vp )
         Tpl tpl{ std::move( tpl_ ) };
         detail::apply( std::move( fn ), std::move( tpl ) );
     }
-    auto self = Scheduler::self();
-    self->terminate( self->running_ );
-    BOOST_ASSERT_MSG( false, "unreachable: should not return from scheduler trampoline( ).");
+    Scheduler::self()->terminate( Scheduler::running() );
+    BOOST_ASSERT_MSG( false, "unreachable");
     throw UnreachableError{};
 }
 

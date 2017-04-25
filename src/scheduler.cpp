@@ -11,6 +11,7 @@
 
 #include <proxc/alt.hpp>
 #include <proxc/context.hpp>
+#include <proxc/exceptions.hpp>
 #include <proxc/scheduler.hpp>
 
 #include <proxc/scheduling_policy/policy_base.hpp>
@@ -18,6 +19,7 @@
 #include <proxc/scheduling_policy/work_stealing.hpp>
 
 #include <proxc/detail/num_cpus.hpp>
+#include <proxc/spinlock.hpp>
 
 #include <boost/assert.hpp>
 #include <boost/intrusive_ptr.hpp>
@@ -49,39 +51,51 @@ struct WaitGroup
     }
 };
 
+void multicore_scheduler_fn( WaitGroup & wg )
+{
+    // this will allocated the scheduler for this thread
+    auto self = Scheduler::self();
+    // need to wait for all of the threads to finish initialize the scheduler
+    wg.wait();
+    self->resume();
+    // when returned, the scheduler has exited and ready to cleanup
+}
+
 struct SchedulerInitializer
 {
     thread_local static Scheduler *      self_;
     thread_local static std::size_t      self_counter_;
 
     static std::atomic< std::size_t >    sched_counter_;
-    static std::thread::id               main_sched_;
     static WaitGroup                     wg_;
-    static std::vector< std::thread >    sched_vec_;
+    static std::vector< std::thread >    thread_vec_;
+    static std::vector< Scheduler * >    sched_vec_;
+
+    static Spinlock                      splk_;
 
     SchedulerInitializer()
     {
         if ( self_counter_++ == 0 ) {
+            // FIXME: new alignment issues?
             auto scheduler = new Scheduler{};
             self_ = scheduler;
             BOOST_ASSERT( Scheduler::running()->is_type( Context::Type::Main ) );
 
             if ( sched_counter_++ == 0 ) {
-                main_sched_ = std::this_thread::get_id();
                 auto num_sched = detail::num_cpus();
                 sched_vec_.reserve( num_sched - 1 );
+                thread_vec_.reserve( num_sched - 1 );
 
                 wg_.add( num_sched );
-                WaitGroup * wg_ptr = & wg_;
                 for ( std::size_t i = 0; i < num_sched - 1; ++i ) {
-                    std::thread th{ [wg_ptr]{
-                        auto self = Scheduler::self();
-                        wg_ptr->wait();
-                        self->resume();
-                    } };
-                    th.detach();
+                    thread_vec_.emplace_back( multicore_scheduler_fn, std::ref( wg_ ) );
                 }
-                wg_ptr->wait();
+                wg_.wait();
+                sched_counter_ = 0;
+
+            } else {
+                std::unique_lock< Spinlock > lk{ splk_ };
+                sched_vec_.push_back( self_ );
             }
         }
     }
@@ -89,7 +103,13 @@ struct SchedulerInitializer
     ~SchedulerInitializer()
     {
         if ( --self_counter_ == 0 ) {
-            if ( std::this_thread::get_id() == main_sched_ ) {
+            if ( sched_counter_++ == 0 ) {
+                for ( const auto& sched : sched_vec_ ) {
+                    sched->signal_exit();
+                }
+                for ( auto& th : thread_vec_ ) {
+                    th.join();
+                }
             }
 
             BOOST_ASSERT( Scheduler::running()->is_type( Context::Type::Main ) );
@@ -103,9 +123,11 @@ thread_local Scheduler *   SchedulerInitializer::self_{ nullptr };
 thread_local std::size_t   SchedulerInitializer::self_counter_{ 0 };
 
 std::atomic< std::size_t > SchedulerInitializer::sched_counter_{ 0 };
-std::thread::id            SchedulerInitializer::main_sched_;
 WaitGroup                  SchedulerInitializer::wg_{};
-std::vector< std::thread > SchedulerInitializer::sched_vec_{};
+std::vector< std::thread > SchedulerInitializer::thread_vec_{};
+std::vector< Scheduler * > SchedulerInitializer::sched_vec_{};
+
+Spinlock                   SchedulerInitializer::splk_{};
 
 } // namespace detail
 
@@ -129,7 +151,10 @@ Scheduler::Scheduler()
     , scheduler_ctx_{ new Context{ context::scheduler_type,
         [this]( void * vp ) { run_( vp ); } } }
 {
-    running_ = main_ctx_.get();
+    main_ctx_->scheduler_      = this;
+    scheduler_ctx_->scheduler_ = this;
+    running_                   = main_ctx_.get();
+
     schedule( scheduler_ctx_.get() );
 }
 
@@ -139,7 +164,7 @@ Scheduler::~Scheduler()
     BOOST_ASSERT( scheduler_ctx_.get() != nullptr );
     BOOST_ASSERT( running_ == main_ctx_.get() );
 
-    exit_ = true;
+    exit_.store( true, std::memory_order_relaxed );
     join( scheduler_ctx_.get() );
 
     BOOST_ASSERT( main_ctx_->wait_queue_.empty() );
@@ -233,7 +258,7 @@ void Scheduler::alt_wait( Alt * alt, std::unique_lock< Spinlock > & splk, bool l
     if ( alt->time_point_ < TimePointT::max() ) {
         running_->alt_        = alt;
         running_->time_point_ = alt->time_point_;
-        running_->link( alt_sleep_queue_ );
+        running_->link( sleep_queue_ );
     }
 
     CtxSwitchData data{ std::addressof( splk ) };
@@ -241,8 +266,8 @@ void Scheduler::alt_wait( Alt * alt, std::unique_lock< Spinlock > & splk, bool l
 
     running_->alt_        = nullptr;
     running_->time_point_ = TimePointT::max();
-    if ( running_->is_linked< hook::AltSleep >() ) {
-        running_->unlink< hook::AltSleep >();
+    if ( running_->is_linked< hook::Sleep >() ) {
+        running_->unlink< hook::Sleep >();
     }
 
     if ( lock ) {
@@ -272,21 +297,25 @@ void Scheduler::terminate( Context * ctx ) noexcept
     BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
 
-    ctx->has_terminated_ = true;
+    std::unique_lock< Spinlock > lk{ ctx->splk_ };
+
+    ctx->terminate();
     ctx->link( terminated_queue_ );
     ctx->unlink< hook::Work >();
 
     wakeup_waiting_on( ctx );
 
+    lk.unlock();
     resume();
 }
 
-void Scheduler::schedule( Context * ctx ) noexcept
+void Scheduler::schedule_local_( Context * ctx ) noexcept
 {
-    BOOST_ASSERT(   ctx != nullptr );
+    BOOST_ASSERT( ctx != nullptr );
     BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
+    BOOST_ASSERT( ! ctx->has_terminated() );
 
     if ( ctx->is_linked< hook::Sleep >() ) {
         ctx->unlink< hook::Sleep >();
@@ -296,6 +325,39 @@ void Scheduler::schedule( Context * ctx ) noexcept
     }
 
     policy_->enqueue( ctx );
+}
+
+void Scheduler::schedule_remote_( Context * ctx ) noexcept
+{
+    BOOST_ASSERT( ctx != nullptr );
+    BOOST_ASSERT( ! ctx->is_type( Context::Type::Scheduler ) );
+    BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
+    BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
+    BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
+    BOOST_ASSERT( ! ctx->has_terminated() );
+    BOOST_ASSERT(   ctx->scheduler_ == this );
+
+    /* std::unique_lock< Spinlock > lk{ splk_ }; */
+    /* if ( ctx->is_linked< hook::Sleep >() ) { */
+    /*     ctx->unlink< hook::Sleep >(); */
+    /* } */
+    /* lk.unlock(); */
+
+    remote_queue_.push( ctx );
+    policy_->notify();
+}
+
+void Scheduler::schedule( Context * ctx ) noexcept
+{
+    BOOST_ASSERT( ctx != nullptr );
+    BOOST_ASSERT( ctx->scheduler_ != nullptr );
+
+    // FIXME: synchronize this?
+    if ( ctx->scheduler_ == this ) {
+        schedule_local_( ctx );
+    } else {
+        ctx->scheduler_->schedule_remote_( ctx );
+    }
 }
 
 void Scheduler::attach( Context * ctx ) noexcept
@@ -308,8 +370,10 @@ void Scheduler::attach( Context * ctx ) noexcept
     BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Sleep >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
+    BOOST_ASSERT(   ctx->scheduler_ == nullptr );
 
     ctx->link( work_queue_ );
+    ctx->scheduler_ = this;
 }
 
 void Scheduler::detach( Context * ctx ) noexcept
@@ -322,8 +386,10 @@ void Scheduler::detach( Context * ctx ) noexcept
     BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Sleep >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
+    BOOST_ASSERT(   ctx->scheduler_ != nullptr );
 
     ctx->unlink< hook::Work >();
+    ctx->scheduler_ = nullptr;
 }
 
 void Scheduler::commit( Context * ctx ) noexcept
@@ -343,7 +409,7 @@ void Scheduler::commit( Context * ctx ) noexcept
 
 void Scheduler::yield() noexcept
 {
-    auto ctx = running_;
+    auto ctx = Scheduler::running();
     BOOST_ASSERT(   ctx != nullptr );
     BOOST_ASSERT(   ctx->is_type( Context::Type::Process ) );
     BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
@@ -355,7 +421,7 @@ void Scheduler::yield() noexcept
     if ( next != nullptr ) {
         schedule( ctx );
         resume( next );
-        BOOST_ASSERT( ctx == running_ );
+        BOOST_ASSERT( ctx == Scheduler::running() );
     }
 }
 
@@ -363,12 +429,15 @@ void Scheduler::join( Context * ctx ) noexcept
 {
     BOOST_ASSERT( ctx != nullptr );
 
-    Context * running_ctx = running_;
+    Context * running_ctx = Scheduler::running();
     // FIXME: this might need rework
+
+    std::unique_lock< Spinlock > lk{ ctx->splk_ };
     if ( ! ctx->has_terminated() ) {
         running_ctx->link( ctx->wait_queue_ );
+        lk.unlock();
         resume();
-        BOOST_ASSERT( running_ == running_ctx );
+        BOOST_ASSERT( Scheduler::running() == running_ctx );
     }
 }
 
@@ -393,6 +462,7 @@ bool Scheduler::sleep_until( TimePointT const & time_point, CtxSwitchData * data
 
 void Scheduler::wakeup_sleep() noexcept
 {
+    std::unique_lock< Spinlock > lk{ splk_ };
     auto now = ClockT::now();
     auto sleep_it = sleep_queue_.begin();
     while ( sleep_it != sleep_queue_.end() ) {
@@ -402,6 +472,10 @@ void Scheduler::wakeup_sleep() noexcept
         BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
         BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
 
+        if ( ctx->mpsc_next_.load( std::memory_order_acquire ) ) {
+            std::cout << "??" << std::endl;
+        }
+
         // Keep advancing the queue if deadline is reached,
         // break if not.
         if ( ctx->time_point_ > now ) {
@@ -409,7 +483,9 @@ void Scheduler::wakeup_sleep() noexcept
         }
         sleep_it = sleep_queue_.erase( sleep_it );
         ctx->time_point_ = TimePointT::max();
-        schedule( ctx );
+        if ( ctx->alt_ == nullptr || ctx->alt_->try_timeout() ) {
+            schedule( ctx );
+        }
     }
     auto alt_sleep_it = alt_sleep_queue_.begin();
     while ( alt_sleep_it != alt_sleep_queue_.end() ) {
@@ -450,6 +526,15 @@ void Scheduler::wakeup_waiting_on( Context * ctx ) noexcept
     BOOST_ASSERT( ctx->wait_queue_.empty() );
 }
 
+void Scheduler::transition_remote() noexcept
+{
+    for ( Context * ctx = remote_queue_.pop();
+          ctx != nullptr;
+          ctx = remote_queue_.pop() ) {
+        schedule_local_( ctx );
+    }
+}
+
 void Scheduler::cleanup_terminated() noexcept
 {
     while ( ! terminated_queue_.empty() ) {
@@ -482,9 +567,17 @@ void Scheduler::print_debug() noexcept
     for ( auto& ctx : work_queue_ ) {
         ctx.print_debug();
     }
+    std::cout << "  Sleep Queue:" << std::endl;
+    for ( auto& ctx : sleep_queue_ ) {
+        std::cout << "    | " << ctx.get_id() << std::endl;
+    }
+    std::cout << "  AltSleep Queue:" << std::endl;
+    for ( auto& ctx : alt_sleep_queue_ ) {
+        std::cout << "    | " << ctx.get_id() << std::endl;
+    }
     std::cout << "  Terminated Queue:" << std::endl;
     for ( auto& ctx : terminated_queue_ ) {
-        ctx.print_debug();
+        std::cout << "    | " << ctx.get_id() << std::endl;
     }
 }
 
@@ -507,14 +600,22 @@ void Scheduler::join_scheduler() noexcept
 
 }
 
+void Scheduler::signal_exit() noexcept
+{
+    exit_.store( true, std::memory_order_release );
+    policy_->notify();
+}
+
+void noop() {}
+
 // Scheduler context loop
-void Scheduler::run_( void * vp ) noexcept
+void Scheduler::run_( void * vp )
 {
     BOOST_ASSERT( running_ == scheduler_ctx_.get() );
     CtxSwitchData * data = static_cast< CtxSwitchData * >( vp );
     resolve_ctx_switch_data( data );
     for ( ;; ) {
-        if ( exit_ ) {
+        if ( exit_.load( std::memory_order_acquire ) ) {
             policy_->notify();
             if ( work_queue_.empty( )) {
                 break;
@@ -522,6 +623,7 @@ void Scheduler::run_( void * vp ) noexcept
         }
 
         cleanup_terminated();
+        transition_remote();
         wakeup_sleep();
 
         auto ctx = policy_->pick_next();
@@ -529,6 +631,7 @@ void Scheduler::run_( void * vp ) noexcept
             schedule( scheduler_ctx_.get() );
             resume( ctx );
             BOOST_ASSERT( running_ == scheduler_ctx_.get() );
+
         } else {
             auto sleep_it = sleep_queue_.begin();
             auto suspend_time = ( sleep_it != sleep_queue_.end() )
@@ -539,11 +642,15 @@ void Scheduler::run_( void * vp ) noexcept
     }
     cleanup_terminated();
 
-    scheduler_ctx_->has_terminated_ = true;
+    scheduler_ctx_->terminate();
     wakeup_waiting_on( scheduler_ctx_.get() );
 
-    main_ctx_->unlink< hook::Ready >();
+    if ( main_ctx_->is_linked< hook::Ready >() ) {
+        main_ctx_->unlink< hook::Ready >();
+    }
     resume( main_ctx_.get() );
+    BOOST_ASSERT_MSG( false, "unreachable" );
+    throw UnreachableError{};
 }
 
 PROXC_NAMESPACE_END

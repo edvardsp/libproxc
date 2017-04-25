@@ -63,7 +63,7 @@ void test_item_copy_move()
         proc(
             [&msg]( channel::Tx< ObjType > tx ) {
                 OpResult res;
-                auto duration = std::chrono::milliseconds( 1 );
+                auto duration = std::chrono::milliseconds( 10 );
                 ObjType s{ msg };
 
                 res = tx.send( s );
@@ -109,11 +109,13 @@ void test_item_copy_move_timeout()
 {
     auto ch = channel::create< std::string >();
     auto tx = channel::get_tx( ch );
+    auto rx = channel::get_rx( ch );
 
     auto duration = std::chrono::milliseconds( 1 );
     OpResult res;
     const std::string msg = "unique message";
     std::string s{ msg };
+    std::string m{};
 
     res = tx.send_for( s, duration );
     throw_assert( res == OpResult::Timeout, "OpResult should be Timeout" );
@@ -130,6 +132,12 @@ void test_item_copy_move_timeout()
     res = tx.send_until( std::move( s ), std::chrono::steady_clock::now() + duration );
     throw_assert( res == OpResult::Timeout, "OpResult should be Timeout" );
     throw_assert_equ( s, msg, "item should have not been moved" );
+
+    res = rx.recv_for( m, duration );
+    throw_assert( res == OpResult::Timeout, "OpResult should be Timeout" );
+
+    res = rx.recv_until( m, std::chrono::steady_clock::now() + duration );
+    throw_assert( res == OpResult::Timeout, "OpResult should be Timeout" );
 }
 
 void test_channel_sync_works()
@@ -319,9 +327,8 @@ void test_timeout_rx_delayed()
     auto ch_for   = channel::create< std::string >();
     auto ch_until = channel::create< std::string >();
 
-    auto delay      = std::chrono::milliseconds( 5 );
+    auto delay      = std::chrono::milliseconds( 1 );
     auto duration   = std::chrono::milliseconds( 20 );
-    auto time_point = std::chrono::steady_clock::now() + duration;
 
     parallel(
         // channel duration timeout
@@ -344,21 +351,21 @@ void test_timeout_rx_delayed()
             }, channel::get_rx( ch_for ) ),
 
         // channel time_point timeout
-        proc( [time_point]( auto tx ) {
+        proc( [duration]( auto tx ) {
                 std::string item = "const ref";
-                auto res = tx.send_until( item, time_point );
+                auto res = tx.send_until( item, std::chrono::steady_clock::now() + duration );
                 throw_assert( res == OpResult::Ok, "OpResult should be Ok" );
-                res = tx.send_until( "movable", time_point );
+                res = tx.send_until( "movable", std::chrono::steady_clock::now() + duration );
                 throw_assert( res == OpResult::Ok, "OpResult should be Ok" );
             }, channel::get_tx( ch_until ) ),
-        proc( [time_point,delay]( auto rx ) {
+        proc( [duration,delay]( auto rx ) {
                 std::string item;
                 this_proc::delay_for( delay );
-                auto res = rx.recv_until( item, time_point );
+                auto res = rx.recv_until( item, std::chrono::steady_clock::now() + duration );
                 throw_assert( res == OpResult::Ok, "OpResult should be Ok" );
 
                 this_proc::delay_for( delay );
-                res = rx.recv_until( item, time_point );
+                res = rx.recv_until( item, std::chrono::steady_clock::now() + duration );
                 throw_assert( res == OpResult::Ok, "OpResult should be Ok" );
             }, channel::get_rx( ch_until ) )
     );
@@ -366,6 +373,8 @@ void test_timeout_rx_delayed()
 
 int main()
 {
+    std::size_t i = 0;
+    for (;;) {
     test_item_copy_move();
     test_item_copy_move_timeout();
     test_channel_sync_works();
@@ -374,6 +383,9 @@ int main()
     test_timeout_complete();
     test_timeout_tx_delayed();
     test_timeout_rx_delayed();
+    printf("stuck? %zu\r", i++);
+    fflush(stdout);
+    }
 
     return 0;
 }

@@ -1,12 +1,14 @@
 
 #include <iostream>
-#include <functional>
+
+#include <mutex>
 
 #include <proxc/config.hpp>
 
 #include <proxc/context.hpp>
 #include <proxc/exceptions.hpp>
 #include <proxc/scheduler.hpp>
+#include <proxc/spinlock.hpp>
 
 #include <boost/context/execution_context_v1.hpp>
 
@@ -77,9 +79,14 @@ bool Context::is_type( Type type ) const noexcept
     return ( static_cast< int >( type ) & static_cast< int >( type_ ) ) != 0;
 }
 
-bool Context::has_terminated() noexcept
+void Context::terminate() noexcept
 {
-    return has_terminated_;
+    terminated_flag_.store( true, std::memory_order_release );
+}
+
+bool Context::has_terminated() const noexcept
+{
+    return terminated_flag_.load( std::memory_order_acquire );
 }
 
 void Context::print_debug() noexcept
@@ -101,6 +108,8 @@ void Context::print_debug() noexcept
     if ( is_linked< hook::Wait >() )       std::cout << "         | Wait" << std::endl;
     if ( is_linked< hook::Sleep >() )      std::cout << "         | Sleep" << std::endl;
     if ( is_linked< hook::Terminated >() ) std::cout << "         | Terminated" << std::endl;
+    if ( mpsc_next_.load( std::memory_order_relaxed ) )
+                                           std::cout << "         | RemoteReady" << std::endl;
     std::cout << "      -> wait queue:" << std::endl;
     for ( auto& ctx : wait_queue_ ) {
         std::cout << "         | " << ctx.get_id() << std::endl;

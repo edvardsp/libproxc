@@ -37,6 +37,7 @@ install_headers(
     'proxc/detail/cpu_relax.hpp',
     'proxc/detail/delegate.hpp',
     'proxc/detail/hook.hpp',
+    'proxc/detail/mpsc_queue.hpp',
     'proxc/detail/num_cpus.hpp',
     'proxc/detail/queue.hpp',
     subdir : 'proxc/detail')

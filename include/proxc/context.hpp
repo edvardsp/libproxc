@@ -93,10 +93,13 @@ public:
 
 private:
     Type    type_;
-    bool    has_terminated_{ false };
 
-    EntryFn        entry_fn_{ nullptr };
+    std::atomic< bool >    terminated_flag_{ false };
+
+    EntryFn     entry_fn_{ nullptr };
     ContextT    ctx_;
+
+    Scheduler *    scheduler_{ nullptr };
 
     // intrusive_ptr friend methods and counter
     friend void intrusive_ptr_add_ref( Context * ctx ) noexcept;
@@ -106,6 +109,8 @@ private:
 public:
     TimePointT     time_point_{ TimePointT::max() };
     Alt *             alt_{ nullptr };
+
+    Spinlock    splk_{};
 
     // Intrusive hooks
     hook::Ready         ready_{};
@@ -121,6 +126,9 @@ public:
         Context, detail::hook::Wait, & Context::wait_
     >;
     WaitQueue     wait_queue_{};
+
+    // Mpsc queue intrusive link
+    std::atomic< Context * > mpsc_next_{ nullptr };
 
 public:
     // constructors and destructor
@@ -139,7 +147,9 @@ public:
     void * resume( void * = nullptr ) noexcept;
 
     bool is_type( Type ) const noexcept;
-    bool has_terminated() noexcept;
+
+    void terminate() noexcept;
+    bool has_terminated() const noexcept;
 
     void print_debug() noexcept;
 
