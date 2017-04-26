@@ -13,9 +13,10 @@ void generate( Tx< long > out, Rx< long > ex )
     while ( ! ex.is_closed() ) {
         out.send( i++ );
     }
+    puts("generate end");
 }
 
-void filter( Rx< long > in, Tx< long > out )
+void filter( std::size_t n, Rx< long > in, Tx< long > out )
 {
     long prime{};
     in.recv( prime );
@@ -24,6 +25,7 @@ void filter( Rx< long > in, Tx< long > out )
             out.send( i );
         }
     }
+    printf("filter %zu : %p end\n", n, (void*)proxc::Scheduler::running() );
 }
 
 int main()
@@ -39,7 +41,7 @@ int main()
         proc( generate, std::move( txs[0] ), channel::get_rx( ex_ch ) ),
         proc_for( static_cast< long >( 0 ), n-1,
             [&txs,&rxs]( auto i ) {
-                filter( std::move( rxs[i] ), std::move( txs[i+1] ) );
+                filter( i, std::move( rxs[i] ), std::move( txs[i+1] ) );
             }
         ),
         proc(

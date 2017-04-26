@@ -37,7 +37,8 @@ struct Barrier
     void wait_until( std::chrono::steady_clock::time_point const & time_point ) noexcept
     {
         std::unique_lock< MutexT > lk{ mtx_ };
-        cv_.wait_until( lk, time_point, [this]{ return flag_; } );
+        cv_.wait_until( lk, time_point,
+            [this]{ return flag_; } );
         flag_ = false;
     }
 
@@ -80,7 +81,7 @@ public:
     WorkStealingPolicy & operator = ( WorkStealingPolicy && )      = delete;
 
     // Added work stealing methods
-    void reserve(std::size_t capacity) noexcept;
+    void reserve( std::size_t capacity ) noexcept;
 
     // Policy base interface methods
     void enqueue( T * ) noexcept;
@@ -96,7 +97,9 @@ public:
 private:
     T * steal() noexcept;
 
-    void signal_enqueue() noexcept;
+    void signal_stealing() noexcept;
+
+    std::size_t take_id() noexcept;
 };
 
 } // namespace detail

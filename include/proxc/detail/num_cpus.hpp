@@ -10,12 +10,12 @@ namespace detail {
 
 inline std::size_t num_cpus()
 {
-    /* static const std::size_t num = []{ */
-    /*     std::size_t n = static_cast< std::size_t >( std::thread::hardware_concurrency() ); */
-    /*     return ( n > 1 ) ? n : 1; */
-    /* }(); */
-    /* return num; */
-    return 1;
+    static const std::size_t num = []{
+        std::size_t n = static_cast< std::size_t >( std::thread::hardware_concurrency() );
+        return ( n > 1 ) ? n : 1;
+    }();
+    return num;
+    /* return 1; */
 }
 
 } // namespace detail

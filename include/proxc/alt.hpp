@@ -215,6 +215,7 @@ private:
     bool select_n( std::vector< ChoiceT * > & ) noexcept;
 
     bool try_select( ChoiceT * ) noexcept;
+    bool try_alt_select( ChoiceT * ) noexcept;
     bool try_timeout() noexcept;
     void maybe_wakeup() noexcept;
 };

@@ -70,8 +70,7 @@ public:
 
     bool try_complete() noexcept
     {
-        auto res = tx_.alt_send();
-        return res == channel::AltResult::Ok;
+        return tx_.alt_send() == channel::AltResult::Ok;
     }
 
     void run_func() const noexcept

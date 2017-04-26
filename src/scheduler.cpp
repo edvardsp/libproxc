@@ -248,26 +248,31 @@ bool Scheduler::wait_until( TimePointT const & time_point, std::unique_lock< Spi
 void Scheduler::alt_wait( Alt * alt, std::unique_lock< Spinlock > & splk, bool lock ) noexcept
 {
     BOOST_ASSERT(   alt != nullptr );
-    BOOST_ASSERT(   running_->alt_ == nullptr );
-    BOOST_ASSERT(   running_->is_type( Context::Type::Process ) );
-    BOOST_ASSERT( ! running_->is_linked< hook::Ready >() );
-    BOOST_ASSERT( ! running_->is_linked< hook::Sleep >() );
-    BOOST_ASSERT( ! running_->is_linked< hook::AltSleep >() );
-    BOOST_ASSERT( ! running_->is_linked< hook::Terminated >() );
+    BOOST_ASSERT(   alt->ctx_ == Scheduler::running() );
+
+    auto alt_ctx = alt->ctx_;
+    BOOST_ASSERT(   alt_ctx->alt_ == nullptr );
+    BOOST_ASSERT(   alt_ctx->is_type( Context::Type::Process ) );
+    BOOST_ASSERT( ! alt_ctx->is_linked< hook::Ready >() );
+    BOOST_ASSERT( ! alt_ctx->is_linked< hook::Sleep >() );
+    BOOST_ASSERT( ! alt_ctx->is_linked< hook::AltSleep >() );
+    BOOST_ASSERT( ! alt_ctx->is_linked< hook::Terminated >() );
 
     if ( alt->time_point_ < TimePointT::max() ) {
-        running_->alt_        = alt;
-        running_->time_point_ = alt->time_point_;
-        running_->link( sleep_queue_ );
+        alt_ctx->alt_        = alt;
+        alt_ctx->time_point_ = alt->time_point_;
+        alt_ctx->link( sleep_queue_ );
     }
 
     CtxSwitchData data{ std::addressof( splk ) };
     resume( std::addressof( data ) );
 
-    running_->alt_        = nullptr;
-    running_->time_point_ = TimePointT::max();
-    if ( running_->is_linked< hook::Sleep >() ) {
-        running_->unlink< hook::Sleep >();
+    BOOST_ASSERT( alt_ctx == Scheduler::running() );
+
+    alt_ctx->alt_        = nullptr;
+    alt_ctx->time_point_ = TimePointT::max();
+    if ( alt_ctx->is_linked< hook::Sleep >() ) {
+        alt_ctx->unlink< hook::Sleep >();
     }
 
     if ( lock ) {
@@ -288,7 +293,7 @@ void Scheduler::resume( Context * to_ctx, CtxSwitchData * data ) noexcept
 void Scheduler::terminate( Context * ctx ) noexcept
 {
     BOOST_ASSERT( ctx != nullptr );
-    BOOST_ASSERT( running_ == ctx );
+    BOOST_ASSERT( ctx == Scheduler::running() );
 
     // FIXME: is_type( Dynamic ) instead?
     BOOST_ASSERT(   ctx->is_type( Context::Type::Work ) );
@@ -305,8 +310,9 @@ void Scheduler::terminate( Context * ctx ) noexcept
 
     wakeup_waiting_on( ctx );
 
-    lk.unlock();
-    resume();
+    /* lk.unlock(); */
+    /* resume(); */
+    wait( lk );
 }
 
 void Scheduler::schedule_local_( Context * ctx ) noexcept
@@ -415,6 +421,7 @@ void Scheduler::yield() noexcept
     BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Sleep >() );
+    BOOST_ASSERT( ! ctx->is_linked< hook::AltSleep >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
 
     auto next = policy_->pick_next();
@@ -430,13 +437,13 @@ void Scheduler::join( Context * ctx ) noexcept
     BOOST_ASSERT( ctx != nullptr );
 
     Context * running_ctx = Scheduler::running();
-    // FIXME: this might need rework
 
     std::unique_lock< Spinlock > lk{ ctx->splk_ };
     if ( ! ctx->has_terminated() ) {
         running_ctx->link( ctx->wait_queue_ );
-        lk.unlock();
-        resume();
+        /* lk.unlock(); */
+        /* resume(); */
+        wait( lk );
         BOOST_ASSERT( Scheduler::running() == running_ctx );
     }
 }
@@ -628,11 +635,13 @@ void Scheduler::run_( void * vp )
 
         auto ctx = policy_->pick_next();
         if ( ctx != nullptr ) {
+            ++num_work;
             schedule( scheduler_ctx_.get() );
             resume( ctx );
             BOOST_ASSERT( running_ == scheduler_ctx_.get() );
 
         } else {
+            ++num_wait;
             auto sleep_it = sleep_queue_.begin();
             auto suspend_time = ( sleep_it != sleep_queue_.end() )
                 ? sleep_it->time_point_

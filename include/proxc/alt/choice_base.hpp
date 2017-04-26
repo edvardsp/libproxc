@@ -35,6 +35,7 @@ public:
     // base methods
     bool same_alt( Alt * ) const noexcept;
     bool try_select() noexcept;
+    bool try_alt_select() noexcept;
     void maybe_wakeup() noexcept;
 
     // interface

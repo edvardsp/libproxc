@@ -43,7 +43,7 @@ void delta( Tx tx, Rx rx, Tx consume )
 
 void consumer( Rx rx )
 {
-    const std::size_t num_iters = 100000;
+    const std::size_t num_iters = 1000;
     const std::size_t rep = 100;
     ItemT item;
     std::size_t ns_per_chan_op = 0;
@@ -51,6 +51,7 @@ void consumer( Rx rx )
         auto start = std::chrono::steady_clock::now();
         for ( std::size_t i = 0; i < num_iters; ++i ) {
             rx.recv( item );
+            std::cout << "recv item\n";
         }
         auto end = std::chrono::steady_clock::now();
         std::chrono::duration< std::size_t, std::nano > diff = end - start;

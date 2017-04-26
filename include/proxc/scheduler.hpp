@@ -50,6 +50,8 @@ using TimePointT = PolicyT::TimePointT;
 
 class Scheduler
 {
+    std::size_t num_work{ 0 };
+    std::size_t num_wait{ 0 };
 public:
     using ReadyQueue = detail::queue::ListQueue<
         Context, detail::hook::Ready, & Context::ready_

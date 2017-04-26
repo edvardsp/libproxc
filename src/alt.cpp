@@ -76,12 +76,17 @@ bool Alt::select_1( ChoiceT * choice ) noexcept
 
     choice->enter();
 
-    if ( choice->is_ready() && choice->try_complete() ) {
-        selected_.store( choice, std::memory_order_release );
+    if ( choice->is_ready() ) {
+        if ( choice->try_complete() ) {
+            selected_.store( choice, std::memory_order_release );
+        }
+    }
 
-    } else {
+    if ( selected_.load( std::memory_order_acquire ) == nullptr ) {
         Scheduler::self()->alt_wait( this, lk, true );
     }
+
+    lk.unlock();
 
     choice->leave();
 
@@ -106,29 +111,28 @@ bool Alt::select_n( std::vector< ChoiceT * > & choices ) noexcept
         }
     }
 
-    alt::ChoiceBase * selected = nullptr;
     if ( ! ready.empty() ) {
         if ( ready.size() > 1 ) {
-            static thread_local std::mt19937 rng{ std::random_device{}() };
+            static thread_local std::minstd_rand rng{ std::random_device{}() };
             std::shuffle( ready.begin(), ready.end(), rng );
         }
 
         for ( const auto& choice : ready ) {
             if ( choice->try_complete() ) {
-                selected_.store( choice, std::memory_order_release );
-                selected = choice;
+                select_flag_.test_and_set( std::memory_order_relaxed );
+                selected_.store( choice, std::memory_order_relaxed );
                 break;
             }
         }
     }
-    if ( selected == nullptr ) {
+    if ( selected_.load( std::memory_order_relaxed ) == nullptr ) {
         Scheduler::self()->alt_wait( this, lk, true );
         // one or more choices should be ready,
         // and selected_ should be set. If set,
         // this is the winning choice.
-    } else {
-        selected_.store( selected, std::memory_order_release );
     }
+
+    lk.unlock();
 
     for ( const auto& choice : choices ) {
         choice->leave();
@@ -136,10 +140,26 @@ bool Alt::select_n( std::vector< ChoiceT * > & choices ) noexcept
     return selected_.load( std::memory_order_relaxed ) == nullptr;
 }
 
-// called by external choices
+// called by external non-alting choices
 bool Alt::try_select( ChoiceT * choice ) noexcept
 {
     std::unique_lock< Spinlock > lk{ splk_ };
+
+    if ( select_flag_.test_and_set( std::memory_order_acq_rel ) ) {
+        return false;
+    }
+
+    selected_.store( choice, std::memory_order_release );
+    return true;
+}
+
+// called by external alting choices
+bool Alt::try_alt_select( ChoiceT * choice ) noexcept
+{
+    std::unique_lock< Spinlock > lk{ splk_, std::defer_lock };
+    if ( ! lk.try_lock() ) {
+        return false;
+    }
 
     if ( select_flag_.test_and_set( std::memory_order_acq_rel ) ) {
         return false;
@@ -188,6 +208,12 @@ bool ChoiceBase::same_alt( Alt * alt ) const noexcept
 bool ChoiceBase::try_select() noexcept
 {
     return alt_->try_select( this );
+}
+
+
+bool ChoiceBase::try_alt_select() noexcept
+{
+    return alt_->try_alt_select( this );
 }
 
 void ChoiceBase::maybe_wakeup() noexcept

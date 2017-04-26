@@ -110,7 +110,7 @@ public:
     TimePointT     time_point_{ TimePointT::max() };
     Alt *             alt_{ nullptr };
 
-    Spinlock    splk_{};
+    Spinlock    splk_;
 
     // Intrusive hooks
     hook::Ready         ready_{};

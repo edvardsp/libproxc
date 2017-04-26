@@ -75,11 +75,21 @@ void WorkStealing::notify() noexcept
 }
 
 template<>
-void WorkStealing::signal_enqueue() noexcept
+std::size_t WorkStealing::take_id() noexcept
 {
-    for ( const auto& stealers : work_stealers_ ) {
-        stealers->notify();
-    }
+    static thread_local std::minstd_rand rng{ std::random_device{}() };
+    static std::uniform_int_distribution< std::size_t > distr{ 0, num_workers_ - 1 };
+    std::size_t id{};
+    do {
+        id = distr( rng );
+    } while ( id == id_ );
+    return id;
+}
+
+template<>
+void WorkStealing::signal_stealing() noexcept
+{
+    work_stealers_[ take_id() ]->barrier_.notify();
 }
 
 template<>
@@ -90,7 +100,6 @@ void WorkStealing::enqueue(Context * ctx) noexcept
         // can be stolen
         Scheduler::self()->detach( ctx );
         deque_.push( ctx );
-        /* signal_enqueue(); */
 
     } else {
         // cannot by stolen
@@ -103,6 +112,9 @@ Context * WorkStealing::pick_next() noexcept
 {
     auto ctx = deque_.pop();
     if ( ctx != nullptr ) {
+        if ( ! deque_.is_empty() ) {
+            signal_stealing();
+        }
         Scheduler::self()->attach( ctx );
 
     } else if ( ! ready_queue_.empty() ) {
@@ -110,12 +122,7 @@ Context * WorkStealing::pick_next() noexcept
         ready_queue_.pop_front();
 
     } else if ( ctx == nullptr ) {
-        static thread_local std::minstd_rand rng;
-        std::size_t id{};
-        do {
-            id = std::uniform_int_distribution< std::size_t >{ 0, num_workers_ - 1 }( rng );
-        } while (id == id_);
-        ctx = work_stealers_[id]->steal();
+        ctx = work_stealers_[ take_id() ]->steal();
         if ( ctx != nullptr ) {
             Scheduler::self()->attach( ctx );
         }
