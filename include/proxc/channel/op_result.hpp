@@ -21,6 +21,7 @@ enum class AltResult {
     Closed,
     SyncFailed,
     SelectFailed,
+    TryLater,
 };
 
 } // namespace channel

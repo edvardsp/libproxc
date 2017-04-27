@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <deque>
 #include <iterator>
 #include <map>
 #include <memory>
@@ -19,6 +20,7 @@
 #include <proxc/exceptions.hpp>
 #include <proxc/spinlock.hpp>
 #include <proxc/detail/delegate.hpp>
+#include <proxc/alt/sync.hpp>
 #include <proxc/alt/choice_base.hpp>
 #include <proxc/alt/choice_send.hpp>
 #include <proxc/alt/choice_recv.hpp>
@@ -36,6 +38,8 @@ private:
     using ChoiceT   = alt::ChoiceBase;
     using ChoicePtr = std::unique_ptr< ChoiceT >;
 
+    using SyncT = alt::Sync;
+
     using ChannelId = channel::detail::ChannelId;
 
     template<typename EndT>
@@ -50,6 +54,15 @@ private:
 
     using TimePointT = Context::TimePointT;
     using TimerFn = detail::delegate< void( void ) >;
+
+    enum class State
+    {
+        Checking,
+        Waiting,
+        Done,
+    };
+
+    std::atomic< State >    state_{ State::Checking };
 
     std::vector< ChoicePtr >    choices_{};
 
@@ -81,6 +94,8 @@ private:
     };
     std::map< ChannelId, ChoiceAudit >    ch_audit_;
 
+    template<typename U>
+    friend class channel::detail::ChannelImpl;
     friend class alt::ChoiceBase;
     friend class Scheduler;
 
@@ -212,12 +227,13 @@ public:
 private:
     bool select_0();
     bool select_1( ChoiceT * ) noexcept;
-    bool select_n( std::vector< ChoiceT * > & ) noexcept;
+    bool select_n( std::deque< ChoiceT * > & ) noexcept;
 
     bool try_select( ChoiceT * ) noexcept;
     bool try_alt_select( ChoiceT * ) noexcept;
     bool try_timeout() noexcept;
     void maybe_wakeup() noexcept;
+    bool sync( Alt *, SyncT * ) noexcept;
 };
 
 // send choice without guard

@@ -16,6 +16,7 @@ install_headers(
     'proxc/work_steal_deque.hpp',
     subdir : 'proxc')
 install_headers(
+    'proxc/alt/sync.hpp',
     'proxc/alt/choice_base.hpp',
     'proxc/alt/choice_send.hpp',
     'proxc/alt/choice_recv.hpp',

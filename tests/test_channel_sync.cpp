@@ -373,8 +373,8 @@ void test_timeout_rx_delayed()
 
 int main()
 {
-    std::size_t i = 0;
-    for (;;) {
+    /* std::size_t i = 0; */
+    /* for (;;) { */
     test_item_copy_move();
     test_item_copy_move_timeout();
     test_channel_sync_works();
@@ -383,9 +383,9 @@ int main()
     test_timeout_complete();
     test_timeout_tx_delayed();
     test_timeout_rx_delayed();
-    printf("stuck? %zu\r", i++);
-    fflush(stdout);
-    }
+    /* printf("stuck? %zu\r", i++); */
+    /* fflush(stdout); */
+    /* } */
 
     return 0;
 }

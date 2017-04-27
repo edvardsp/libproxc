@@ -4,6 +4,7 @@
 #include <proxc/config.hpp>
 
 #include <proxc/scheduler.hpp>
+#include <proxc/alt/sync.hpp>
 
 #include <boost/assert.hpp>
 #include <boost/container/small_vector.hpp>
@@ -13,14 +14,19 @@ PROXC_NAMESPACE_BEGIN
 // forward declaration
 class Alt;
 
+namespace channel {
+
+struct AltSync;
+
+} // namespace channel
+
 namespace alt {
 
 class ChoiceBase
 {
-private:
+public:
     Alt *    alt_;
 
-public:
     ChoiceBase( Alt * ) noexcept;
     virtual ~ChoiceBase() noexcept {}
 
@@ -37,6 +43,9 @@ public:
     bool try_select() noexcept;
     bool try_alt_select() noexcept;
     void maybe_wakeup() noexcept;
+    bool sync( ChoiceBase *, Sync * ) noexcept;
+    bool offer_sync( ChoiceBase * ) noexcept;
+    bool operator < ( ChoiceBase const & ) const noexcept;
 
     // interface
     virtual void enter() noexcept = 0;
