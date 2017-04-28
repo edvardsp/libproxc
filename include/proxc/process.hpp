@@ -103,15 +103,14 @@ auto proc_for_impl( InputIt first, InputIt last, Fns && ... fns )
     procs.reserve( total_size );
 
     for ( auto data = first; data != last; ++data ) {
-        for ( auto& fn : fn_arr ) {
-            auto p = proc( fn, *data );
-            p.launch();
-            procs.push_back( std::move( p ) );
+        for ( const auto& fn : fn_arr ) {
+            procs.emplace_back( fn, *data );
         }
     }
-    for ( auto& proc : procs ) {
-        proc.join();
-    }
+    std::for_each( procs.begin(), procs.end(),
+        []( auto& proc ){ proc.launch(); } );
+    std::for_each( procs.begin(), procs.end(),
+        []( auto& proc ){ proc.join(); } );
 }
 
 template< typename Input,
