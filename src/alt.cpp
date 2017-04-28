@@ -25,7 +25,7 @@ Alt::Alt()
 
 void Alt::select()
 {
-    std::deque< ChoiceT * > choices;
+    std::vector< ChoiceT * > choices;
     for ( const auto& kv : ch_audit_ ) {
         auto& audit = kv.second;
         if ( audit.state_ != ChoiceAudit::State::Clash ) {
@@ -78,56 +78,65 @@ bool Alt::select_1( ChoiceT * choice ) noexcept
 
     choice->enter();
 
-    state_.store( State::Checking, std::memory_order_release );
-
-    if ( choice->is_ready() ) {
-        if ( choice->try_complete() ) {
+    while ( choice->is_ready() ) {
+        switch ( choice->try_complete() ) {
+        case ChoiceT::Result::TryLater:
+            continue;
+        case ChoiceT::Result::Ok:
+            select_flag_.test_and_set( std::memory_order_relaxed );
             selected_.store( choice, std::memory_order_release );
+            /* [[fallthrough]]; */
+        case ChoiceT::Result::Failed:
+            break;
         }
+        break;
     }
 
     if ( selected_.load( std::memory_order_acquire ) == nullptr ) {
-        state_.store( State::Waiting, std::memory_order_release );
-        Scheduler::self()->alt_wait( this, lk, true );
+        state_.store( alt::State::Waiting, std::memory_order_release );
+        Scheduler::self()->alt_wait( this, lk );
+        state_.store( alt::State::Done, std::memory_order_release );
+    } else {
+        state_.store( alt::State::Done, std::memory_order_release );
+        lk.unlock();
     }
 
-    state_.store( State::Done, std::memory_order_release );
-
-    lk.unlock();
+    /* state_.store( alt::State::Done, std::memory_order_release ); */
+    /* lk.unlock(); */
 
     choice->leave();
 
     return selected_.load( std::memory_order_relaxed ) == nullptr;
 }
 
-bool Alt::select_n( std::deque< ChoiceT * > & choices ) noexcept
+bool Alt::select_n( std::vector< ChoiceT * > & choices ) noexcept
 {
-    std::vector< ChoiceT * > ready;
-    // FIXME: reserve? and if so, at what size?
-    ready.reserve( choices.size() );
-
     std::unique_lock< Spinlock > lk{ splk_ };
 
     for ( const auto& choice : choices ) {
         choice->enter();
     }
 
-    state_.store( State::Checking, std::memory_order_release );
-
-    for ( const auto& choice : choices ) {
-        if ( choice->is_ready() ) {
-            ready.push_back( choice );
+    while ( selected_.load( std::memory_order_acquire ) == nullptr ) {
+        std::vector< ChoiceT * > ready;
+        for ( const auto& choice : choices ) {
+            if ( choice->is_ready() ) {
+                ready.push_back( choice );
+            }
         }
-    }
 
-    if ( ! ready.empty() ) {
-        if ( ready.size() > 1 ) {
+        const auto size = ready.size();
+        if ( size == 0 ) {
+            break;
+        }
+        if ( size > 1 ) {
             static thread_local std::minstd_rand rng{ std::random_device{}() };
             std::shuffle( ready.begin(), ready.end(), rng );
         }
-
+        
         for ( const auto& choice : ready ) {
-            if ( choice->try_complete() ) {
+            auto res = choice->try_complete();
+            if ( res == ChoiceT::Result::Ok ) {
                 select_flag_.test_and_set( std::memory_order_relaxed );
                 selected_.store( choice, std::memory_order_relaxed );
                 break;
@@ -136,16 +145,20 @@ bool Alt::select_n( std::deque< ChoiceT * > & choices ) noexcept
     }
 
     if ( selected_.load( std::memory_order_relaxed ) == nullptr ) {
-        state_.store( State::Waiting, std::memory_order_release );
-        Scheduler::self()->alt_wait( this, lk, true );
+        state_.store( alt::State::Waiting, std::memory_order_release );
+        Scheduler::self()->alt_wait( this, lk );
         // one or more choices should be ready,
         // and selected_ should be set. If set,
         // this is the winning choice.
+        state_.store( alt::State::Done, std::memory_order_release );
+    } else {
+        state_.store( alt::State::Done, std::memory_order_release );
+        lk.unlock();
     }
 
-    state_.store( State::Done, std::memory_order_release );
+    /* state_.store( alt::State::Done, std::memory_order_release ); */
 
-    lk.unlock();
+    /* lk.unlock(); */
 
     for ( const auto& choice : choices ) {
         choice->leave();
@@ -200,44 +213,6 @@ void Alt::maybe_wakeup() noexcept
 
 }
 
-bool Alt::sync( Alt * alt, SyncT * sync ) noexcept
-{
-    BOOST_ASSERT( alt != nullptr );
-    BOOST_ASSERT( sync != nullptr );
-
-    std::unique_lock< Spinlock > lk{ alt->splk_, std::defer_lock };
-
-    auto state = alt->state_.load( std::memory_order_acquire );
-    switch ( state ) {
-    case State::Waiting:
-        lk.lock();
-        return ! select_flag_.test_and_set( std::memory_order_acq_rel );
-
-    case State::Checking:
-        if ( this < alt ) {
-            // offer sync
-            sync->state_.store( SyncT::State::Offered, std::memory_order_release );
-            const auto offered = SyncT::State::Offered;
-            const auto accepted = SyncT::State::Accepted;
-            while ( offered == sync->state_.load( std::memory_order_acquire ) )
-                { /* spin */ }
-            if ( accepted == sync->state_.load( std::memory_order_acquire ) ) {
-
-            }
-
-        } else {
-            // check and accept sync
-
-        }
-
-        break;
-    case State::Done:
-        return false;
-    }
-
-    return false;
-}
-
 namespace alt {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -269,14 +244,18 @@ void ChoiceBase::maybe_wakeup() noexcept
     alt_->maybe_wakeup();
 }
 
-bool ChoiceBase::sync( ChoiceBase * choice, Sync * sync ) noexcept
+alt::State ChoiceBase::get_state() const noexcept
 {
-    return alt_->sync( choice->alt_, sync );
+    return alt_->state_.load( std::memory_order_acquire );
 }
 
 bool ChoiceBase::operator < ( ChoiceBase const & other ) const noexcept
 {
-    return alt_ < other.alt_;
+    return ( alt_->tp_start_ < other.alt_->tp_start_ )
+        ? true
+        : ( alt_->tp_start_ > other.alt_->tp_start_ )
+            ? false
+            : ( alt_ < other.alt_ ) ;
 }
 
 } // namespace alt

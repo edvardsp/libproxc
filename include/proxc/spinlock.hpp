@@ -33,6 +33,8 @@ private:
     alignas(cache_alignment) std::atomic< State >          state_{ State::Unlocked };
     alignas(cache_alignment) std::atomic< std::size_t >    prev_tests_{ 0 };
 
+    alignas(cache_alignment) std::mt19937    rng{ std::random_device{}() };
+
 public:
     Spinlock() noexcept = default;
 
@@ -65,8 +67,7 @@ public:
             }
 
             if ( State::Locked == state_.exchange( State::Locked, std::memory_order_acquire ) ) {
-                static thread_local std::minstd_rand rng{ std::random_device{}() };
-                static std::uniform_int_distribution< std::size_t > distr
+                std::uniform_int_distribution< std::size_t > distr
                     { 0, static_cast< std::size_t >( 1 ) << n_collisions };
                 const std::size_t z = distr( rng );
                 ++n_collisions;

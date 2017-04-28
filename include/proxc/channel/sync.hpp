@@ -13,6 +13,7 @@
 #include <proxc/context.hpp>
 #include <proxc/scheduler.hpp>
 #include <proxc/spinlock.hpp>
+#include <proxc/alt/state.hpp>
 #include <proxc/alt/sync.hpp>
 #include <proxc/alt/choice_base.hpp>
 #include <proxc/channel/op_result.hpp>
@@ -58,6 +59,12 @@ public:
     using EndT    = ChanEnd< ItemT >;
     using ChoiceT = alt::ChoiceBase;
 
+    enum class EndVariant
+    {
+        Tx,
+        Rx,
+    };
+
 private:
     Spinlock    splk_{};
 
@@ -70,7 +77,6 @@ private:
     alignas(cache_alignment) std::atomic< bool >      rx_consumed_{ false };
 
     alignas(cache_alignment) alt::Sync    alt_sync_{};
-
 
 public:
     ChannelImpl() = default;
@@ -110,19 +116,18 @@ public:
                          std::chrono::time_point< Clock, Dur > const & ) noexcept;
 
     // send and receive methods for alting
+    void alt_complete_normal( EndVariant ) noexcept;
+    void alt_complete_sync() noexcept;
+
     void alt_send_enter( EndT & ) noexcept;
     void alt_send_leave() noexcept;
     bool alt_send_ready() noexcept;
     AltResult alt_send() noexcept;
-    AltResult alt_send_blocking( std::unique_lock< Spinlock > & ) noexcept;
-    AltResult alt_send_nonblocking( std::unique_lock< Spinlock > & ) noexcept;
 
     void alt_recv_enter( EndT & ) noexcept;
     void alt_recv_leave() noexcept;
     bool alt_recv_ready() noexcept;
     AltResult alt_recv() noexcept;
-    AltResult alt_recv_blocking( std::unique_lock< Spinlock > & ) noexcept;
-    AltResult alt_recv_nonblocking( std::unique_lock< Spinlock > & ) noexcept;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -352,6 +357,42 @@ OpResult ChannelImpl< T >::recv_until(
 }
 
 template<typename T>
+void ChannelImpl< T >::alt_complete_normal( EndVariant variant ) noexcept
+{
+    BOOST_ASSERT( has_tx_() );
+    BOOST_ASSERT( has_rx_() );
+
+    EndT * tx = tx_end_.exchange( nullptr, std::memory_order_release );
+    EndT * rx = rx_end_.exchange( nullptr, std::memory_order_release );
+    rx->item_ = std::move( tx->item_ );
+    switch ( variant ) {
+    case EndVariant::Tx:
+        tx_consumed_.store( true, std::memory_order_release );
+        Scheduler::self()->schedule( tx->ctx_ );
+        break;
+    case EndVariant::Rx:
+        rx_consumed_.store( true, std::memory_order_release );
+        Scheduler::self()->schedule( rx->ctx_ );
+        break;
+    }
+}
+
+template<typename T>
+void ChannelImpl< T >::alt_complete_sync() noexcept
+{
+    BOOST_ASSERT( has_tx_() );
+    BOOST_ASSERT( has_rx_() );
+    BOOST_ASSERT( alt_sync_.state_.load( std::memory_order_acquire )
+        == alt::Sync::State::Offered );
+
+    EndT * tx = tx_end_.exchange( nullptr, std::memory_order_release );
+    EndT * rx = rx_end_.exchange( nullptr, std::memory_order_release );
+    rx->item_ = std::move( tx->item_ );
+    alt_sync_.state_.store( alt::Sync::State::Accepted,
+        std::memory_order_release );
+}
+
+template<typename T>
 void ChannelImpl< T >::alt_send_enter( EndT & tx ) noexcept
 {
     BOOST_ASSERT( tx_end_.load( std::memory_order_relaxed ) == nullptr );
@@ -394,20 +435,24 @@ AltResult ChannelImpl< T >::alt_send() noexcept
 {
     BOOST_ASSERT( has_tx_() );
 
-    const auto offered  = alt::Sync::State::Offered;
-    const auto accepted = alt::Sync::State::Accepted;
-    if ( offered == alt_sync_.state_.load( std::memory_order_acquire ) ) {
-        // Rx is alting and offering sync. Rx is currently spinning,
-        // waiting for alt_sync state to change. Meanwhile, complete
-        // the channel operation and signal the sync has been accepted.
-        EndT * tx = tx_end_.exchange( nullptr, std::memory_order_release );
-        EndT * rx = rx_end_.exchange( nullptr, std::memory_order_release );
-        rx->item_ = std::move( tx->item_ );
-        alt_sync_.state_.store( accepted, std::memory_order_release );
-        return AltResult::Ok;
+    std::unique_lock< Spinlock > lk{ splk_, std::defer_lock };
+    if ( ! lk.try_lock() ) {
+        EndT * rx = rx_end_.load( std::memory_order_acquire );
+        if ( rx != nullptr && rx->alt_choice_ != nullptr ) {
+            const auto offered = alt::Sync::State::Offered;
+            if ( offered == alt_sync_.state_.load( std::memory_order_release ) ) {
+                alt_complete_sync();
+                return AltResult::Ok;
+
+            } else {
+                return AltResult::TryLater;
+            }
+
+        } else {
+            lk.lock();
+        }
     }
 
-    std::unique_lock< Spinlock > lk{ splk_ };
     if ( is_closed() ) {
         return AltResult::Closed;
     }
@@ -417,17 +462,14 @@ AltResult ChannelImpl< T >::alt_send() noexcept
         return AltResult::NoEnd;
     }
 
-    EndT * tx = rx_end_.load( std::memory_order_acquire );
+    EndT * tx = tx_end_.load( std::memory_order_acquire );
     ChoiceT * rx_choice = rx->alt_choice_;
     if ( rx_choice == nullptr ) {
-        tx_end_.store( nullptr, std::memory_order_release );
-        rx_end_.store( nullptr, std::memory_order_release );
-        rx->item_ = std::move( tx->item_ );
-        rx_consumed_.store( true, std::memory_order_release );
-        Scheduler::self()->schedule( rx->ctx_ );
+        // normal Rx
+        alt_complete_normal( EndVariant::Rx );
         return AltResult::Ok;
     }
-    // else, Alting Rx, not offering sync
+    // else, Alting Rx, must sync
     ChoiceT * tx_choice = tx->alt_choice_;
     BOOST_ASSERT( tx_choice != nullptr );
 
@@ -438,11 +480,38 @@ AltResult ChannelImpl< T >::alt_send() noexcept
         // offer sync. if sync accepted, rx completed
         // channel operation. if rejected, channel
         // operation failed.
-        alt_sync_.state_.store( offered, std::memory_order_release );
-        /* lk.unlock(); */
-        while ( offered == alt_sync_.state_.load( std::memory_order_acquire ) )
-            { /* spin */ }
-        return accepted == alt_sync_.state_.exchange( none, std::memory_order_release );
+        switch ( rx_choice->get_state() ) {
+        case alt::State::Checking:
+            alt_sync_.state_.store( offered, std::memory_order_release );
+
+            while ( offered == alt_sync_.state_.load( std::memory_order_acquire )
+                && alt::State::Checking == rx_choice->get_state() )
+                { /* spin */ }
+
+            if ( accepted == alt_sync_.state_.exchange( none, std::memory_order_release ) ) {
+                return AltResult::Ok;
+            } else if ( alt::State::Waiting == rx_choice->get_state() ) {
+                if ( rx_choice->try_select() ) {
+                    alt_complete_normal( EndVariant::Rx );
+                    return AltResult::Ok;
+                } else {
+                    return AltResult::SelectFailed;
+                }
+            } else {
+                return AltResult::SyncFailed;
+            }
+
+        case alt::State::Waiting:
+            if ( rx_choice->try_select() ) {
+                alt_complete_normal( EndVariant::Rx );
+                return AltResult::Ok;
+            } else {
+                return AltResult::SelectFailed;
+            }
+
+        case alt::State::Done:
+            return AltResult::SyncFailed;
+        }
 
     } else {
         // check and accept sync.
@@ -451,60 +520,37 @@ AltResult ChannelImpl< T >::alt_send() noexcept
         // complete channel operation and accept.
         // if in waiting state, try normal selecting.
         // if in done state, channel operation failed.
-    }
-}
+        const auto sync_state = alt_sync_.state_.load( std::memory_order_acquire );
+        BOOST_ASSERT( sync_state != accepted );
+        switch ( sync_state ) {
+        case none:
+            switch ( rx_choice->get_state() ) {
+            case alt::State::Checking:
+                return AltResult::TryLater;
 
-template<typename T>
-AltResult ChannelImpl< T >::alt_send_blocking( std::unique_lock< Spinlock > & lk ) noexcept
-{
-    lk.lock();
+            case alt::State::Waiting:
+                if ( rx_choice->try_select() ) {
+                    alt_complete_normal( EndVariant::Rx );
+                    return AltResult::Ok;
+                } else {
+                    return AltResult::SelectFailed;
+                }
 
-    if ( is_closed() ) {
-        return AltResult::Closed;
-    }
+            case alt::State::Done:
+                return AltResult::SyncFailed;
+            }
 
-    EndT * rx = rx_end_.load( std::memory_order_acquire );
-    if ( rx != nullptr ) {
-        bool success = false;
-        ChoiceT * alt_choice = rx->alt_choice_;
-        success = ( alt_choice != nullptr )
-            ? alt_choice->try_select()
-            : true ;
+        case offered:
+            // Rx is alting and offering sync. Rx is currently spinning,
+            // waiting for alt_sync state to change. Meanwhile, complete
+            // the channel operation and signal the sync has been accepted.
+            alt_complete_sync();
+            return AltResult::Ok;
 
-        return ( success )
-            ? AltResult::Ok
-            : AltResult::SelectFailed ;
-
-    } else {
-        return AltResult::NoEnd;
-    }
-}
-
-template<typename T>
-AltResult ChannelImpl< T >::alt_send_nonblocking( std::unique_lock< Spinlock > & lk ) noexcept
-{
-    if ( ! lk.try_lock() ) {
-        return AltResult::SyncFailed;
-    }
-
-    if ( is_closed() ) {
-        return AltResult::Closed;
-    }
-
-    EndT * rx = rx_end_.load( std::memory_order_acquire );
-    if ( rx != nullptr ) {
-        bool success = false;
-        ChoiceT * alt_choice = rx->alt_choice_;
-        success = ( alt_choice != nullptr )
-            ? alt_choice->try_alt_select()
-            : true ;
-
-        return ( success )
-            ? AltResult::Ok
-            : AltResult::SelectFailed ;
-
-    } else {
-        return AltResult::NoEnd;
+        case accepted:
+            BOOST_ASSERT_MSG( false, "unreachable" );
+            return AltResult::TryLater;
+        }
     }
 }
 
@@ -552,52 +598,21 @@ AltResult ChannelImpl< T >::alt_recv() noexcept
     BOOST_ASSERT( has_rx_() );
 
     std::unique_lock< Spinlock > lk{ splk_, std::defer_lock };
-
-    AltResult result = ( true )
-        ? alt_recv_blocking( lk )
-        : alt_recv_nonblocking( lk ) ;
-
-    if ( result == AltResult::Ok ) {
-        EndT * tx = tx_end_.exchange( nullptr, std::memory_order_acq_rel );
-        EndT * rx = rx_end_.exchange( nullptr, std::memory_order_acq_rel );
-        rx->item_ = std::move( tx->item_ );
-        tx_consumed_.store( true, std::memory_order_release );
-        Scheduler::self()->schedule( tx->ctx_ );
-    }
-    return result;
-}
-
-template<typename T>
-AltResult ChannelImpl< T >::alt_recv_blocking( std::unique_lock< Spinlock > & lk ) noexcept
-{
-    lk.lock();
-
-    if ( is_closed() ) {
-        return AltResult::Closed;
-    }
-
-    EndT * tx = tx_end_.load( std::memory_order_acquire );
-    if ( tx != nullptr ) {
-        bool success = false;
-        ChoiceT * alt_choice = tx->alt_choice_;
-        success = ( alt_choice != nullptr )
-            ? alt_choice->try_select()
-            : true ;
-
-        return ( success )
-            ? AltResult::Ok
-            : AltResult::SelectFailed ;
-
-    } else {
-        return AltResult::NoEnd;
-    }
-}
-
-template<typename T>
-AltResult ChannelImpl< T >::alt_recv_nonblocking( std::unique_lock< Spinlock > & lk ) noexcept
-{
     if ( ! lk.try_lock() ) {
-        return AltResult::SyncFailed;
+        EndT * tx = tx_end_.load( std::memory_order_acquire );
+        if ( tx != nullptr && tx->alt_choice_ != nullptr ) {
+            const auto offered = alt::Sync::State::Offered;
+            if ( offered == alt_sync_.state_.load( std::memory_order_release ) ) {
+                alt_complete_sync();
+                return AltResult::Ok;
+
+            } else {
+                return AltResult::TryLater;
+            }
+
+        } else {
+            lk.lock();
+        }
     }
 
     if ( is_closed() ) {
@@ -605,19 +620,99 @@ AltResult ChannelImpl< T >::alt_recv_nonblocking( std::unique_lock< Spinlock > &
     }
 
     EndT * tx = tx_end_.load( std::memory_order_acquire );
-    if ( tx != nullptr ) {
-        bool success = false;
-        ChoiceT * alt_choice = tx->alt_choice_;
-        success = ( alt_choice != nullptr )
-            ? alt_choice->try_alt_select()
-            : true ;
+    if ( tx == nullptr ) {
+        return AltResult::NoEnd;
+    }
 
-        return ( success )
-            ? AltResult::Ok
-            : AltResult::SelectFailed ;
+    EndT * rx = rx_end_.load( std::memory_order_acquire );
+    ChoiceT * tx_choice = tx->alt_choice_;
+    if ( tx_choice == nullptr ) {
+        // normal Tx
+        alt_complete_normal( EndVariant::Tx );
+        return AltResult::Ok;
+    }
+    // else, Alting Rx, must sync
+    ChoiceT * rx_choice = rx->alt_choice_;
+    BOOST_ASSERT( rx_choice != nullptr );
+
+    const auto none     = alt::Sync::State::None;
+    const auto offered  = alt::Sync::State::Offered;
+    const auto accepted = alt::Sync::State::Accepted;
+    if ( *rx_choice < *tx_choice ) {
+        // offer sync. if sync accepted, rx completed
+        // channel operation. if rejected, channel
+        // operation failed.
+        switch ( tx_choice->get_state() ) {
+        case alt::State::Checking:
+            alt_sync_.state_.store( offered, std::memory_order_release );
+
+            while ( offered == alt_sync_.state_.load( std::memory_order_acquire )
+                && alt::State::Checking == tx_choice->get_state() )
+                { /* spin */ }
+
+            if ( accepted == alt_sync_.state_.exchange( none, std::memory_order_release ) ) {
+                return AltResult::Ok;
+            } else if ( alt::State::Waiting == tx_choice->get_state() ) {
+                if ( tx_choice->try_select() ) {
+                    alt_complete_normal( EndVariant::Tx );
+                    return AltResult::Ok;
+                } else {
+                    return AltResult::SelectFailed;
+                }
+            } else {
+                return AltResult::SyncFailed;
+            }
+
+        case alt::State::Waiting:
+            if ( tx_choice->try_select() ) {
+                alt_complete_normal( EndVariant::Tx );
+                return AltResult::Ok;
+            } else {
+                return AltResult::SelectFailed;
+            }
+
+        case alt::State::Done:
+            return AltResult::SyncFailed;
+        }
 
     } else {
-        return AltResult::NoEnd;
+        // check and accept sync.
+        // if rx_choice is in checking state, and sync
+        // not offered, try later. if sync offered,
+        // complete channel operation and accept.
+        // if in waiting state, try normal selecting.
+        // if in done state, channel operation failed.
+        const auto sync_state = alt_sync_.state_.load( std::memory_order_acquire );
+        BOOST_ASSERT( sync_state != accepted );
+        switch ( sync_state ) {
+        case none:
+            switch ( tx_choice->get_state() ) {
+            case alt::State::Checking:
+                return AltResult::TryLater;
+
+            case alt::State::Waiting:
+                if ( tx_choice->try_select() ) {
+                    alt_complete_normal( EndVariant::Tx );
+                    return AltResult::Ok;
+                } else {
+                    return AltResult::SelectFailed;
+                }
+
+            case alt::State::Done:
+                return AltResult::SyncFailed;
+            }
+
+        case offered:
+            // Rx is alting and offering sync. Rx is currently spinning,
+            // waiting for alt_sync state to change. Meanwhile, complete
+            // the channel operation and signal the sync has been accepted.
+            alt_complete_sync();
+            return AltResult::Ok;
+
+        case accepted:
+            BOOST_ASSERT_MSG( false, "unreachable" );
+            return AltResult::TryLater;
+        }
     }
 }
 

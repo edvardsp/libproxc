@@ -4,6 +4,7 @@
 #include <proxc/config.hpp>
 
 #include <proxc/scheduler.hpp>
+#include <proxc/alt/state.hpp>
 #include <proxc/alt/sync.hpp>
 
 #include <boost/assert.hpp>
@@ -25,6 +26,13 @@ namespace alt {
 class ChoiceBase
 {
 public:
+    enum class Result
+    {
+        Ok,
+        TryLater,
+        Failed,
+    };
+
     Alt *    alt_;
 
     ChoiceBase( Alt * ) noexcept;
@@ -43,8 +51,7 @@ public:
     bool try_select() noexcept;
     bool try_alt_select() noexcept;
     void maybe_wakeup() noexcept;
-    bool sync( ChoiceBase *, Sync * ) noexcept;
-    bool offer_sync( ChoiceBase * ) noexcept;
+    alt::State get_state() const noexcept;
     bool operator < ( ChoiceBase const & ) const noexcept;
 
     // interface
@@ -52,7 +59,7 @@ public:
     virtual void leave() noexcept = 0;
     virtual bool is_ready() const noexcept = 0;
 
-    virtual bool try_complete() noexcept = 0;
+    virtual Result try_complete() noexcept = 0;
     virtual void run_func() const noexcept = 0;
 };
 

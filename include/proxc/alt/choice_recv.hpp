@@ -57,10 +57,14 @@ public:
         return rx_.alt_ready();
     }
 
-    bool try_complete() noexcept
+    Result try_complete() noexcept
     {
         auto res = rx_.alt_recv();
-        return res == channel::AltResult::Ok;
+        switch ( res ) {
+        case channel::AltResult::Ok:       return Result::Ok;
+        case channel::AltResult::TryLater: return Result::TryLater;
+        default:                           return Result::Failed;
+        }
     }
 
     void run_func() const noexcept

@@ -383,7 +383,7 @@ int main()
     test_timeout_complete();
     test_timeout_tx_delayed();
     test_timeout_rx_delayed();
-    /* printf("stuck? %zu\r", i++); */
+    /* printf("stuck? %zu\n", i++); */
     /* fflush(stdout); */
     /* } */
 

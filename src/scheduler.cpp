@@ -215,13 +215,10 @@ void Scheduler::wait( Context * ctx ) noexcept
     resume( std::addressof( data ) );
 }
 
-void Scheduler::wait( std::unique_lock< Spinlock > & splk, bool lock ) noexcept
+void Scheduler::wait( std::unique_lock< Spinlock > & splk ) noexcept
 {
     CtxSwitchData data{ std::addressof( splk ) };
     resume( std::addressof( data ) );
-    if ( lock ) {
-        splk.lock();
-    }
 }
 
 bool Scheduler::wait_until( TimePointT const & time_point ) noexcept
@@ -245,7 +242,7 @@ bool Scheduler::wait_until( TimePointT const & time_point, std::unique_lock< Spi
     return ret;
 }
 
-void Scheduler::alt_wait( Alt * alt, std::unique_lock< Spinlock > & splk, bool lock ) noexcept
+void Scheduler::alt_wait( Alt * alt, std::unique_lock< Spinlock > & splk ) noexcept
 {
     BOOST_ASSERT(   alt != nullptr );
     BOOST_ASSERT(   alt->ctx_ == Scheduler::running() );
@@ -273,10 +270,6 @@ void Scheduler::alt_wait( Alt * alt, std::unique_lock< Spinlock > & splk, bool l
     alt_ctx->time_point_ = TimePointT::max();
     if ( alt_ctx->is_linked< hook::Sleep >() ) {
         alt_ctx->unlink< hook::Sleep >();
-    }
-
-    if ( lock ) {
-        splk.lock();
     }
 }
 

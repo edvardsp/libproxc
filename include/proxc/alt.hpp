@@ -21,6 +21,7 @@
 #include <proxc/spinlock.hpp>
 #include <proxc/detail/delegate.hpp>
 #include <proxc/alt/sync.hpp>
+#include <proxc/alt/state.hpp>
 #include <proxc/alt/choice_base.hpp>
 #include <proxc/alt/choice_send.hpp>
 #include <proxc/alt/choice_recv.hpp>
@@ -55,17 +56,11 @@ private:
     using TimePointT = Context::TimePointT;
     using TimerFn = detail::delegate< void( void ) >;
 
-    enum class State
-    {
-        Checking,
-        Waiting,
-        Done,
-    };
-
-    std::atomic< State >    state_{ State::Checking };
+    std::atomic< alt::State >    state_{ alt::State::Checking };
 
     std::vector< ChoicePtr >    choices_{};
 
+    TimePointT      tp_start_{ ClockT::now() };
     TimePointT      time_point_{ TimePointT::max() };
     TimerFn         timer_fn_{};
 
@@ -227,7 +222,7 @@ public:
 private:
     bool select_0();
     bool select_1( ChoiceT * ) noexcept;
-    bool select_n( std::deque< ChoiceT * > & ) noexcept;
+    bool select_n( std::vector< ChoiceT * > & ) noexcept;
 
     bool try_select( ChoiceT * ) noexcept;
     bool try_alt_select( ChoiceT * ) noexcept;

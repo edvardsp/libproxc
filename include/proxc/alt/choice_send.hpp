@@ -68,9 +68,14 @@ public:
         return tx_.alt_ready();
     }
 
-    bool try_complete() noexcept
+    Result try_complete() noexcept
     {
-        return tx_.alt_send() == channel::AltResult::Ok;
+        auto res = tx_.alt_send();
+        switch ( res ) {
+        case channel::AltResult::Ok:       return Result::Ok;
+        case channel::AltResult::TryLater: return Result::TryLater;
+        default:                           return Result::Failed;
+        }
     }
 
     void run_func() const noexcept
