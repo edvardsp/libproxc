@@ -1,3 +1,26 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) [2017] [Edvard S. Pettersen] <edvard.pettersen@gmail.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 #include <atomic>
 #include <condition_variable>
@@ -182,7 +205,6 @@ Scheduler::~Scheduler()
 
     BOOST_ASSERT( work_queue_.empty() );
     BOOST_ASSERT( sleep_queue_.empty() );
-    BOOST_ASSERT( alt_sleep_queue_.empty() );
     BOOST_ASSERT( terminated_queue_.empty() );
 }
 
@@ -252,7 +274,6 @@ void Scheduler::alt_wait( Alt * alt, std::unique_lock< Spinlock > & splk ) noexc
     BOOST_ASSERT(   alt_ctx->is_type( Context::Type::Process ) );
     BOOST_ASSERT( ! alt_ctx->is_linked< hook::Ready >() );
     BOOST_ASSERT( ! alt_ctx->is_linked< hook::Sleep >() );
-    BOOST_ASSERT( ! alt_ctx->is_linked< hook::AltSleep >() );
     BOOST_ASSERT( ! alt_ctx->is_linked< hook::Terminated >() );
 
     if ( alt->time_point_ < TimePointT::max() ) {
@@ -288,8 +309,7 @@ void Scheduler::terminate( Context * ctx ) noexcept
     BOOST_ASSERT( ctx != nullptr );
     BOOST_ASSERT( ctx == Scheduler::running() );
 
-    // FIXME: is_type( Dynamic ) instead?
-    BOOST_ASSERT(   ctx->is_type( Context::Type::Work ) );
+    BOOST_ASSERT(   ctx->is_type( Context::Type::Dynamic ) );
     BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Sleep >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
@@ -318,9 +338,6 @@ void Scheduler::schedule_local_( Context * ctx ) noexcept
 
     if ( ctx->is_linked< hook::Sleep >() ) {
         ctx->unlink< hook::Sleep >();
-    }
-    if ( ctx->is_linked< hook::AltSleep >() ) {
-        ctx->unlink< hook::AltSleep >();
     }
 
     policy_->enqueue( ctx );
@@ -351,7 +368,6 @@ void Scheduler::schedule( Context * ctx ) noexcept
     BOOST_ASSERT( ctx != nullptr );
     BOOST_ASSERT( ctx->scheduler_ != nullptr );
 
-    // FIXME: synchronize this?
     if ( ctx->scheduler_ == this ) {
         schedule_local_( ctx );
     } else {
@@ -362,8 +378,7 @@ void Scheduler::schedule( Context * ctx ) noexcept
 void Scheduler::attach( Context * ctx ) noexcept
 {
     BOOST_ASSERT(   ctx != nullptr );
-    // FIXME: is_type( Dynamic ) instead?
-    BOOST_ASSERT(   ctx->is_type( Context::Type::Work ) );
+    BOOST_ASSERT(   ctx->is_type( Context::Type::Dynamic ) );
     BOOST_ASSERT( ! ctx->is_linked< hook::Work >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
@@ -378,8 +393,7 @@ void Scheduler::attach( Context * ctx ) noexcept
 void Scheduler::detach( Context * ctx ) noexcept
 {
     BOOST_ASSERT( ctx != nullptr );
-    // FIXME: is_type( Dynamic ) instead?
-    BOOST_ASSERT(   ctx->is_type( Context::Type::Work ) );
+    BOOST_ASSERT(   ctx->is_type( Context::Type::Dynamic ) );
     BOOST_ASSERT(   ctx->is_linked< hook::Work >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
@@ -394,8 +408,7 @@ void Scheduler::detach( Context * ctx ) noexcept
 void Scheduler::commit( Context * ctx ) noexcept
 {
     BOOST_ASSERT(   ctx != nullptr );
-    // FIXME: is_type( Dynamic ) instead?
-    BOOST_ASSERT(   ctx->is_type( Context::Type::Work ) );
+    BOOST_ASSERT(   ctx->is_type( Context::Type::Dynamic ) );
     BOOST_ASSERT( ! ctx->is_linked< hook::Work >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
@@ -414,7 +427,6 @@ void Scheduler::yield() noexcept
     BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Sleep >() );
-    BOOST_ASSERT( ! ctx->is_linked< hook::AltSleep >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
 
     auto next = policy_->pick_next();
@@ -472,10 +484,6 @@ void Scheduler::wakeup_sleep() noexcept
         BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
         BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
 
-        if ( ctx->mpsc_next_.load( std::memory_order_acquire ) ) {
-            std::cout << "??" << std::endl;
-        }
-
         // Keep advancing the queue if deadline is reached,
         // break if not.
         if ( ctx->time_point_ > now ) {
@@ -484,26 +492,6 @@ void Scheduler::wakeup_sleep() noexcept
         sleep_it = sleep_queue_.erase( sleep_it );
         ctx->time_point_ = TimePointT::max();
         if ( ctx->alt_ == nullptr || ctx->alt_->try_timeout() ) {
-            schedule( ctx );
-        }
-    }
-    auto alt_sleep_it = alt_sleep_queue_.begin();
-    while ( alt_sleep_it != alt_sleep_queue_.end() ) {
-        auto ctx = &( *alt_sleep_it );
-
-        BOOST_ASSERT(   ctx->is_type( Context::Type::Process ) );
-        BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
-        BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
-        BOOST_ASSERT(   ctx->alt_ != nullptr );
-
-        // Keep advancing the queue if deadline is reached,
-        // break if not.
-        if ( ctx->time_point_ > now ) {
-            break;
-        }
-        alt_sleep_it = alt_sleep_queue_.erase( alt_sleep_it );
-        ctx->time_point_ = TimePointT::max();
-        if ( ctx->alt_->try_timeout() ) {
             schedule( ctx );
         }
     }
@@ -541,15 +529,13 @@ void Scheduler::cleanup_terminated() noexcept
         auto ctx = & terminated_queue_.front();
         terminated_queue_.pop_front();
 
-        // FIXME: is_type( Dynamic ) instead?
-        BOOST_ASSERT(   ctx->is_type( Context::Type::Work ) );
+        BOOST_ASSERT(   ctx->is_type( Context::Type::Dynamic ) );
         BOOST_ASSERT( ! ctx->is_type( Context::Type::Static ) );
         BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
         BOOST_ASSERT( ! ctx->is_linked< hook::Work >() );
         BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
         BOOST_ASSERT( ! ctx->is_linked< hook::Sleep >() );
 
-        // FIXME: might do a more reliable cleanup here.
         intrusive_ptr_release( ctx );
     }
 }
@@ -569,10 +555,6 @@ void Scheduler::print_debug() noexcept
     }
     std::cout << "  Sleep Queue:" << std::endl;
     for ( auto& ctx : sleep_queue_ ) {
-        std::cout << "    | " << ctx.get_id() << std::endl;
-    }
-    std::cout << "  AltSleep Queue:" << std::endl;
-    for ( auto& ctx : alt_sleep_queue_ ) {
         std::cout << "    | " << ctx.get_id() << std::endl;
     }
     std::cout << "  Terminated Queue:" << std::endl;

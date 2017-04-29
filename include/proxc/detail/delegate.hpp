@@ -1,6 +1,8 @@
 
-// All thanks to http://codereview.stackexchange.com/questions/14730/impossibly-fast-delegate-in-c11
-// for this C++11 implementation of fast delegates.
+// All thanks to 
+// http://codereview.stackexchange.com/questions/14730/impossibly-fast-delegate-in-c11
+// https://www.codeproject.com/Articles/11015/The-Impossibly-Fast-C-Delegates
+// for this C++11 implementation of fast delegates. See last link for appropriate license.
 
 #pragma once
 
