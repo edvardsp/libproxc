@@ -2,7 +2,6 @@
 #pragma once
 
 #include <atomic>
-#include <iostream>
 #include <memory>
 
 #include <proxc/config.hpp>

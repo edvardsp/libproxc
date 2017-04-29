@@ -1,8 +1,6 @@
 
 #pragma once
 
-#include <iostream>
-
 #include <atomic>
 #include <chrono>
 #include <mutex>
@@ -153,7 +151,6 @@ template<typename T>
 void ChannelImpl< T >::close() noexcept
 {
     std::unique_lock< Spinlock > lk{ splk_ };
-    /* std::cout << "chan closing\n"; */
     closed_.store( true, std::memory_order_release );
     EndT * tx = tx_end_.exchange( nullptr, std::memory_order_acq_rel );
     if ( tx != nullptr ) {
@@ -161,7 +158,6 @@ void ChannelImpl< T >::close() noexcept
         if ( alt_choice != nullptr ) {
             alt_choice->maybe_wakeup();
         } else {
-            /* std::cout << "closing: waking up tx\n"; */
             Scheduler::self()->schedule( tx->ctx_ );
         }
     }
@@ -171,7 +167,6 @@ void ChannelImpl< T >::close() noexcept
         if ( alt_choice != nullptr ) {
             alt_choice->maybe_wakeup();
         } else {
-            /* std::cout << "closing: waking up rx\n"; */
             Scheduler::self()->schedule( rx->ctx_ );
         }
     }
@@ -208,15 +203,12 @@ OpResult ChannelImpl< T >::send( EndT & tx ) noexcept
             rx->item_ = std::move( tx.item_ );
             rx_consumed_.store( true, std::memory_order_release );
             Scheduler::self()->schedule( rx->ctx_ );
-            /* std::cout << "tx consumed, moving on\n"; */
             return OpResult::Ok;
         }
     }
 
     tx_end_.store( std::addressof( tx ), std::memory_order_release );
-    /* std::cout << "tx waiting\n"; */
     Scheduler::self()->wait( lk );
-    /* std::cout << "tx wokeup\n"; */
     return ( tx_consumed_.exchange( false, std::memory_order_acq_rel ) )
         ? OpResult::Ok
         : OpResult::Closed ;
@@ -241,15 +233,12 @@ OpResult ChannelImpl< T >::recv( EndT & rx ) noexcept
             rx.item_ = std::move( tx->item_ );
             tx_consumed_.store( true, std::memory_order_release );
             Scheduler::self()->schedule( tx->ctx_ );
-            /* std::cout << "rx consumed, moving on\n"; */
             return OpResult::Ok;
         }
     }
 
     rx_end_.store( std::addressof( rx ), std::memory_order_release );
-    /* std::cout << "rx waiting\n"; */
     Scheduler::self()->wait( lk );
-    /* std::cout << "rx wokeup\n"; */
     return ( rx_consumed_.exchange( false, std::memory_order_acq_rel ) )
         ? OpResult::Ok
         : OpResult::Closed ;
