@@ -67,6 +67,11 @@ public:
             }
 
             if ( State::Locked == state_.exchange( State::Locked, std::memory_order_acquire ) ) {
+                // this way of storing thread local random number generators causes segmentation
+                // faults spuriously when running on multi-core. No idea why.
+                // Fix: let the random number generator be class member instead. Not ideal,
+                // but at least it doesn't cause segmentation faults.
+                /* static thread_local std::minstd_rand rng{ std::random_device{}() }; */
                 std::uniform_int_distribution< std::size_t > distr
                     { 0, static_cast< std::size_t >( 1 ) << n_collisions };
                 const std::size_t z = distr( rng );

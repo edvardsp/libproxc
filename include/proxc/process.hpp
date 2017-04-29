@@ -150,5 +150,26 @@ Process proc_for( Input first, Input last, Fns && ... fns )
     };
 }
 
+template< typename InputIt
+        , typename = std::enable_if_t<
+            std::is_same<
+                Process,
+                typename std::decay<
+                    typename std::iterator_traits< InputIt>::value_type
+                >::type
+            >::value
+        > >
+Process proc_for( InputIt first, InputIt last )
+{
+    return Process{
+        [first,last]{
+            std::for_each( first, last,
+                []( auto& proc ){ proc.launch(); } );
+            std::for_each( first, last,
+                []( auto& proc ){ proc.join(); } );
+        }
+    };
+}
+
 PROXC_NAMESPACE_END
 

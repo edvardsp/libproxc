@@ -32,6 +32,18 @@ TxVec< T > get_tx( std::tuple< TxVec< T >, RxVec< T > > & tpl )
 }
 
 template<typename T>
+Tx< T > get_tx_ind( TxVec< T > & tx_vec, std::size_t ind )
+{
+    return std::move( tx_vec[ ind ] );
+}
+
+template<typename T>
+Tx< T > get_tx_ind( std::tuple< TxVec< T >, RxVec< T > > & tpl, std::size_t ind )
+{
+    return std::move( std::get< 0 >( tpl )[ ind ] );
+}
+
+template<typename T>
 Rx< T > get_rx( std::tuple< Tx< T >, Rx< T > > & tpl )
 {
     return std::move( std::get< 1 >( tpl ) );
@@ -41,6 +53,18 @@ template<typename T>
 RxVec< T > get_rx( std::tuple< TxVec< T >, RxVec< T > > & tpl )
 {
     return std::move( std::get< 1 >( tpl ) );
+}
+
+template<typename T>
+Rx< T > get_rx_ind( RxVec< T > & rx_vec, std::size_t ind )
+{
+    return std::move( rx_vec[ ind ] );
+}
+
+template<typename T>
+Rx< T > get_rx_ind( std::tuple< TxVec< T >, RxVec< T > > & tpl, std::size_t ind )
+{
+    return std::move( std::get< 1 >( tpl )[ ind ] );
 }
 
 template<typename T>

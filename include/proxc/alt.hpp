@@ -195,6 +195,16 @@ public:
     Alt & recv_for( RxIt rx_first, RxIt rx_last,
                     RxFn< EndT< RxIt > > fn = RxFn< EndT< RxIt > >{} ) noexcept;
 
+    // replicated recv choice with guard
+    template< typename RxIt
+            , typename = std::enable_if_t<
+                traits::is_rx_iterator< RxIt >::value
+            > >
+    PROXC_WARN_UNUSED
+    Alt & recv_for_if( bool guard,
+                       RxIt rx_first, RxIt rx_last,
+                       RxFn< EndT< RxIt > > fn = RxFn< EndT< RxIt > >{} ) noexcept;
+
     // timeout without guard
     template< typename Timer
             , typename = typename std::enable_if<
@@ -428,6 +438,20 @@ Alt & Alt::recv_for(
         (void)recv( *rx_it, fn );
     }
     return *this;
+}
+
+// replicated recv choice with guard
+template<typename RxIt, typename>
+Alt & Alt::recv_for_if(
+    bool guard,
+    RxIt rx_first, RxIt rx_last,
+    RxFn< EndT< RxIt > > fn
+) noexcept
+{
+    return ( guard )
+        ? recv_for( rx_first, rx_last,
+                    std::move( fn ) )
+        : *this ;
 }
 
 // timeout without guard
