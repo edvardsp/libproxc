@@ -1,9 +1,9 @@
-# ProXC - A CSP-inspired concurrency library for C 
+# ProXC - A CSP-inspired concurrency library for C
 
-This is a library for C which enables Communicating Sequential Processes (CSP) like structuring of your code. 
+This is a library for C which enables Communicating Sequential Processes (CSP) like structuring of your code.
 Programming languages such as Occam and XC utilizes and builds around this very paradigm, but sadly is hardware locked.
 Many good CSP libraries for general purpose programming languages has been made, including both for Java (JCSP) and C++ (C++CSP2), but not for C.
-There does exists plenty of libraries for C which implements many features from CSP, such as coroutines, channels, etc., but not all in a single library. 
+There does exists plenty of libraries for C which implements many features from CSP, such as coroutines, channels, etc., but not all in a single library.
 
 ProXC aims to do this, and with no macro magic!
 
