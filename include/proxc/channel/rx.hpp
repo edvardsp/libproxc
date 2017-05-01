@@ -31,8 +31,8 @@
 
 #include <proxc/config.hpp>
 
-#include <proxc/context.hpp>
-#include <proxc/scheduler.hpp>
+#include <proxc/runtime/context.hpp>
+#include <proxc/runtime/scheduler.hpp>
 #include <proxc/channel/sync.hpp>
 
 PROXC_NAMESPACE_BEGIN
@@ -112,7 +112,7 @@ public:
     // normal recv operations
     OpResult recv( ItemT & item ) noexcept
     {
-        EndT rx{ Scheduler::running(), item };
+        EndT rx{ runtime::Scheduler::running(), item };
         return chan_->recv( rx );
     }
 
@@ -122,7 +122,7 @@ public:
                          std::chrono::time_point< Clock, Dur > const & time_point
     ) noexcept
     {
-        EndT rx{ Scheduler::running(), item };
+        EndT rx{ runtime::Scheduler::running(), item };
         return chan_->recv_until( rx, time_point );
     }
 
@@ -258,6 +258,7 @@ end( Rx< ItemT > & )
 
 } // namespace channel
 
+namespace detail {
 namespace traits {
 
 template<typename Rx>
@@ -282,5 +283,6 @@ struct is_rx_iterator
 {};
 
 } // namespace traits
+} // namespace detail
 PROXC_NAMESPACE_END
 

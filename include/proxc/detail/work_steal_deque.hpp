@@ -24,16 +24,18 @@
 
 #pragma once
 
-#include <proxc/config.hpp>
-
-#include <proxc/detail/circular_array.hpp>
-
 #include <atomic>
 #include <memory>
 #include <utility>
 
+#include <proxc/config.hpp>
+
+#include <proxc/detail/circular_array.hpp>
+
 PROXC_NAMESPACE_BEGIN
 namespace detail {
+
+namespace {
 
 constexpr std::ptrdiff_t to_signed( std::size_t x ) noexcept
 {
@@ -48,7 +50,7 @@ constexpr std::ptrdiff_t to_signed( std::size_t x ) noexcept
     }
 }
 
-} // namespace detail
+} // namespace **
 
 // Chase-Lev work-steal deque
 //
@@ -120,8 +122,8 @@ public:
         auto array = array_.load( std::memory_order_relaxed );
 
         // Grow array if full
-        if (   detail::to_signed( bottom - top ) 
-             > detail::to_signed( array->size() - 1 ) ) {
+        if (   to_signed( bottom - top )
+             > to_signed( array->size() - 1 ) ) {
             auto new_array = array->grow( top, bottom );
             std::swap( array, new_array );
             array_.store( array, std::memory_order_release );
@@ -141,7 +143,7 @@ public:
         std::atomic_thread_fence( std::memory_order_seq_cst );
         std::size_t top = top_.load( std::memory_order_relaxed );
 
-        if ( detail::to_signed( top - bottom ) <= 0 ) {
+        if ( to_signed( top - bottom ) <= 0 ) {
             // non-empty queue
             if ( top == bottom ) {
                 // last item in queue
@@ -178,7 +180,7 @@ public:
             std::size_t bottom = bottom_.load( std::memory_order_acquire );
 
             // Exit if deque is empty
-            if ( detail::to_signed( bottom - top ) <= 0 ) {
+            if ( to_signed( bottom - top ) <= 0 ) {
                 return nullptr;
             }
 
@@ -199,5 +201,6 @@ public:
     }
 };
 
+} // namespace detail
 PROXC_NAMESPACE_END
 

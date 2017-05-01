@@ -27,7 +27,7 @@
 #include <vector>
 
 #include <proxc/config.hpp>
-
+#include <proxc.hpp>
 #include <proxc/detail/circular_array.hpp>
 
 #include "setup.hpp"

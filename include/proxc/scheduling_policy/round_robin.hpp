@@ -30,8 +30,9 @@
 
 #include <proxc/config.hpp>
 
-#include <proxc/context.hpp>
-#include <proxc/scheduler.hpp>
+#include <proxc/runtime/context.hpp>
+#include <proxc/runtime/scheduler.hpp>
+
 #include <proxc/scheduling_policy/policy_base.hpp>
 
 PROXC_NAMESPACE_BEGIN
@@ -43,10 +44,10 @@ template<typename T>
 class RoundRobinPolicy : public PolicyBase<T>
 {
 private:
-    Scheduler::ReadyQueue      ready_queue_{};
-    std::mutex                 mtx_{};
-    std::condition_variable    cnd_{};
-    bool                       flag_{ false };
+    runtime::Scheduler::ReadyQueue      ready_queue_{};
+    std::mutex                          mtx_{};
+    std::condition_variable             cnd_{};
+    bool                                flag_{ false };
 
 public:
     using TimePointT = typename PolicyBase<T>::TimePointT;
@@ -69,7 +70,7 @@ public:
 
 } // namespace detail
 
-using RoundRobin = detail::RoundRobinPolicy<Context>;
+using RoundRobin = detail::RoundRobinPolicy< runtime::Context >;
 
 } // namespace scheduling_policy
 

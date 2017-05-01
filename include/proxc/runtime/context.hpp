@@ -25,17 +25,16 @@
 #pragma once
 
 #include <chrono>
-#include <functional>
 #include <tuple>
 #include <utility>
 
 #include <proxc/config.hpp>
 
-#include <proxc/spinlock.hpp>
-#include <proxc/traits.hpp>
 #include <proxc/detail/delegate.hpp>
 #include <proxc/detail/hook.hpp>
 #include <proxc/detail/queue.hpp>
+#include <proxc/detail/spinlock.hpp>
+#include <proxc/detail/traits.hpp>
 
 #include <boost/assert.hpp>
 #include <boost/intrusive_ptr.hpp>
@@ -46,12 +45,12 @@ PROXC_NAMESPACE_BEGIN
 namespace hook = detail::hook;
 
 // forward declaration
-class Scheduler;
 class Alt;
 
-namespace detail {
+namespace runtime {
 
-} // namespace detail
+// forward declaration
+class Scheduler;
 
 namespace context {
 
@@ -111,7 +110,6 @@ public:
     using ContextT = boost::context::execution_context;
     using TimePointT = std::chrono::steady_clock::time_point;
 
-    using SchedulerFn = std::function< void( void * ) >;
     using EntryFn     = detail::delegate< void( void * ) >;
 
 private:
@@ -133,7 +131,7 @@ public:
     TimePointT     time_point_{ TimePointT::max() };
     Alt *             alt_{ nullptr };
 
-    Spinlock    splk_;
+    detail::Spinlock    splk_;
 
     // Intrusive hooks
     hook::Ready         ready_{};
@@ -224,5 +222,6 @@ void Context::unlink() noexcept
     get_hook_< Hook >().unlink();
 }
 
+} // namespace runtime
 PROXC_NAMESPACE_END
 

@@ -30,9 +30,9 @@
 
 #include <proxc/config.hpp>
 
-#include <proxc/context.hpp>
 #include <proxc/process.hpp>
-#include <proxc/scheduler.hpp>
+#include <proxc/runtime/context.hpp>
+#include <proxc/runtime/scheduler.hpp>
 
 #include <boost/intrusive_ptr.hpp>
 #include <boost/range/irange.hpp>
@@ -97,7 +97,7 @@ void parallel(Procs && ... procs)
 {
     static_assert( detail::are_procs< Procs ... >::value,
         "Supplied arguments must be of type proxc::Process" );
-    static_assert( traits::are_move_assigneable< Procs ... >::value,
+    static_assert( detail::traits::are_move_assigneable< Procs ... >::value,
         "Supplied processes must be move assigneable" );
     detail::parallel_impl( std::forward< Procs >( procs ) ... );
 }

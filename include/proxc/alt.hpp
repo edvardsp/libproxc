@@ -1,18 +1,18 @@
-/* 
+/*
  * MIT License
- * 
+ *
  * Copyright (c) [2017] [Edvard S. Pettersen] <edvard.pettersen@gmail.com>
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -37,24 +37,21 @@
 
 #include <proxc/config.hpp>
 
-#include <proxc/context.hpp>
 #include <proxc/channel.hpp>
 #include <proxc/timer.hpp>
 #include <proxc/exceptions.hpp>
-#include <proxc/spinlock.hpp>
-#include <proxc/detail/delegate.hpp>
+#include <proxc/runtime/context.hpp>
 #include <proxc/alt/sync.hpp>
 #include <proxc/alt/state.hpp>
 #include <proxc/alt/choice_base.hpp>
 #include <proxc/alt/choice_send.hpp>
 #include <proxc/alt/choice_recv.hpp>
+#include <proxc/detail/delegate.hpp>
+#include <proxc/detail/spinlock.hpp>
 
 #include <boost/assert.hpp>
 
 PROXC_NAMESPACE_BEGIN
-namespace detail {
-
-} // namespace detail
 
 class Alt
 {
@@ -63,6 +60,7 @@ private:
     using ChoicePtr = std::unique_ptr< ChoiceT >;
 
     using SyncT = alt::Sync;
+    using LockT = detail::Spinlock;
 
     using ChannelId = channel::detail::ChannelId;
 
@@ -76,19 +74,19 @@ private:
     template<typename Rx>
     using RxFn = detail::delegate< void( ItemT< Rx > ) >;
 
-    using TimePointT = Context::TimePointT;
+    using TimePointT = runtime::Context::TimePointT;
     using TimerFn = detail::delegate< void( void ) >;
 
     std::atomic< alt::State >    state_{ alt::State::Checking };
 
     std::vector< ChoicePtr >    choices_{};
 
-    TimePointT      tp_start_{ ClockT::now() };
+    TimePointT      tp_start_{ runtime::ClockT::now() };
     TimePointT      time_point_{ TimePointT::max() };
     TimerFn         timer_fn_{};
 
-    Context *    ctx_;
-    Spinlock     splk_;
+    runtime::Context *    ctx_;
+    LockT                 splk_;
 
     alignas(cache_alignment) std::atomic_flag            select_flag_;
     alignas(cache_alignment) std::atomic< ChoiceT * >    selected_{ nullptr };
@@ -118,7 +116,7 @@ private:
     template<typename U>
     friend class channel::detail::ChannelImpl;
     friend class alt::ChoiceBase;
-    friend class Scheduler;
+    friend class runtime::Scheduler;
 
 public:
     Alt();
@@ -135,7 +133,7 @@ public:
     // send choice without guard
     template< typename Tx
             , typename = std::enable_if_t<
-                traits::is_tx< Tx >::value
+                detail::traits::is_tx< Tx >::value
             > >
     PROXC_WARN_UNUSED
     Alt & send( Tx & tx,
@@ -144,7 +142,7 @@ public:
 
     template< typename Tx
             , typename = std::enable_if_t<
-                traits::is_tx< Tx >::value
+                detail::traits::is_tx< Tx >::value
             > >
     PROXC_WARN_UNUSED
     Alt & send( Tx & tx,
@@ -154,7 +152,7 @@ public:
     // send choice with guard
     template< typename Tx
             , typename = std::enable_if_t<
-                traits::is_tx< Tx >::value
+                detail::traits::is_tx< Tx >::value
             > >
     PROXC_WARN_UNUSED
     Alt & send_if( bool guard,
@@ -164,7 +162,7 @@ public:
 
     template< typename Tx
             , typename = std::enable_if_t<
-                traits::is_tx< Tx >::value
+                detail::traits::is_tx< Tx >::value
             > >
     PROXC_WARN_UNUSED
     Alt & send_if( bool guard,
@@ -175,8 +173,8 @@ public:
     // replicated send choice over item iterator
     template< typename TxIt, typename ItemIt
             , typename = std::enable_if_t<
-                traits::is_tx_iterator< TxIt >::value &&
-                traits::is_inputiterator< ItemIt >::value
+                detail::traits::is_tx_iterator< TxIt >::value &&
+                detail::traits::is_inputiterator< ItemIt >::value
             > >
     PROXC_WARN_UNUSED
     Alt & send_for( TxIt tx_first, TxIt tx_last,
@@ -186,7 +184,7 @@ public:
     // replicated send choice over single item
     template< typename TxIt
             , typename = std::enable_if_t<
-                traits::is_tx_iterator< TxIt >::value
+                detail::traits::is_tx_iterator< TxIt >::value
             > >
     PROXC_WARN_UNUSED
     Alt & send_for( TxIt tx_first, TxIt tx_last,
@@ -196,7 +194,7 @@ public:
     // recv choice without guard
     template< typename Rx
             , typename = std::enable_if_t<
-                traits::is_rx< Rx >::value
+                detail::traits::is_rx< Rx >::value
             > >
     PROXC_WARN_UNUSED
     Alt & recv( Rx & rx,
@@ -205,7 +203,7 @@ public:
     // recv choice with guard
     template< typename Rx
             , typename = std::enable_if_t<
-                traits::is_rx< Rx >::value
+                detail::traits::is_rx< Rx >::value
             > >
     PROXC_WARN_UNUSED
     Alt & recv_if( bool guard,
@@ -215,7 +213,7 @@ public:
     // replicated recv choice
     template< typename RxIt
             , typename = std::enable_if_t<
-                traits::is_rx_iterator< RxIt >::value
+                detail::traits::is_rx_iterator< RxIt >::value
             > >
     PROXC_WARN_UNUSED
     Alt & recv_for( RxIt rx_first, RxIt rx_last,
@@ -224,7 +222,7 @@ public:
     // replicated recv choice with guard
     template< typename RxIt
             , typename = std::enable_if_t<
-                traits::is_rx_iterator< RxIt >::value
+                detail::traits::is_rx_iterator< RxIt >::value
             > >
     PROXC_WARN_UNUSED
     Alt & recv_for_if( bool guard,
@@ -234,7 +232,7 @@ public:
     // timeout without guard
     template< typename Timer
             , typename = typename std::enable_if<
-                traits::is_timer< Timer >::value
+                detail::traits::is_timer< Timer >::value
             >::type >
     PROXC_WARN_UNUSED
     Alt & timeout( Timer const &,
@@ -243,7 +241,7 @@ public:
     // timeout with guard
     template< typename Timer
             , typename = typename std::enable_if<
-                traits::is_timer< Timer >::value
+                detail::traits::is_timer< Timer >::value
             >::type >
     PROXC_WARN_UNUSED
     Alt & timeout_if( bool,

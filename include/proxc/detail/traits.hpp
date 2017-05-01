@@ -31,10 +31,10 @@
 #include <proxc/config.hpp>
 
 PROXC_NAMESPACE_BEGIN
-
+namespace detail {
 namespace traits {
 
-namespace detail {
+namespace {
 
 template<typename T>
 using always_void = void;
@@ -49,11 +49,11 @@ struct is_callable_impl< Fn(Args ...), always_void< std::result_of_t< Fn(Args ..
     : std::true_type
 {};
 
-} // namespace detail
+} // namespace **
 
 template<typename Expr>
 struct is_callable
-    : detail::is_callable_impl< Expr >
+    : is_callable_impl< Expr >
 {};
 
 template<typename Arg, typename ...>
@@ -101,7 +101,7 @@ decay_copy(T && t)
 }
 
 } // namespace traits
-
+} // namespace detail
 PROXC_NAMESPACE_END
 
 

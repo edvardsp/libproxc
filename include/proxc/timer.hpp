@@ -145,6 +145,7 @@ public:
 
 } // namespace timer
 
+namespace detail {
 namespace traits {
 
 template<typename Timer>
@@ -159,6 +160,7 @@ struct is_timer
 {};
 
 } // namespace traits
+} // namespace detail
 
 PROXC_NAMESPACE_END
 

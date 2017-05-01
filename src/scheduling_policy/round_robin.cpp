@@ -24,8 +24,11 @@
 
 #include <proxc/config.hpp>
 
-#include <proxc/context.hpp>
+#include <proxc/runtime/context.hpp>
+#include <proxc/runtime/scheduler.hpp>
+
 #include <proxc/scheduling_policy/round_robin.hpp>
+
 #include <proxc/detail/hook.hpp>
 
 #include <boost/assert.hpp>
@@ -37,16 +40,16 @@ namespace detail {
 namespace hook = proxc::detail::hook;
 
 template<>
-void RoundRobin::enqueue(Context * ctx) noexcept
+void RoundRobin::enqueue( runtime::Context * ctx ) noexcept
 {
     BOOST_ASSERT(ctx != nullptr);
     ctx->link(ready_queue_);
 }
 
 template<>
-Context * RoundRobin::pick_next() noexcept
+runtime::Context * RoundRobin::pick_next() noexcept
 {
-    Context * next = nullptr;
+    runtime::Context * next = nullptr;
     if ( ! ready_queue_.empty() ) {
         next = &ready_queue_.front();
         ready_queue_.pop_front();

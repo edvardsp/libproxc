@@ -25,7 +25,7 @@
 #include <proxc/config.hpp>
 
 #include <proxc/process.hpp>
-#include <proxc/scheduler.hpp>
+#include <proxc/runtime/scheduler.hpp>
 
 PROXC_NAMESPACE_BEGIN
 
@@ -65,12 +65,12 @@ auto Process::get_id() const noexcept
 
 void Process::launch() noexcept
 {
-    Scheduler::self()->commit( ctx_.get() );
+    runtime::Scheduler::self()->commit( ctx_.get() );
 }
 
 void Process::join()
 {
-    Scheduler::self()->join( ctx_.get() );
+    runtime::Scheduler::self()->join( ctx_.get() );
     ctx_.reset();
 }
 

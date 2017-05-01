@@ -40,6 +40,7 @@
 #endif
 
 PROXC_NAMESPACE_BEGIN
+namespace detail {
 
 class Spinlock
 {
@@ -127,6 +128,7 @@ public:
     }
 };
 
+} // namespace detail
 PROXC_NAMESPACE_END
 
 #if defined(PROXC_COMP_CLANG)

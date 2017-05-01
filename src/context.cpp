@@ -27,14 +27,17 @@
 
 #include <proxc/config.hpp>
 
-#include <proxc/context.hpp>
+#include <proxc/runtime/context.hpp>
+#include <proxc/runtime/scheduler.hpp>
+
 #include <proxc/exceptions.hpp>
-#include <proxc/scheduler.hpp>
-#include <proxc/spinlock.hpp>
+
+#include <proxc/detail/spinlock.hpp>
 
 #include <boost/context/execution_context_v1.hpp>
 
 PROXC_NAMESPACE_BEGIN
+namespace runtime {
 
 // intrusive_ptr friend methods
 void intrusive_ptr_add_ref( Context * ctx ) noexcept
@@ -157,5 +160,6 @@ template<> detail::hook::Wait       & Context::get_hook_() noexcept { return wai
 template<> detail::hook::Sleep      & Context::get_hook_() noexcept { return sleep_; }
 template<> detail::hook::Terminated & Context::get_hook_() noexcept { return terminated_; }
 
+} // namespace runtime
 PROXC_NAMESPACE_END
 

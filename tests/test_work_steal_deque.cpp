@@ -22,10 +22,6 @@
  * SOFTWARE.
  */
 
-#include <proxc/config.hpp>
-
-#include <proxc/work_steal_deque.hpp>
-
 #include <algorithm>
 #include <chrono>
 #include <future>
@@ -33,21 +29,16 @@
 #include <tuple>
 #include <vector>
 
+#include <proxc/config.hpp>
+#include <proxc.hpp>
+#include <proxc/detail/work_steal_deque.hpp>
+
 #include "setup.hpp"
 
-
-void test_to_signed()
-{
-    std::vector<std::ptrdiff_t> ptrs{ 0, 1, 1000, -1, -1000, PTRDIFF_MIN, PTRDIFF_MAX };
-    for (auto ptr : ptrs) {
-        auto ptr_eq = static_cast<std::size_t>(ptr);
-        auto ptr_to = proxc::detail::to_signed(ptr_eq);
-        throw_assert_equ(ptr, ptr_to, "signed_to is not idempotent");
-    }
-}
+using namespace proxc;
 
 template<typename T>
-class TestObject 
+class TestObject
 {
 private:
     T m_data;
@@ -74,10 +65,10 @@ using Object = TestObject<std::size_t>;
 
 void test_reserve_capacity()
 {
-    proxc::WorkStealDeque<Object> deque;
+    detail::WorkStealDeque<Object> deque;
 
     throw_assert_equ(deque.capacity(), deque.default_capacity, "default capacity is wrong");
-    
+
     deque.reserve(deque.default_capacity - 1);
 
     throw_assert_equ(deque.capacity(), deque.default_capacity, "capacity should not have changed");
@@ -89,10 +80,10 @@ void test_reserve_capacity()
 
 void test_deque_growing()
 {
-    proxc::WorkStealDeque<Object> only_pop;
-    proxc::WorkStealDeque<Object> only_steal;
+    detail::WorkStealDeque<Object> only_pop;
+    detail::WorkStealDeque<Object> only_steal;
 
-    const auto capacity = proxc::WorkStealDeque<Object>::default_capacity;
+    const auto capacity = detail::WorkStealDeque<Object>::default_capacity;
     auto num_items = capacity * 2;
 
     for (std::size_t i = 0; i < capacity; ++i) {
@@ -135,10 +126,10 @@ void test_deque_growing()
 
 void test_deque_fill_and_deplete()
 {
-    proxc::WorkStealDeque<Object> only_pop;
-    proxc::WorkStealDeque<Object> only_steal;
+    detail::WorkStealDeque<Object> only_pop;
+    detail::WorkStealDeque<Object> only_steal;
 
-    const auto capacity  = proxc::WorkStealDeque<Object>::default_capacity;
+    const auto capacity  = detail::WorkStealDeque<Object>::default_capacity;
     const auto num_items = capacity;
 
     {
@@ -164,7 +155,7 @@ void test_deque_fill_and_deplete()
 
         auto pop_item   = only_pop.pop();
         auto steal_item = only_steal.steal();
-    
+
         throw_assert_equ(only_pop.capacity(),   capacity, "inconsistent capacity");
         throw_assert_equ(only_steal.capacity(), capacity, "inconsistent capacity");
 
@@ -189,9 +180,9 @@ void test_deque_fill_and_deplete()
     }
 }
 
-void test_single_deque_single_thread() 
+void test_single_deque_single_thread()
 {
-    proxc::WorkStealDeque<Object> deque;
+    detail::WorkStealDeque<Object> deque;
 
     {
         throw_assert(deque.is_empty(),         "should be empty");
@@ -207,7 +198,7 @@ void test_single_deque_single_thread()
     for (auto rit = values.rbegin(); rit != values.rend(); ++rit) {
         auto value = *rit;
         throw_assert( ! deque.is_empty(), "should not be empty");
-        auto item = deque.pop();                           
+        auto item = deque.pop();
         throw_assert(item != nullptr, "non-empty deque returns nullptr on pop");
         auto item_value = item->get();
         throw_assert_equ(item_value, value, "popped item does not match content");
@@ -222,7 +213,7 @@ void test_single_deque_single_thread()
 }
 
 template<typename T>
-int worker_func(typename proxc::WorkStealDeque<T> * deque)
+int worker_func(typename detail::WorkStealDeque<T> * deque)
 {
     int steals = 0;
     while ( ! deque->is_empty()) {
@@ -241,7 +232,7 @@ void test_single_deque_multiple_threads()
     const std::size_t num_items = 1000000;
 
     // populate deque
-    proxc::WorkStealDeque<Object> deque;
+    detail::WorkStealDeque<Object> deque;
     deque.reserve(num_items);
     for (std::size_t i = 0; i < num_items; i++) {
         deque.push(new Object{ i });
@@ -254,7 +245,7 @@ void test_single_deque_multiple_threads()
             std::launch::async,
             & worker_func<Object>, & deque));
     }
-    
+
     // pop from deque while it is non-empty
     int n_pops = 0;
     while ( ! deque.is_empty() ) {
@@ -276,7 +267,6 @@ void test_single_deque_multiple_threads()
 
 int main()
 {
-    test_to_signed();
     test_reserve_capacity();
     test_deque_growing();
     test_deque_fill_and_deplete();

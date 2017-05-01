@@ -27,7 +27,6 @@
 #include <vector>
 
 #include <proxc/config.hpp>
-
 #include <proxc.hpp>
 
 #include "setup.hpp"

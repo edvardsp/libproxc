@@ -25,17 +25,16 @@ install_headers(
     'proxc/alt.hpp',
     'proxc/channel.hpp',
     'proxc/config.hpp',
-    'proxc/context.hpp',
     'proxc/parallel.hpp',
     'proxc/process.hpp',
-    'proxc/scheduler.hpp',
-    'proxc/spinlock.hpp',
     'proxc/timer.hpp',
     'proxc/this_proc.hpp',
-    'proxc/traits.hpp',
     'proxc/version.hpp',
-    'proxc/work_steal_deque.hpp',
     subdir : 'proxc')
+install_headers(
+    'proxc/runtime/context.hpp',
+    'proxc/runtime/scheduler.hpp',
+    subdir : 'runtime')
 install_headers(
     'proxc/alt/state.hpp',
     'proxc/alt/sync.hpp',
@@ -63,4 +62,7 @@ install_headers(
     'proxc/detail/mpsc_queue.hpp',
     'proxc/detail/num_cpus.hpp',
     'proxc/detail/queue.hpp',
+    'proxc/detail/spinlock.hpp',
+    'proxc/detail/traits.hpp',
+    'proxc/detail/work_steal_deque.hpp',
     subdir : 'proxc/detail')

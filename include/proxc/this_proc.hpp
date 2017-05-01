@@ -28,33 +28,33 @@
 
 #include <proxc/config.hpp>
 
-#include <proxc/scheduler.hpp>
 #include <proxc/process.hpp>
+#include <proxc/runtime/scheduler.hpp>
 
 PROXC_NAMESPACE_BEGIN
 namespace this_proc {
 
 Process::Id get_id() noexcept
 {
-    return Scheduler::running()->get_id();
+    return runtime::Scheduler::running()->get_id();
 }
 
 void yield() noexcept
 {
-    Scheduler::self()->yield();
+    runtime::Scheduler::self()->yield();
 }
 
 template<typename Rep, typename Period>
 void delay_for( std::chrono::duration< Rep, Period > const & duration ) noexcept
 {
-    (void)Scheduler::self()->sleep_until(
+    (void)runtime::Scheduler::self()->sleep_until(
         std::chrono::steady_clock::now() + duration );
 }
 
 template<typename Clock, typename Dur>
 void delay_until( std::chrono::time_point< Clock, Dur > const & time_point ) noexcept
 {
-    (void)Scheduler::self()->sleep_until( time_point );
+    (void)runtime::Scheduler::self()->sleep_until( time_point );
 }
 
 } // namespace this_proc

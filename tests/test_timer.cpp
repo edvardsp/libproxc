@@ -25,6 +25,7 @@
 #include <chrono>
 #include <thread>
 
+#include <proxc/config.hpp>
 #include <proxc.hpp>
 
 #include "setup.hpp"

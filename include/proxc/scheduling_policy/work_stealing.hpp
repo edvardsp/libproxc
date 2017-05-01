@@ -31,9 +31,9 @@
 
 #include <proxc/config.hpp>
 
-#include <proxc/context.hpp>
-#include <proxc/scheduler.hpp>
-#include <proxc/work_steal_deque.hpp>
+#include <proxc/runtime/context.hpp>
+#include <proxc/runtime/scheduler.hpp>
+#include <proxc/detail/work_steal_deque.hpp>
 #include <proxc/scheduling_policy/policy_base.hpp>
 
 PROXC_NAMESPACE_BEGIN
@@ -84,8 +84,8 @@ private:
     Barrier    barrier_{};
 
     std::size_t                   id_;
-    proxc::WorkStealDeque< T >    deque_{};
-    Scheduler::ReadyQueue         ready_queue_{};
+    ::proxc::detail::WorkStealDeque< T >    deque_{};
+    runtime::Scheduler::ReadyQueue          ready_queue_{};
 
     static void init_();
 
@@ -127,7 +127,7 @@ private:
 
 } // namespace detail
 
-using WorkStealing = detail::WorkStealingPolicy<Context>;
+using WorkStealing = detail::WorkStealingPolicy< runtime::Context >;
 
 } // namespace scheduling_policy
 

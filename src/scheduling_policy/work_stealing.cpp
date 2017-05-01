@@ -29,8 +29,9 @@
 
 #include <proxc/config.hpp>
 
-#include <proxc/context.hpp>
-#include <proxc/scheduler.hpp>
+#include <proxc/runtime/context.hpp>
+#include <proxc/runtime/scheduler.hpp>
+
 #include <proxc/scheduling_policy/work_stealing.hpp>
 
 #include <proxc/detail/num_cpus.hpp>
@@ -69,7 +70,7 @@ WorkStealing::WorkStealingPolicy()
 }
 
 template<>
-Context * WorkStealing::steal() noexcept
+runtime::Context * WorkStealing::steal() noexcept
 {
     return deque_.steal();
 }
@@ -116,12 +117,12 @@ void WorkStealing::signal_stealing() noexcept
 }
 
 template<>
-void WorkStealing::enqueue(Context * ctx) noexcept
+void WorkStealing::enqueue( runtime::Context * ctx ) noexcept
 {
     BOOST_ASSERT( ctx != nullptr );
-    if ( ctx->is_type( Context::Type::Dynamic ) ) {
+    if ( ctx->is_type( runtime::Context::Type::Dynamic ) ) {
         // can be stolen
-        Scheduler::self()->detach( ctx );
+        runtime::Scheduler::self()->detach( ctx );
         deque_.push( ctx );
 
     } else {
@@ -131,14 +132,14 @@ void WorkStealing::enqueue(Context * ctx) noexcept
 }
 
 template<>
-Context * WorkStealing::pick_next() noexcept
+runtime::Context * WorkStealing::pick_next() noexcept
 {
     auto ctx = deque_.pop();
     if ( ctx != nullptr ) {
         if ( ! deque_.is_empty() ) {
             signal_stealing();
         }
-        Scheduler::self()->attach( ctx );
+        runtime::Scheduler::self()->attach( ctx );
 
     } else if ( ! ready_queue_.empty() ) {
         ctx = std::addressof( ready_queue_.front() );
@@ -147,7 +148,7 @@ Context * WorkStealing::pick_next() noexcept
     } else if ( ctx == nullptr ) {
         ctx = work_stealers_[ take_id() ]->steal();
         if ( ctx != nullptr ) {
-            Scheduler::self()->attach( ctx );
+            runtime::Scheduler::self()->attach( ctx );
         }
     }
     return ctx;

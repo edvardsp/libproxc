@@ -32,26 +32,28 @@
 
 #include <proxc/config.hpp>
 
+#include <proxc/runtime/context.hpp>
+#include <proxc/runtime/scheduler.hpp>
+
 #include <proxc/alt.hpp>
-#include <proxc/context.hpp>
 #include <proxc/exceptions.hpp>
-#include <proxc/scheduler.hpp>
 
 #include <proxc/scheduling_policy/policy_base.hpp>
 #include <proxc/scheduling_policy/round_robin.hpp>
 #include <proxc/scheduling_policy/work_stealing.hpp>
 
 #include <proxc/detail/num_cpus.hpp>
-#include <proxc/spinlock.hpp>
+#include <proxc/detail/spinlock.hpp>
 
 #include <boost/assert.hpp>
 #include <boost/intrusive_ptr.hpp>
 
 PROXC_NAMESPACE_BEGIN
+namespace runtime {
 
 namespace hook = detail::hook;
 
-namespace detail {
+namespace init {
 
 struct WaitGroup
 {
@@ -77,7 +79,7 @@ struct WaitGroup
 void multicore_scheduler_fn( WaitGroup & wg )
 {
     // this will allocated the scheduler for this thread
-    auto self = Scheduler::self();
+    auto self = ::proxc::runtime::Scheduler::self();
     // need to wait for all of the threads to finish initialize the scheduler
     wg.wait();
     self->resume();
@@ -86,23 +88,25 @@ void multicore_scheduler_fn( WaitGroup & wg )
 
 struct SchedulerInitializer
 {
-    thread_local static Scheduler *      self_;
-    thread_local static std::size_t      self_counter_;
+    thread_local static ::proxc::runtime::Scheduler *      self_;
+    thread_local static std::size_t                        self_counter_;
 
     static std::atomic< std::size_t >    sched_counter_;
     static WaitGroup                     wg_;
     static std::vector< std::thread >    thread_vec_;
-    static std::vector< Scheduler * >    sched_vec_;
+    static std::vector< ::proxc::runtime::Scheduler * >    sched_vec_;
 
-    static Spinlock                      splk_;
+    using LockT = detail::Spinlock;
+    static LockT    splk_;
 
     SchedulerInitializer()
     {
         if ( self_counter_++ == 0 ) {
             // FIXME: new alignment issues?
-            auto scheduler = new Scheduler{};
+            auto scheduler = new ::proxc::runtime::Scheduler{};
             self_ = scheduler;
-            BOOST_ASSERT( Scheduler::running()->is_type( Context::Type::Main ) );
+            BOOST_ASSERT( ::proxc::runtime::Scheduler::running()
+                ->is_type( ::proxc::runtime::Context::Type::Main ) );
 
             if ( sched_counter_++ == 0 ) {
                 auto num_sched = detail::num_cpus();
@@ -117,7 +121,7 @@ struct SchedulerInitializer
                 sched_counter_ = 0;
 
             } else {
-                std::unique_lock< Spinlock > lk{ splk_ };
+                std::unique_lock< LockT > lk{ splk_ };
                 sched_vec_.push_back( self_ );
             }
         }
@@ -135,30 +139,31 @@ struct SchedulerInitializer
                 }
             }
 
-            BOOST_ASSERT( Scheduler::running()->is_type( Context::Type::Main ) );
+            BOOST_ASSERT( ::proxc::runtime::Scheduler::running()
+                ->is_type( ::proxc::runtime::Context::Type::Main ) );
             auto scheduler = self_;
             delete scheduler;
         }
     }
 };
 
-thread_local Scheduler *   SchedulerInitializer::self_{ nullptr };
+thread_local ::proxc::runtime::Scheduler *   SchedulerInitializer::self_{ nullptr };
 thread_local std::size_t   SchedulerInitializer::self_counter_{ 0 };
 
 std::atomic< std::size_t > SchedulerInitializer::sched_counter_{ 0 };
 WaitGroup                  SchedulerInitializer::wg_{};
 std::vector< std::thread > SchedulerInitializer::thread_vec_{};
-std::vector< Scheduler * > SchedulerInitializer::sched_vec_{};
+std::vector< ::proxc::runtime::Scheduler * > SchedulerInitializer::sched_vec_{};
 
-Spinlock                   SchedulerInitializer::splk_{};
+typename SchedulerInitializer::LockT SchedulerInitializer::splk_{};
 
-} // namespace detail
+} // namespace init
 
 Scheduler * Scheduler::self() noexcept
 {
     //thread_local static boost::context::detail::activation_record_initializer ac_rec_init;
-    thread_local static detail::SchedulerInitializer sched_init;
-    return detail::SchedulerInitializer::self_;
+    thread_local static init::SchedulerInitializer sched_init;
+    return init::SchedulerInitializer::self_;
 }
 
 Context * Scheduler::running() noexcept
@@ -237,7 +242,7 @@ void Scheduler::wait( Context * ctx ) noexcept
     resume( std::addressof( data ) );
 }
 
-void Scheduler::wait( std::unique_lock< Spinlock > & splk ) noexcept
+void Scheduler::wait( std::unique_lock< LockT > & splk ) noexcept
 {
     CtxSwitchData data{ std::addressof( splk ) };
     resume( std::addressof( data ) );
@@ -254,7 +259,7 @@ bool Scheduler::wait_until( TimePointT const & time_point, Context * ctx ) noexc
     return sleep_until( time_point, std::addressof( data ) );
 }
 
-bool Scheduler::wait_until( TimePointT const & time_point, std::unique_lock< Spinlock > & splk, bool lock ) noexcept
+bool Scheduler::wait_until( TimePointT const & time_point, std::unique_lock< LockT > & splk, bool lock ) noexcept
 {
     CtxSwitchData data{ std::addressof( splk ) };
     auto ret = sleep_until( time_point, std::addressof( data ) );
@@ -264,7 +269,7 @@ bool Scheduler::wait_until( TimePointT const & time_point, std::unique_lock< Spi
     return ret;
 }
 
-void Scheduler::alt_wait( Alt * alt, std::unique_lock< Spinlock > & splk ) noexcept
+void Scheduler::alt_wait( Alt * alt, std::unique_lock< LockT > & splk ) noexcept
 {
     BOOST_ASSERT(   alt != nullptr );
     BOOST_ASSERT(   alt->ctx_ == Scheduler::running() );
@@ -315,7 +320,7 @@ void Scheduler::terminate( Context * ctx ) noexcept
     BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
 
-    std::unique_lock< Spinlock > lk{ ctx->splk_ };
+    std::unique_lock< LockT > lk{ ctx->splk_ };
 
     ctx->terminate();
     ctx->link( terminated_queue_ );
@@ -353,7 +358,7 @@ void Scheduler::schedule_remote_( Context * ctx ) noexcept
     BOOST_ASSERT( ! ctx->has_terminated() );
     BOOST_ASSERT(   ctx->scheduler_ == this );
 
-    /* std::unique_lock< Spinlock > lk{ splk_ }; */
+    /* std::unique_lock< LockT > lk{ splk_ }; */
     /* if ( ctx->is_linked< hook::Sleep >() ) { */
     /*     ctx->unlink< hook::Sleep >(); */
     /* } */
@@ -443,7 +448,7 @@ void Scheduler::join( Context * ctx ) noexcept
 
     Context * running_ctx = Scheduler::running();
 
-    std::unique_lock< Spinlock > lk{ ctx->splk_ };
+    std::unique_lock< LockT > lk{ ctx->splk_ };
     if ( ! ctx->has_terminated() ) {
         running_ctx->link( ctx->wait_queue_ );
         /* lk.unlock(); */
@@ -474,7 +479,7 @@ bool Scheduler::sleep_until( TimePointT const & time_point, CtxSwitchData * data
 
 void Scheduler::wakeup_sleep() noexcept
 {
-    std::unique_lock< Spinlock > lk{ splk_ };
+    std::unique_lock< LockT > lk{ splk_ };
     auto now = ClockT::now();
     auto sleep_it = sleep_queue_.begin();
     while ( sleep_it != sleep_queue_.end() ) {
@@ -610,13 +615,11 @@ void Scheduler::run_( void * vp )
 
         auto ctx = policy_->pick_next();
         if ( ctx != nullptr ) {
-            ++num_work;
             schedule( scheduler_ctx_.get() );
             resume( ctx );
             BOOST_ASSERT( running_ == scheduler_ctx_.get() );
 
         } else {
-            ++num_wait;
             auto sleep_it = sleep_queue_.begin();
             auto suspend_time = ( sleep_it != sleep_queue_.end() )
                 ? sleep_it->time_point_
@@ -637,5 +640,6 @@ void Scheduler::run_( void * vp )
     throw UnreachableError{};
 }
 
+} // namespace runtime
 PROXC_NAMESPACE_END
 

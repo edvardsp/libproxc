@@ -31,11 +31,11 @@
 
 #include <proxc/config.hpp>
 
-#include <proxc/context.hpp>
-#include <proxc/scheduler.hpp>
-#include <proxc/traits.hpp>
+#include <proxc/runtime/context.hpp>
+#include <proxc/runtime/scheduler.hpp>
 #include <proxc/detail/apply.hpp>
 #include <proxc/detail/delegate.hpp>
+#include <proxc/detail/traits.hpp>
 
 #include <boost/intrusive_ptr.hpp>
 #include <boost/range/irange.hpp>
@@ -49,12 +49,12 @@ PROXC_NAMESPACE_BEGIN
 class Process
 {
 private:
-    using CtxPtr = boost::intrusive_ptr< Context >;
+    using CtxPtr = boost::intrusive_ptr< runtime::Context >;
 
     CtxPtr    ctx_{};
 
 public:
-    using Id = Context::Id;
+    using Id = runtime::Context::Id;
 
     Process() = default;
 
@@ -89,7 +89,7 @@ template< typename Fn,
           typename ... Args
 >
 Process::Process( Fn && fn, Args && ... args )
-    : ctx_{ Scheduler::make_work(
+    : ctx_{ runtime::Scheduler::make_work(
         std::forward< Fn >( fn ),
         std::forward< Args >( args ) ...
     ) }
@@ -110,10 +110,10 @@ template< typename InputIt,
 >
 auto proc_for_impl( InputIt first, InputIt last, Fns && ... fns )
     -> std::enable_if_t<
-        traits::is_inputiterator< InputIt >{}
+        detail::traits::is_inputiterator< InputIt >{}
     >
 {
-    static_assert( traits::are_callable_with_arg< typename InputIt::value_type, Fns ... >{},
+    static_assert( detail::traits::are_callable_with_arg< typename InputIt::value_type, Fns ... >{},
         "Supplied functions does not have the correct function signature" );
 
     using FnT = detail::delegate< void( typename InputIt::value_type ) >;

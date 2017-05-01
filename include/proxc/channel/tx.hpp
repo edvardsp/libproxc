@@ -31,8 +31,8 @@
 
 #include <proxc/config.hpp>
 
-#include <proxc/context.hpp>
-#include <proxc/scheduler.hpp>
+#include <proxc/runtime/context.hpp>
+#include <proxc/runtime/scheduler.hpp>
 #include <proxc/channel/sync.hpp>
 
 PROXC_NAMESPACE_BEGIN
@@ -112,14 +112,14 @@ public:
     OpResult send( ItemT const & item ) noexcept
     {
         ItemT i{ item };
-        EndT tx{ Scheduler::running(), i };
+        EndT tx{ runtime::Scheduler::running(), i };
         return chan_->send( tx );
     }
 
     OpResult send( ItemT && item ) noexcept
     {
         ItemT i{ std::move( item ) };
-        EndT tx{ Scheduler::running(), i };
+        EndT tx{ runtime::Scheduler::running(), i };
         return chan_->send( tx );
     }
 
@@ -129,7 +129,7 @@ public:
                          std::chrono::time_point< Clock, Dur > const & time_point
     ) noexcept
     {
-        EndT tx{ Scheduler::running(), item };
+        EndT tx{ runtime::Scheduler::running(), item };
         return chan_->send_until( tx, time_point );
     }
 
@@ -139,7 +139,7 @@ public:
     ) noexcept
     {
         ItemT i{ item };
-        EndT tx{ Scheduler::running(), i };
+        EndT tx{ runtime::Scheduler::running(), i };
         return chan_->send_until( tx, time_point );
     }
 
@@ -197,6 +197,7 @@ private:
 
 } // namespace channel
 
+namespace detail {
 namespace traits {
 
 template<typename Tx>
@@ -221,5 +222,6 @@ struct is_tx_iterator
 {};
 
 } // namespace traits
+} // namespace detail
 PROXC_NAMESPACE_END
 

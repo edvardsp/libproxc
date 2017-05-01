@@ -32,14 +32,14 @@
 
 #include <proxc/config.hpp>
 
-#include <proxc/context.hpp>
 #include <proxc/exceptions.hpp>
-#include <proxc/traits.hpp>
+#include <proxc/runtime/context.hpp>
 #include <proxc/scheduling_policy/policy_base.hpp>
 #include <proxc/detail/apply.hpp>
 #include <proxc/detail/hook.hpp>
 #include <proxc/detail/mpsc_queue.hpp>
 #include <proxc/detail/queue.hpp>
+#include <proxc/detail/traits.hpp>
 
 #include <boost/intrusive_ptr.hpp>
 
@@ -59,12 +59,13 @@ class ChoiceBase;
 
 } // namespace alt
 
-namespace detail {
+namespace runtime {
+namespace init {
 
 // Schwarz counter
 struct SchedulerInitializer;
 
-} // detail
+} // namespace init
 
 using PolicyT = scheduling_policy::PolicyBase<Context>;
 using ClockT = PolicyT::ClockT;
@@ -72,8 +73,9 @@ using TimePointT = PolicyT::TimePointT;
 
 class Scheduler
 {
-    std::size_t num_work{ 0 };
-    std::size_t num_wait{ 0 };
+private:
+    using LockT = detail::Spinlock;
+
 public:
     using ReadyQueue = detail::queue::ListQueue<
         Context, detail::hook::Ready, & Context::ready_
@@ -82,7 +84,7 @@ public:
     struct CtxSwitchData
     {
         Context *                         ctx_{ nullptr };
-        std::unique_lock< Spinlock > *    splk_{ nullptr };
+        std::unique_lock< LockT > *    splk_{ nullptr };
 
         CtxSwitchData() = default;
 
@@ -90,13 +92,13 @@ public:
             : ctx_{ ctx }
         {}
 
-        explicit CtxSwitchData( std::unique_lock< Spinlock > * splk ) noexcept
+        explicit CtxSwitchData( std::unique_lock< LockT > * splk ) noexcept
             : splk_{ splk }
         {}
     };
 
 private:
-    friend struct detail::SchedulerInitializer;
+    friend struct init::SchedulerInitializer;
 
     struct time_point_cmp_
     {
@@ -122,7 +124,7 @@ private:
 
     Context *    running_{ nullptr };
 
-    Spinlock    splk_{};
+    LockT    splk_{};
 
     WorkQueue          work_queue_{};
     SleepQueue         sleep_queue_{};
@@ -152,13 +154,13 @@ public:
 
     void wait() noexcept;
     void wait( Context * ) noexcept;
-    void wait( std::unique_lock< Spinlock > & ) noexcept;
+    void wait( std::unique_lock< LockT > & ) noexcept;
 
     bool wait_until( TimePointT const & ) noexcept;
     bool wait_until( TimePointT const &, Context * ) noexcept;
-    bool wait_until( TimePointT const &, std::unique_lock< Spinlock > &, bool lock = false ) noexcept;
+    bool wait_until( TimePointT const &, std::unique_lock< LockT > &, bool lock = false ) noexcept;
 
-    void alt_wait( Alt *, std::unique_lock< Spinlock > & ) noexcept;
+    void alt_wait( Alt *, std::unique_lock< LockT > & ) noexcept;
 
     void resume( CtxSwitchData * = nullptr ) noexcept;
     void resume( Context *, CtxSwitchData * = nullptr ) noexcept;
@@ -204,7 +206,7 @@ private:
 template<typename Fn, typename ... Args>
 boost::intrusive_ptr< Context > Scheduler::make_work( Fn && fn, Args && ... args ) noexcept
 {
-    static_assert( traits::is_callable< Fn( Args ... ) >::value,
+    static_assert( detail::traits::is_callable< Fn( Args ... ) >::value,
         "function is not callable with given arguments" );
     auto func = [fn = std::move( fn ),
                  tpl = std::make_tuple( std::forward< Args >( args ) ... )]
@@ -229,6 +231,7 @@ void Scheduler::trampoline( Fn && fn_, Tpl && tpl_, void * vp )
     throw UnreachableError{};
 }
 
+} // namespace runtime
 PROXC_NAMESPACE_END
 
 #if defined(PROXC_COMP_CLANG)

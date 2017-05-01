@@ -32,7 +32,7 @@
 using namespace proxc;
 
 constexpr std::size_t NUM_WORKERS = 8;
-constexpr std::size_t NUM_ITERS = 1 << 20;
+constexpr std::size_t NUM_ITERS = 1 << 25;
 
 void monte_carlo_pi( channel::Tx< double > out, std::size_t iters ) noexcept
 {
@@ -72,6 +72,7 @@ int main()
     auto chs = channel::create_n< double >( NUM_WORKERS );
 
     std::vector< Process > workers;
+    workers.reserve( NUM_WORKERS );
     for ( std::size_t i = 0; i < NUM_WORKERS; ++i ) {
         workers.emplace_back( monte_carlo_pi,
             channel::get_tx_ind( chs, i ), iter_work );

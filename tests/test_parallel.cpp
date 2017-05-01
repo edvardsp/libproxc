@@ -27,9 +27,7 @@
 #include <vector>
 
 #include <proxc/config.hpp>
-
-#include <proxc/parallel.hpp>
-#include <proxc/process.hpp>
+#include <proxc.hpp>
 
 #include "setup.hpp"
 

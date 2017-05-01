@@ -1,18 +1,18 @@
-/* 
+/*
  * MIT License
- * 
+ *
  * Copyright (c) [2017] [Edvard S. Pettersen] <edvard.pettersen@gmail.com>
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -29,6 +29,7 @@
 
 #include <proxc/config.hpp>
 
+#include <proxc/runtime/scheduler.hpp>
 #include <proxc/alt.hpp>
 #include <proxc/alt/sync.hpp>
 #include <proxc/alt/choice_base.hpp>
@@ -40,7 +41,7 @@ PROXC_NAMESPACE_BEGIN
 ////////////////////////////////////////////////////////////////////////////////
 
 Alt::Alt()
-    : ctx_{ Scheduler::running() }
+    : ctx_{ runtime::Scheduler::running() }
 {
     choices_.reserve( 8 );
     select_flag_.clear( std::memory_order_relaxed );
@@ -84,12 +85,12 @@ void Alt::select()
 bool Alt::select_0()
 {
     if ( time_point_ < TimePointT::max() ) {
-        Scheduler::self()->wait_until( time_point_ );
+        runtime::Scheduler::self()->wait_until( time_point_ );
         return true;
 
     } else {
         // suspend indefinitely, should never return
-        Scheduler::self()->wait();
+        runtime::Scheduler::self()->wait();
         BOOST_ASSERT_MSG( false, "unreachable" );
         throw UnreachableError{};
     }
@@ -97,7 +98,7 @@ bool Alt::select_0()
 
 bool Alt::select_1( ChoiceT * choice ) noexcept
 {
-    std::unique_lock< Spinlock > lk{ splk_ };
+    std::unique_lock< LockT > lk{ splk_ };
 
     choice->enter();
 
@@ -117,7 +118,7 @@ bool Alt::select_1( ChoiceT * choice ) noexcept
 
     if ( selected_.load( std::memory_order_acquire ) == nullptr ) {
         state_.store( alt::State::Waiting, std::memory_order_release );
-        Scheduler::self()->alt_wait( this, lk );
+        runtime::Scheduler::self()->alt_wait( this, lk );
         state_.store( alt::State::Done, std::memory_order_release );
     } else {
         state_.store( alt::State::Done, std::memory_order_release );
@@ -134,7 +135,7 @@ bool Alt::select_1( ChoiceT * choice ) noexcept
 
 bool Alt::select_n( std::vector< ChoiceT * > & choices ) noexcept
 {
-    std::unique_lock< Spinlock > lk{ splk_ };
+    std::unique_lock< LockT > lk{ splk_ };
 
     for ( const auto& choice : choices ) {
         choice->enter();
@@ -156,7 +157,7 @@ bool Alt::select_n( std::vector< ChoiceT * > & choices ) noexcept
             static thread_local std::minstd_rand rng{ std::random_device{}() };
             std::shuffle( ready.begin(), ready.end(), rng );
         }
-        
+
         for ( const auto& choice : ready ) {
             auto res = choice->try_complete();
             if ( res == ChoiceT::Result::Ok ) {
@@ -169,7 +170,7 @@ bool Alt::select_n( std::vector< ChoiceT * > & choices ) noexcept
 
     if ( selected_.load( std::memory_order_relaxed ) == nullptr ) {
         state_.store( alt::State::Waiting, std::memory_order_release );
-        Scheduler::self()->alt_wait( this, lk );
+        runtime::Scheduler::self()->alt_wait( this, lk );
         // one or more choices should be ready,
         // and selected_ should be set. If set,
         // this is the winning choice.
@@ -192,7 +193,7 @@ bool Alt::select_n( std::vector< ChoiceT * > & choices ) noexcept
 // called by external non-alting choices
 bool Alt::try_select( ChoiceT * choice ) noexcept
 {
-    std::unique_lock< Spinlock > lk{ splk_ };
+    std::unique_lock< LockT > lk{ splk_ };
 
     if ( select_flag_.test_and_set( std::memory_order_acq_rel ) ) {
         return false;
@@ -207,7 +208,7 @@ bool Alt::try_alt_select( ChoiceT * choice ) noexcept
 {
     BOOST_ASSERT( choice != nullptr );
 
-    std::unique_lock< Spinlock > lk{ splk_ };
+    std::unique_lock< LockT > lk{ splk_ };
     if ( select_flag_.test_and_set( std::memory_order_acq_rel ) ) {
         return false;
     }
@@ -223,7 +224,7 @@ bool Alt::try_timeout() noexcept
     // waiting. spinlocking on try_select() is used to force
     // ready choices to wait for the alting process to go to
     // wait before trying to set selected_.
-    std::unique_lock< Spinlock > lk{ splk_ };
+    std::unique_lock< LockT > lk{ splk_ };
 
     return ! select_flag_.test_and_set( std::memory_order_acq_rel );
 }

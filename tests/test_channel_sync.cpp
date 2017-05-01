@@ -28,10 +28,7 @@
 #include <vector>
 
 #include <proxc/config.hpp>
-
-#include <proxc/parallel.hpp>
-#include <proxc/this_proc.hpp>
-#include <proxc/channel.hpp>
+#include <proxc.hpp>
 
 #include "setup.hpp"
 

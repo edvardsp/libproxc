@@ -26,9 +26,7 @@
 #include <string>
 
 #include <proxc/config.hpp>
-
-#include <proxc/process.hpp>
-#include <proxc/scheduler.hpp>
+#include <proxc.hpp>
 
 #include "setup.hpp"
 
@@ -52,13 +50,13 @@ void fn3()
 {
     for ( int i = 0; i < 10; ++i ) {
         value1 = i;
-        Scheduler::self()->yield();
+        runtime::Scheduler::self()->yield();
     }
 }
 
 void fn4()
 {
-    Scheduler::self()->yield();
+    runtime::Scheduler::self()->yield();
 }
 
 void fn5()
