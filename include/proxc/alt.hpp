@@ -254,6 +254,14 @@ public:
     void select();
 
 private:
+    template<typename Tx>
+    void send_impl( Tx & tx,
+                    ItemT< Tx > item,
+                    TxFn< Tx > fn ) noexcept;
+    template<typename Rx>
+    void recv_impl( Rx & rx,
+                    RxFn< Rx > fn ) noexcept;
+
     bool select_0();
     bool select_1( ChoiceT * ) noexcept;
     bool select_n( std::vector< ChoiceT * > & ) noexcept;
@@ -264,11 +272,10 @@ private:
     bool sync( Alt *, SyncT * ) noexcept;
 };
 
-// send choice without guard
-template<typename Tx, typename>
-Alt & Alt::send(
+template<typename Tx>
+void Alt::send_impl(
     Tx & tx,
-    ItemT< Tx > && item,
+    ItemT< Tx > item,
     TxFn< Tx > fn
 ) noexcept
 {
@@ -297,112 +304,10 @@ Alt & Alt::send(
             ch_audit_[ id ].state_ = ChoiceAudit::State::Clash;
         }
     }
-    return *this;
 }
 
-template<typename Tx, typename>
-Alt & Alt::send(
-    Tx & tx,
-    ItemT< Tx > const & item,
-    TxFn< Tx > fn
-) noexcept
-{
-    if ( ! tx.is_closed() ) {
-        ChannelId id = tx.get_id();
-        auto audit_it = ch_audit_.find( id );
-        if ( audit_it == ch_audit_.end()
-            || audit_it->second.state_ == ChoiceAudit::State::Tx ) {
-            auto pc = std::make_unique< alt::ChoiceSend< ItemT< Tx > > >(
-                this,
-                ctx_,
-                tx,
-                item,
-                std::move( fn )
-            );
-            if ( audit_it == ch_audit_.end() ) {
-                ch_audit_[ id ] = ChoiceAudit{
-                    ChoiceAudit::State::Tx,
-                    pc.get()
-                };
-            } else { // state == State::Tx;
-                ch_audit_[ id ].vec_.push_back( pc.get() );
-            }
-            choices_.push_back( std::move( pc ) );
-        } else {
-            ch_audit_[ id ].state_ = ChoiceAudit::State::Clash;
-        }
-    }
-    return *this;
-}
-
-// send choice with guard
-template<typename Tx, typename>
-Alt & Alt::send_if(
-    bool guard,
-    Tx & tx,
-    ItemT< Tx > && item,
-    TxFn< Tx > fn
-) noexcept
-{
-    return ( guard )
-        ? send( tx,
-                std::move( item ),
-                std::move( fn ) )
-        : *this
-        ;
-}
-
-template<typename Tx, typename>
-Alt & Alt::send_if(
-    bool guard,
-    Tx & tx,
-    ItemT< Tx > const & item,
-    TxFn< Tx > fn
-) noexcept
-{
-    return ( guard )
-        ? send( tx,
-                item,
-                std::move( fn ) )
-        : *this
-        ;
-}
-
-// replicated send choice over item iterator
-template<typename TxIt, typename ItemIt, typename>
-Alt & Alt::send_for(
-    TxIt   tx_first,   TxIt   tx_last,
-    ItemIt item_first,
-    TxFn< EndT< TxIt > > fn
-) noexcept
-{
-    for ( auto tx_it = tx_first;
-          tx_it != tx_last;
-          ++tx_it ) {
-        (void)send( *tx_it, *item_first++, fn );
-    }
-    return *this;
-}
-
-// replicated send choice over single item
-template<typename TxIt, typename>
-Alt & Alt::send_for(
-    TxIt tx_first, TxIt tx_last,
-    ItemT< EndT< TxIt > > item,
-    TxFn< EndT< TxIt > > fn
-) noexcept
-{
-    for ( auto tx_it = tx_first;
-          tx_it != tx_last;
-          ++tx_it ) {
-        (void)send( *tx_it, item, fn );
-    }
-    return *this;
-}
-
-// recv choice without guard
-template<typename Rx, typename>
-Alt & Alt::recv(
+template<typename Rx>
+void Alt::recv_impl(
     Rx & rx,
     RxFn< Rx > fn
 ) noexcept
@@ -431,6 +336,111 @@ Alt & Alt::recv(
             ch_audit_[ id ].state_ = ChoiceAudit::State::Clash;
         }
     }
+}
+// send choice without guard
+template<typename Tx, typename>
+Alt & Alt::send(
+    Tx & tx,
+    ItemT< Tx > && item,
+    TxFn< Tx > fn
+) noexcept
+{
+    send_impl( tx,
+               std::move( item ),
+               std::move( fn ) );
+    return *this;
+}
+
+template<typename Tx, typename>
+Alt & Alt::send(
+    Tx & tx,
+    ItemT< Tx > const & item,
+    TxFn< Tx > fn
+) noexcept
+{
+    send_impl( tx,
+               item,
+               std::move( fn ) );
+    return *this;
+}
+
+// send choice with guard
+template<typename Tx, typename>
+Alt & Alt::send_if(
+    bool guard,
+    Tx & tx,
+    ItemT< Tx > && item,
+    TxFn< Tx > fn
+) noexcept
+{
+    if ( guard ) {
+        send_impl( tx,
+                   std::move( item ),
+                   std::move( fn ) );
+    }
+    return *this;
+}
+
+template<typename Tx, typename>
+Alt & Alt::send_if(
+    bool guard,
+    Tx & tx,
+    ItemT< Tx > const & item,
+    TxFn< Tx > fn
+) noexcept
+{
+    if ( guard ) {
+        send_impl( tx,
+                   item,
+                   std::move( fn ) );
+    }
+    return *this;
+}
+
+// replicated send choice over item iterator
+template<typename TxIt, typename ItemIt, typename>
+Alt & Alt::send_for(
+    TxIt   tx_first,   TxIt   tx_last,
+    ItemIt item_first,
+    TxFn< EndT< TxIt > > fn
+) noexcept
+{
+    for ( auto tx_it = tx_first;
+          tx_it != tx_last;
+          ++tx_it ) {
+        send_impl( *tx_it,
+                   *item_first++,
+                   fn );
+    }
+    return *this;
+}
+
+// replicated send choice over single item
+template<typename TxIt, typename>
+Alt & Alt::send_for(
+    TxIt tx_first, TxIt tx_last,
+    ItemT< EndT< TxIt > > item,
+    TxFn< EndT< TxIt > > fn
+) noexcept
+{
+    for ( auto tx_it = tx_first;
+          tx_it != tx_last;
+          ++tx_it ) {
+        send_impl( *tx_it,
+                   item,
+                   fn );
+    }
+    return *this;
+}
+
+// recv choice without guard
+template<typename Rx, typename>
+Alt & Alt::recv(
+    Rx & rx,
+    RxFn< Rx > fn
+) noexcept
+{
+    recv_impl( rx, std::move( fn ) );
     return *this;
 }
 
@@ -442,10 +452,10 @@ Alt & Alt::recv_if(
     RxFn< Rx > fn
 ) noexcept
 {
-    return ( guard )
-        ? recv( rx,
-                std::move( fn ) )
-        : *this ;
+    if ( guard ) {
+        recv_impl( rx, std::move( fn ) );
+    }
+    return *this;
 }
 
 // replicated recv choice
@@ -458,7 +468,7 @@ Alt & Alt::recv_for(
     for ( auto rx_it = rx_first;
           rx_it != rx_last;
           ++rx_it ) {
-        (void)recv( *rx_it, fn );
+        recv_impl( *rx_it, fn );
     }
     return *this;
 }

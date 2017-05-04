@@ -24,6 +24,7 @@
 
 #pragma once
 
+#include <iterator>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -88,16 +89,17 @@ struct is_inputiterator
 {};
 
 template<typename It>
-struct is_inputiterator< It, decltype( *std::declval< It & >(), ++std::declval< It & >(), void() )>
+struct is_inputiterator< It,
+    decltype( *std::declval< It & >(), void(),
+             ++std::declval< It & >(), void() ) >
     : std::true_type
 {};
-
 
 template<typename T>
 typename std::decay< T >::type
 decay_copy(T && t)
 {
-    return std::forward< T >(t);
+    return std::forward< T >( t );
 }
 
 } // namespace traits

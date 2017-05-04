@@ -60,7 +60,8 @@ private:
     alignas(cache_alignment) std::mt19937    rng{ std::random_device{}() };
 
 public:
-    Spinlock() noexcept = default;
+    Spinlock() = default;
+    ~Spinlock() noexcept {}
 
     // make non-copyable
     Spinlock(Spinlock const &) = delete;

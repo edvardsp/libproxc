@@ -29,7 +29,7 @@ add_global_arguments(
     language: 'cpp')
 
 cxx = meson.get_compiler('cpp')
-if cxx.get_id() == 'clang' or cxx.get_id() == 'gcc'
+if cxx.get_id() == 'clang'
     add_global_arguments('-fcolor-diagnostics', language: 'cpp')
 endif
 

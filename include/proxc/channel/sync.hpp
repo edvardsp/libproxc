@@ -450,7 +450,7 @@ AltResult ChannelImpl< T >::alt_send() noexcept
         EndT * rx = rx_end_.load( std::memory_order_acquire );
         if ( rx != nullptr && rx->alt_choice_ != nullptr ) {
             const auto offered = alt::Sync::State::Offered;
-            if ( offered == alt_sync_.state_.load( std::memory_order_release ) ) {
+            if ( offered == alt_sync_.state_.load( std::memory_order_acquire ) ) {
                 alt_complete_sync();
                 return AltResult::Ok;
 
@@ -562,6 +562,7 @@ AltResult ChannelImpl< T >::alt_send() noexcept
             return AltResult::TryLater;
         }
     }
+    return AltResult::SelectFailed;
 }
 
 template<typename T>
@@ -612,7 +613,7 @@ AltResult ChannelImpl< T >::alt_recv() noexcept
         EndT * tx = tx_end_.load( std::memory_order_acquire );
         if ( tx != nullptr && tx->alt_choice_ != nullptr ) {
             const auto offered = alt::Sync::State::Offered;
-            if ( offered == alt_sync_.state_.load( std::memory_order_release ) ) {
+            if ( offered == alt_sync_.state_.load( std::memory_order_acquire ) ) {
                 alt_complete_sync();
                 return AltResult::Ok;
 
@@ -724,6 +725,7 @@ AltResult ChannelImpl< T >::alt_recv() noexcept
             return AltResult::TryLater;
         }
     }
+    return AltResult::SelectFailed;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

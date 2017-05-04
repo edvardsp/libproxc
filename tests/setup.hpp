@@ -164,27 +164,22 @@ public:
 };
 
 #define _stringify(expr) #expr
-static int foo;
 // Assert that EXPRESSION evaluates to true, otherwise raise AssertionFailureException with associated MESSAGE (which may use C++ stream-style message formatting)
 #define throw_assert(EXPRESSION, MESSAGE) do { \
     if(!(EXPRESSION)) { \
-        AssertionFailureException error( \
+        throw AssertionFailureException( \
                 #EXPRESSION, __FILE__, __LINE__, \
                 (AssertionFailureException::StreamFormatter() << MESSAGE)); \
-        std::cerr << error.what() << std::endl; \
-        /* while (foo == 0); */ \
     } \
 } while (false)
 
 #define _throw_assert_logic(LEFT, RIGHT, LEFT_EXPR, RIGHT_EXPR, OP, MESSAGE) do { \
     auto left = (LEFT); auto right = (RIGHT); \
     if (!(left OP right)) { \
-        AssertionFailureException error( \
+        throw AssertionFailureException( \
                 LEFT_EXPR " " #OP " " RIGHT_EXPR, __FILE__, __LINE__, \
                 (AssertionFailureException::StreamFormatter() << MESSAGE \
                     << " | Left: " << left << ", Right: " << right << " | ")); \
-        std::cerr << error.what() << std::endl; \
-        /* while (foo == 0); */ \
     } \
 } while (false)
 

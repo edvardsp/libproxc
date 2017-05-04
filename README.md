@@ -7,88 +7,54 @@ There does exists plenty of libraries for C which implements many features from 
 
 ProXC aims to do this, and with no macro magic!
 
-## Features
+## Supported Platforms
 
-* Lightweight stackful coroutines, called PROC
-    * supports arbitrary number of args, acquired through ARGN
-* Lightweight runtime environment
-* Nestable PROC execution sequence with
-    * PAR - parallel execution of given PROC, PAR and SEQ
-    * SEQ - sequential execution of given PROC, PAR and SEQ
-* Two methods of dispatching execution sequences
-    * RUN - fork & join, given a tree of PROC, PAR and SEQ
-    * GO - fire & forget, given a tree of PROC, PAR and SEQ
-* Any to any, pseudo-type safe, channels
-* ALT - wait on multiple guarded commands, which are guarded by a boolean condition
-* Guarded commands consist of
-    * Skip Guard - always available
-    * Time Guard - timeout on a given relative time, with a granularity of microseconds
-    * Chan Guard - wait on a channel READ (Note! only channel reads are supported)
-* YIELD - give up running time for another PROC, if available
-* SLEEP - suspend PROC for a given time, with a granularity of microseconds
+Only requirement is support for C++14 compiler, as well as `boost.context` version 1.61 or higher installed.
 
-## Supports
+Only tested on 64-bit Linux.
 
-Currently only supports 32- and 64-bit x86 Linux.
+## Prerequisites
 
-## Compile and Install
+You will need
 
-Requires CMake 2.8+ for compiling.
+* C++14 supported compiler
+* Meson - build system front-end
+* ninja - build system back-end
 
-Run the following in your terminal. This installs both the static and shared library in /usr/local/lib. ldconfig must be called to register the shared library, as cmake does not do this automatically (for some reason).
+### Meson
+
+Can be installed via pip for python3.
+
+    $ pip3 install meson
+
+### Ninja
+
+Can be installed through any package manager, e.g. Ubuntu,
+
+    $ sudo apt-get install ninja-build
+
+## Compiling and Installing
+
+First, clone the repository and create a build directory.
 
     $ git clone https://github.com/edvardsp/libproxc.git
     $ mkdir libproxc/build && cd libproxc/build
-    $ cmake ..
-    $ make
-    $ sudo make install
+
+Next, configure the project. The compiler can be set by setting the `CXX` variable.
+
+    $ CXX=*compiler-name* meson ..
+
+Project options can be viewed by typing `mesonconf`. A standard release configuration can be done by setting
+
+    $ mesonconf -Dbuildtype=release -Db_ndebug=true
+
+If your linker supports Link Time Optimizations (lto), then the configuration `-Db_lto=true` is recommended, as ProXC is a template heavy libray.
+
+Lastly, build and install.
+
+    $ ninja
+    $ sudo ninja install
     $ sudo ldconfig
 
-## Example
+To check that the compilation was succesfull, run `ninja test`. This should run all unit tests, which should all complete with success.
 
-```c
-#include <stdio.h>
-#include <stdlib.h>
-
-#include <proxc.h>
-
-void printer() {
-    for (;;) {
-        printf("printer: Hello!\n");
-        SLEEP(MSEC(500));
-    }
-}
-
-void fxn() {
-    int id = *(int *)ARGN(0);
-    int val = *(int *)ARGN(1);
-    printf("fxn %d: start %d\n", id, val);
-    SLEEP(SEC(3));
-    printf("fxn %d: stop %d\n", id, val);
-}
-
-void foobar() {
-    GO(PROC(printer));
-
-    int ids[] = { 1, 2, 3 };
-    int one = 1, two = 2;
-    printf("foobar: start\n");
-    RUN(PAR(
-            PAR(
-                SEQ( PROC(fxn, &ids[0], &one), PROC(fxn, &ids[1], &one) ),
-                PROC(fxn, &ids[2], &one)
-            ),
-            SEQ(
-                PROC(fxn, &ids[0], &two),
-                PAR( PROC(fxn, &ids[1], &two), PROC(fxn, &ids[2], &two) )
-            )
-        )
-    );
-    printf("foobar: stop\n");
-}
-
-int main() {
-    proxc_start(foobar);
-    return 0;
-}
-```
