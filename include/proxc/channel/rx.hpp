@@ -136,6 +136,11 @@ public:
         return recv_until( item, time_point );
     }
 
+    template<typename ItemU>
+    friend bool operator >> ( Rx< ItemU > & rx, ItemU & item )
+    {
+        return rx.recv( item ) == OpResult::Ok;
+    }
 
 private:
     Rx( ChanPtr ptr )

@@ -162,6 +162,17 @@ public:
         return send_until( item, time_point );
     }
 
+    template<typename ItemU>
+    friend bool operator << ( Tx< ItemU > & tx, ItemU && item ) noexcept
+    {
+        return tx.send( std::move( item ) ) == OpResult::Ok;
+    }
+
+    template<typename ItemU>
+    friend bool operator << ( Tx< ItemU > & tx, ItemU const & item ) noexcept
+    {
+        return tx.send( item ) == OpResult::Ok;
+    }
 
 private:
     Tx( ChanPtr ptr )
