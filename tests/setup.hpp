@@ -166,20 +166,20 @@ public:
 #define _stringify(expr) #expr
 // Assert that EXPRESSION evaluates to true, otherwise raise AssertionFailureException with associated MESSAGE (which may use C++ stream-style message formatting)
 #define throw_assert(EXPRESSION, MESSAGE) do { \
-    if(!(EXPRESSION)) { \
+    if ( ! (EXPRESSION) ) { \
         throw AssertionFailureException( \
-                #EXPRESSION, __FILE__, __LINE__, \
-                (AssertionFailureException::StreamFormatter() << MESSAGE)); \
+            #EXPRESSION, __FILE__, __LINE__, \
+            ( AssertionFailureException::StreamFormatter() << MESSAGE ) ); \
     } \
 } while (false)
 
 #define _throw_assert_logic(LEFT, RIGHT, LEFT_EXPR, RIGHT_EXPR, OP, MESSAGE) do { \
     auto left = (LEFT); auto right = (RIGHT); \
-    if (!(left OP right)) { \
+    if ( ! (left OP right) ) { \
         throw AssertionFailureException( \
-                LEFT_EXPR " " #OP " " RIGHT_EXPR, __FILE__, __LINE__, \
-                (AssertionFailureException::StreamFormatter() << MESSAGE \
-                    << " | Left: " << left << ", Right: " << right << " | ")); \
+            LEFT_EXPR " " #OP " " RIGHT_EXPR, __FILE__, __LINE__, \
+            ( AssertionFailureException::StreamFormatter() << MESSAGE \
+                << " | Left: " << left << ", Right: " << right << " | " ) ); \
     } \
 } while (false)
 
@@ -189,3 +189,4 @@ public:
 #define throw_assert_leq(LEFT, RIGHT, MESSAGE) _throw_assert_logic(LEFT, RIGHT, _stringify(LEFT), _stringify(RIGHT), <=, MESSAGE)
 #define throw_assert_gtr(LEFT, RIGHT, MESSAGE) _throw_assert_logic(LEFT, RIGHT, _stringify(LEFT), _stringify(RIGHT),  >, MESSAGE)
 #define throw_assert_geq(LEFT, RIGHT, MESSAGE) _throw_assert_logic(LEFT, RIGHT, _stringify(LEFT), _stringify(RIGHT), >=, MESSAGE)
+

@@ -38,7 +38,6 @@ inline std::size_t num_cpus()
         return ( n > 1 ) ? n : 1;
     }();
     return num;
-    /* return 1; */
 }
 
 } // namespace detail

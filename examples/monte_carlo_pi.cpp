@@ -32,7 +32,7 @@
 using namespace proxc;
 
 constexpr std::size_t NUM_WORKERS = 8;
-constexpr std::size_t NUM_ITERS = 1 << 25;
+constexpr std::size_t NUM_ITERS = std::size_t{ 1 } << std::size_t(32 - 1);
 
 void monte_carlo_pi( channel::Tx< double > out, std::size_t iters ) noexcept
 {
@@ -49,8 +49,7 @@ void monte_carlo_pi( channel::Tx< double > out, std::size_t iters ) noexcept
         }
         this_proc::yield();
     }
-    auto pi = ( 4. * in_circle ) / static_cast< double >( iters );
-    out.send( pi );
+    out << ( 4. * in_circle ) / static_cast< double >( iters );
 }
 
 void calculate( std::vector< channel::Rx< double > > in, std::size_t workers ) noexcept

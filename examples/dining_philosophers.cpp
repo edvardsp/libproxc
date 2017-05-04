@@ -52,12 +52,12 @@ void a_fork( channel::Rx< int > left, channel::Rx< int > right )
             .recv( left,
                 [&left](auto){
                     int item{};
-                    left.recv( item );
+                    left >> item;
                 } )
             .recv( right,
                 [&right](auto){
                     int item{};
-                    right.recv( item );
+                    right >> item;
                 } )
             .select();
     }
@@ -74,12 +74,12 @@ void philosopher( channel::Tx< std::string > report, int i,
         this_proc::delay_for( dur );
 
         report.send( std::to_string( i ) + " hungry" );
-        down.send( i );
+        down << i;
 
         report.send( std::to_string( i ) + " sitting" );
         parallel(
-            proc( [&left,i] { left.send( i ); } ),
-            proc( [&right,i]{ right.send( i ); } )
+            proc( [&left,i] { left << i; } ),
+            proc( [&right,i]{ right << i; } )
         );
 
         report.send( std::to_string( i ) + " eating" );
@@ -87,11 +87,11 @@ void philosopher( channel::Tx< std::string > report, int i,
 
         report.send( std::to_string( i ) + " leaving" );
         parallel(
-            proc( [&left,i] { left.send( i ); } ),
-            proc( [&right,i]{ right.send( i ); } )
+            proc( [&left,i] { left << i; } ),
+            proc( [&right,i]{ right << i; } )
         );
 
-        up.send( i );
+        up << i;
     }
 }
 

@@ -1,18 +1,18 @@
-/* 
+/*
  * MIT License
- * 
+ *
  * Copyright (c) [2017] [Edvard S. Pettersen] <edvard.pettersen@gmail.com>
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -65,27 +65,31 @@ std::size_t fib( const std::size_t n )
     else if ( n == 1 ) { return 1; }
 
     auto chs = channel::create_n< std::size_t >( 2 * n + 1 );
-    auto txs = std::move( std::get<0>( chs ) );
-    auto rxs = std::move( std::get<1>( chs ) );
 
-    rxs[ 2 * n ].close();
-    rxs[ 2 * n - 2 ].close();
+    channel::get_rx_ind( chs, 2 * n - 0 ).close();
+    channel::get_rx_ind( chs, 2 * n - 2 ).close();
+
+    std::vector< Process > fibs;
+    fibs.reserve( n - 1 );
+    for ( std::size_t i = 0; i < n - 1; ++i ) {
+        fibs.emplace_back( & fib_n,
+            channel::get_tx_ind( chs, 2 * i + 3 ), channel::get_tx_ind( chs, 2 * i + 4 ),
+            channel::get_rx_ind( chs, 2 * i + 0 ), channel::get_rx_ind( chs, 2 * i + 1 )
+        );
+    }
 
     std::size_t result{};
     parallel(
-        proc( fib_0, std::move( txs[ 0 ] ) ),
-        proc( fib_1, std::move( txs[ 1 ] ), std::move( txs[ 2 ] ) ),
-        proc_for( std::size_t{ 0 }, n - 1,
-            [&txs,&rxs]( auto i ){
-                fib_n( std::move( txs[ 2*i+3 ] ), std::move( txs[ 2*i+4 ] ),
-                       std::move( rxs[ 2*i+0 ] ), std::move( rxs[ 2*i+1 ] ) );
-            } ),
+        proc( & fib_0, channel::get_tx_ind( chs, 0 ) ),
+        proc( & fib_1, channel::get_tx_ind( chs, 1 ), channel::get_tx_ind( chs, 2 ) ),
+        proc_for( fibs.begin(), fibs.end() ),
         proc(
             [&result]( Rx< std::size_t > rx ){
                 rx.recv( result );
-            }, std::move( rxs[ 2*n-1 ] )
+            }, channel::get_rx_ind( chs, 2 * n - 1 )
         )
     );
+
     return result;
 }
 
