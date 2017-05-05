@@ -436,8 +436,8 @@ void Scheduler::yield() noexcept
 
     auto next = policy_->pick_next();
     if ( next != nullptr ) {
-        schedule( ctx );
-        resume( next );
+        CtxSwitchData data{ ctx };
+        resume( next, std::addressof( data ) );
         BOOST_ASSERT( ctx == Scheduler::running() );
     }
 }
@@ -451,8 +451,6 @@ void Scheduler::join( Context * ctx ) noexcept
     std::unique_lock< LockT > lk{ ctx->splk_ };
     if ( ! ctx->has_terminated() ) {
         running_ctx->link( ctx->wait_queue_ );
-        /* lk.unlock(); */
-        /* resume(); */
         wait( lk );
         BOOST_ASSERT( Scheduler::running() == running_ctx );
     }
@@ -467,7 +465,7 @@ bool Scheduler::sleep_until( TimePointT const & time_point, CtxSwitchData * data
     BOOST_ASSERT( ! running_->is_linked< hook::Sleep >() );
     BOOST_ASSERT( ! running_->is_linked< hook::Terminated >() );
 
-    if (ClockT::now() < time_point) {
+    if ( ClockT::now() < time_point ) {
         running_->time_point_ = time_point;
         running_->link( sleep_queue_ );
         resume( data );
