@@ -33,51 +33,50 @@ template<typename T> using Rx = channel::Rx< T >;
 void generate( Tx< long > out, Rx< long > ex )
 {
     long i = 2;
-    while ( ! ex.is_closed() ) {
-        out.send( i++ );
+    while ( ex ) {
+        out << i++;
     }
 }
 
 void filter( Rx< long > in, Tx< long > out )
 {
     long prime{};
-    in.recv( prime );
+    in >> prime;
     for ( auto i : in ) {
         if ( i % prime != 0 ) {
-            out.send( i );
+            out << i;
         }
     }
 }
 
 int main()
 {
-    const long n = 4000;
+    const long n = 10000;
     auto ex_ch = channel::create< long >();
     auto chans = channel::create_n< long >( n );
 
-    auto start = std::chrono::steady_clock::now();
-
     std::vector< Process > filters;
-    filters.reserve( n );
+    filters.reserve( n - 1 );
     for ( std::size_t i = 0; i < n - 1; ++i ) {
         filters.emplace_back( filter,
             channel::get_rx_ind( chans, i ), channel::get_tx_ind( chans, i + 1 )
         );
     }
 
+    auto start = std::chrono::steady_clock::now();
+
     parallel(
         proc( generate, channel::get_tx_ind( chans, 0 ), channel::get_rx( ex_ch ) ),
         proc_for( filters.begin(), filters.end() ),
-        proc( [start,n]( Rx< long > in, Tx< long > ex ){
+        proc( [start,n]( Rx< long > in, Tx< long > ){
                 long prime{};
-                in.recv( prime );
+                in >> prime;
                 auto end = std::chrono::steady_clock::now();
                 std::chrono::duration< double, std::micro > diff = end - start;
                 std::cout << n << "th prime is " << prime << std::endl;
                 std::cout << "each prime took approx " << diff.count() / n << "us" << std::endl;
             },
-            channel::get_rx_ind( chans, n - 1 ), channel::get_tx( ex_ch )
-        )
+            channel::get_rx_ind( chans, n - 1 ), channel::get_tx( ex_ch ) )
     );
 
     return 0;

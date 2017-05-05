@@ -159,6 +159,7 @@ typename SchedulerInitializer::LockT SchedulerInitializer::splk_{};
 
 } // namespace init
 
+/* PROXC_NEVER_INLINE */
 Scheduler * Scheduler::self() noexcept
 {
     //thread_local static boost::context::detail::activation_record_initializer ac_rec_init;

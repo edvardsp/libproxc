@@ -162,6 +162,16 @@ public:
         return send_until( item, time_point );
     }
 
+    explicit operator bool() const noexcept
+    {
+        return ! is_closed();
+    }
+
+    bool operator ! () const noexcept
+    {
+        return is_closed();
+    }
+
     template<typename ItemU>
     friend bool operator << ( Tx< ItemU > & tx, ItemU && item ) noexcept
     {

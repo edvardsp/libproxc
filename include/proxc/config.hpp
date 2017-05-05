@@ -196,5 +196,23 @@ static constexpr std::size_t cacheline_length{ PROXC_ARCH };
 // Warning macros
 ////////////////////////////////////////////////////////////////////////////////
 
-#define PROXC_WARN_UNUSED   __attribute__((warn_unused_result))
+/* MSVC */
+#if defined(PROXC_COMP_MSVC)
+
+#   define PROXC_WARN_UNUSED    __Check_return_
+#   define PROXC_NEVER_INLINE   __declspec(noinline)
+
+/* GCC or Clang */
+#elif defined(PROXC_COMP_GCC) || defined(PROXC_COMP_CLANG)
+
+#   define PROXC_WARN_UNUSED    __attribute__((warn_unused_result))
+#   define PROXC_NEVER_INLINE   __attribute__((noinline))
+
+/* default */
+#else
+
+#   define PROXC_WARN_UNUSED
+#   define PROXC_NEVER_INLINE
+
+#endif
 

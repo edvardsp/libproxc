@@ -136,6 +136,16 @@ public:
         return recv_until( item, time_point );
     }
 
+    explicit operator bool() const noexcept
+    {
+        return ! is_closed();
+    }
+
+    bool operator ! () const noexcept
+    {
+        return is_closed();
+    }
+
     template<typename ItemU>
     friend bool operator >> ( Rx< ItemU > & rx, ItemU & item )
     {

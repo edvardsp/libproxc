@@ -119,18 +119,18 @@ auto proc_for_impl( InputIt first, InputIt last, Fns && ... fns )
     using FnT = detail::delegate< void( typename InputIt::value_type ) >;
     using ArrT = std::array< FnT, sizeof...(Fns) >;
 
-    auto fn_arr = ArrT{ { std::forward< Fns >( fns ) ... } };
+    ArrT fn_arr{ { std::forward< Fns >( fns ) ... } };
     const std::size_t total_size = sizeof...(Fns) * std::distance( first, last );
+
     std::vector< Process > procs;
     procs.reserve( total_size );
-
     for ( auto data = first; data != last; ++data ) {
         for ( const auto& fn : fn_arr ) {
             procs.emplace_back( fn, *data );
+            procs.back().launch();
         }
+        runtime::Scheduler::self()->yield();
     }
-    std::for_each( procs.begin(), procs.end(),
-        []( auto& proc ){ proc.launch(); } );
     std::for_each( procs.begin(), procs.end(),
         []( auto& proc ){ proc.join(); } );
 }
