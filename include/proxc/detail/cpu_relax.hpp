@@ -56,7 +56,7 @@ namespace detail {
 #else /* unknown architecture */
 
 #   warning "architecture does not support yield/pause mnemonic"
-#   define cpu_relax()  std::this_thread_yield()
+#   define cpu_relax()  std::this_thread::yield()
 
 #endif
 
