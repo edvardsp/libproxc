@@ -34,6 +34,7 @@
 #include <proxc/runtime/context.hpp>
 #include <proxc/runtime/scheduler.hpp>
 #include <proxc/channel/sync.hpp>
+#include <proxc/channel/rx.hpp>
 
 PROXC_NAMESPACE_BEGIN
 
@@ -182,6 +183,15 @@ public:
     friend bool operator << ( Tx< ItemU > & tx, ItemU const & item ) noexcept
     {
         return tx.send( item ) == OpResult::Ok;
+    }
+
+    template<typename ItemU>
+    friend bool operator >> ( Rx< ItemU > & rx, Tx< ItemU > & tx )
+    {
+        ItemU item{};
+        return ( rx.recv( item ) == OpResult::Ok )
+            ? tx.send( item ) == OpResult::Ok
+            : false ;
     }
 
 private:

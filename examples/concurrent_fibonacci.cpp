@@ -34,15 +34,13 @@ template<typename T> using Rx = channel::Rx< T >;
 
 void fib_0( Tx< std::size_t > out )
 {
-    out.send( std::size_t{ 0 } );
+    out << std::size_t{ 0 };
 }
 
 void fib_1( Tx< std::size_t > out1, Tx< std::size_t > out2 )
 {
-    out1.send( std::size_t{ 1 } );
-    if ( ! out2.is_closed() ) {
-        out2.send( std::size_t{ 1 } );
-    }
+    out1 << std::size_t{ 1 };
+    out2 << std::size_t{ 1 };
 }
 
 
@@ -50,13 +48,11 @@ void fib_n( Tx< std::size_t > out1, Tx< std::size_t > out2,
             Rx< std::size_t > in1,  Rx< std::size_t > in2 )
 {
     std::size_t nm1{}, nm2{};
-    in1.recv( nm1 );
-    in2.recv( nm2 );
+    in1 >> nm1;
+    in2 >> nm2;
     std::size_t n = nm1 + nm2;
-    out1.send( n );
-    if ( ! out2.is_closed() ) {
-        out2.send( n );
-    }
+    out1 << n;
+    out2 << n;
 }
 
 std::size_t fib( const std::size_t n )
@@ -83,11 +79,10 @@ std::size_t fib( const std::size_t n )
         proc( & fib_0, channel::get_tx_ind( chs, 0 ) ),
         proc( & fib_1, channel::get_tx_ind( chs, 1 ), channel::get_tx_ind( chs, 2 ) ),
         proc_for( fibs.begin(), fibs.end() ),
-        proc(
-            [&result]( Rx< std::size_t > rx ){
-                rx.recv( result );
-            }, channel::get_rx_ind( chs, 2 * n - 1 )
-        )
+        proc( [&result]( Rx< std::size_t > rx ){
+                rx >> result;
+            },
+            channel::get_rx_ind( chs, 2 * n - 1 ) )
     );
 
     return result;
@@ -99,10 +94,10 @@ int main()
     parallel(
         proc_for( std::size_t{ 0 }, n,
             []( auto i ) {
-                    auto result = fib( i );
-                    std::stringstream ss;
-                    ss << "Fib " << i << ": " << result << std::endl;
-                    std::cout << ss.str();
+                auto result = fib( i );
+                std::stringstream ss;
+                ss << "Fib " << i << ": " << result << std::endl;
+                std::cout << ss.str();
             } )
     );
 

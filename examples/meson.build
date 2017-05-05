@@ -26,7 +26,8 @@ examples = [
     ['commstime',            ['commstime.cpp']],
     ['stressed_alt',         ['stressed_alt.cpp']],
     ['dining_philosophers',  ['dining_philosophers.cpp']],
-    ['monte_carlo_pi',       ['monte_carlo_pi.cpp']]
+    ['monte_carlo_pi',       ['monte_carlo_pi.cpp']],
+    ['piping',               ['piping.cpp']]
 ]
 
 foreach e : examples
@@ -35,3 +36,4 @@ foreach e : examples
         dependencies : [boost_dep, thread_dep],
         link_with : proxc)
 endforeach
+
