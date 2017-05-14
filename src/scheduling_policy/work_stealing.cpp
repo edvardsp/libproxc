@@ -136,9 +136,9 @@ runtime::Context * WorkStealing::pick_next() noexcept
 {
     auto ctx = deque_.pop();
     if ( ctx != nullptr ) {
-        if ( ! deque_.is_empty() ) {
-            signal_stealing();
-        }
+        /* if ( ! deque_.is_empty() ) { */
+        /*     signal_stealing(); */
+        /* } */
         runtime::Scheduler::self()->attach( ctx );
 
     } else if ( ! ready_queue_.empty() ) {

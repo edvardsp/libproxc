@@ -23,6 +23,7 @@
  */
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <iostream>
 #include <memory>
@@ -159,7 +160,6 @@ typename SchedulerInitializer::LockT SchedulerInitializer::splk_{};
 
 } // namespace init
 
-/* PROXC_NEVER_INLINE */
 Scheduler * Scheduler::self() noexcept
 {
     //thread_local static boost::context::detail::activation_record_initializer ac_rec_init;
@@ -358,12 +358,6 @@ void Scheduler::schedule_remote_( Context * ctx ) noexcept
     BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
     BOOST_ASSERT( ! ctx->has_terminated() );
     BOOST_ASSERT(   ctx->scheduler_ == this );
-
-    /* std::unique_lock< LockT > lk{ splk_ }; */
-    /* if ( ctx->is_linked< hook::Sleep >() ) { */
-    /*     ctx->unlink< hook::Sleep >(); */
-    /* } */
-    /* lk.unlock(); */
 
     remote_queue_.push( ctx );
     policy_->notify();
@@ -622,7 +616,7 @@ void Scheduler::run_( void * vp )
             auto sleep_it = sleep_queue_.begin();
             auto suspend_time = ( sleep_it != sleep_queue_.end() )
                 ? sleep_it->time_point_
-                : ( PolicyT::TimePointT::max )();
+                : std::chrono::steady_clock::now() + std::chrono::milliseconds(1);
             policy_->suspend_until( suspend_time );
         }
     }
