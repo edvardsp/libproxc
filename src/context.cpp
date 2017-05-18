@@ -43,17 +43,16 @@ namespace runtime {
 void intrusive_ptr_add_ref( Context * ctx ) noexcept
 {
     BOOST_ASSERT( ctx != nullptr );
-    ++ctx->use_count_;
+    ctx->use_count_.fetch_add( 1, std::memory_order_relaxed );
 }
 
 void intrusive_ptr_release( Context * ctx ) noexcept
 {
     BOOST_ASSERT( ctx != nullptr );
-    if ( --ctx->use_count_ != 0 ) { return; }
+    if ( 1 != ctx->use_count_.fetch_sub( 1, std::memory_order_release ) ) { return; }
+    std::atomic_thread_fence( std::memory_order_acquire );
 
-    // If context new allocated => delete
     delete ctx;
-    // if context new placement allocated => call destructor
 }
 
 // Context methods

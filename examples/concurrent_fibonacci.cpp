@@ -39,20 +39,21 @@ void fib_0( Tx< std::size_t > out )
 
 void fib_1( Tx< std::size_t > out1, Tx< std::size_t > out2 )
 {
-    out1 << std::size_t{ 1 };
-    out2 << std::size_t{ 1 };
+    parallel(
+        proc( [&out1]{ out1 << std::size_t{ 1 }; } ),
+        proc( [&out2]{ out2 << std::size_t{ 1 }; } )
+    );
 }
 
 
 void fib_n( Tx< std::size_t > out1, Tx< std::size_t > out2,
             Rx< std::size_t > in1,  Rx< std::size_t > in2 )
 {
-    std::size_t nm1{}, nm2{};
-    in1 >> nm1;
-    in2 >> nm2;
-    std::size_t n = nm1 + nm2;
-    out1 << n;
-    out2 << n;
+    std::size_t n = in1() + in2();
+    parallel(
+        proc( [&out1,n]{ out1 << n; } ),
+        proc( [&out2,n]{ out2 << n; } )
+    );
 }
 
 std::size_t fib( const std::size_t n )
@@ -79,10 +80,7 @@ std::size_t fib( const std::size_t n )
         proc( & fib_0, channel::get_tx_ind( chs, 0 ) ),
         proc( & fib_1, channel::get_tx_ind( chs, 1 ), channel::get_tx_ind( chs, 2 ) ),
         proc_for( fibs.begin(), fibs.end() ),
-        proc( [&result]( Rx< std::size_t > rx ){
-                rx >> result;
-            },
-            channel::get_rx_ind( chs, 2 * n - 1 ) )
+        proc( [&result]( Rx< std::size_t > rx ){ rx >> result; }, channel::get_rx_ind( chs, 2 * n - 1 ) )
     );
 
     return result;

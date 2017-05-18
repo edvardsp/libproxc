@@ -84,6 +84,14 @@ void consumer( Rx rx )
 
 int main()
 {
+    auto ch = channel::create< int >();
+    auto tx = channel::get_tx( ch );
+    auto rx = channel::get_rx( ch );
+    parallel(
+        proc( [&tx]{        tx << 42; } ),
+        proc( [&rx]{ int i; rx >> i; } )
+    );
+
     auto chs = channel::create_n< ItemT >( 4 );
     auto txs = channel::get_tx( chs );
     auto rxs = channel::get_rx( chs );

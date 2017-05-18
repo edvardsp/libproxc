@@ -202,9 +202,10 @@ Scheduler::~Scheduler()
     scheduler_ctx_.reset();
     main_ctx_.reset();
 
-    for (auto et = work_queue_.begin(); et != work_queue_.end(); ) {
+    for ( auto et = work_queue_.begin();
+          et != work_queue_.end();
+          et = work_queue_.erase( et ) ) {
         auto ctx = &( *et );
-        et = work_queue_.erase( et );
         intrusive_ptr_release( ctx );
     }
     running_ = nullptr;
@@ -212,6 +213,7 @@ Scheduler::~Scheduler()
     BOOST_ASSERT( work_queue_.empty() );
     BOOST_ASSERT( sleep_queue_.empty() );
     BOOST_ASSERT( terminated_queue_.empty() );
+    BOOST_ASSERT( remote_queue_.pop() == nullptr );
 }
 
 void Scheduler::resume_( Context * to_ctx, CtxSwitchData * data ) noexcept
@@ -295,9 +297,9 @@ void Scheduler::alt_wait( Alt * alt, std::unique_lock< LockT > & splk ) noexcept
 
     alt_ctx->alt_        = nullptr;
     alt_ctx->time_point_ = TimePointT::max();
-    if ( alt_ctx->is_linked< hook::Sleep >() ) {
-        alt_ctx->unlink< hook::Sleep >();
-    }
+    // FIXME: this is not sound, since the context can migrate after
+    // the context switch, making the access to the sleep queue erroneous
+    alt_ctx->try_unlink< hook::Sleep >();
 }
 
 void Scheduler::resume( CtxSwitchData * data ) noexcept
@@ -327,10 +329,8 @@ void Scheduler::terminate( Context * ctx ) noexcept
     ctx->link( terminated_queue_ );
     ctx->unlink< hook::Work >();
 
-    wakeup_waiting_on( ctx );
+    wakeup_waiting_on_( ctx );
 
-    /* lk.unlock(); */
-    /* resume(); */
     wait( lk );
 }
 
@@ -342,9 +342,7 @@ void Scheduler::schedule_local_( Context * ctx ) noexcept
     BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
     BOOST_ASSERT( ! ctx->has_terminated() );
 
-    if ( ctx->is_linked< hook::Sleep >() ) {
-        ctx->unlink< hook::Sleep >();
-    }
+    ctx->try_unlink< hook::Sleep >();
 
     policy_->enqueue( ctx );
 }
@@ -453,24 +451,26 @@ void Scheduler::join( Context * ctx ) noexcept
 
 bool Scheduler::sleep_until( TimePointT const & time_point, CtxSwitchData * data ) noexcept
 {
-    BOOST_ASSERT(   running_ != nullptr );
-    BOOST_ASSERT(   running_->is_type( Context::Type::Process ) );
-    BOOST_ASSERT( ! running_->is_linked< hook::Ready >() );
-    BOOST_ASSERT( ! running_->is_linked< hook::Wait >() );
-    BOOST_ASSERT( ! running_->is_linked< hook::Sleep >() );
-    BOOST_ASSERT( ! running_->is_linked< hook::Terminated >() );
+    auto running_ctx = Scheduler::running();
+    BOOST_ASSERT(   running_ctx != nullptr );
+    BOOST_ASSERT(   running_ctx->is_type( Context::Type::Process ) );
+    BOOST_ASSERT( ! running_ctx->is_linked< hook::Ready >() );
+    BOOST_ASSERT( ! running_ctx->is_linked< hook::Wait >() );
+    BOOST_ASSERT( ! running_ctx->is_linked< hook::Sleep >() );
+    BOOST_ASSERT( ! running_ctx->is_linked< hook::Terminated >() );
 
     if ( ClockT::now() < time_point ) {
-        running_->time_point_ = time_point;
-        running_->link( sleep_queue_ );
+        running_ctx->time_point_ = time_point;
+        running_ctx->link( sleep_queue_ );
         resume( data );
+        running_ctx->time_point_ = TimePointT::max();
         return ClockT::now() >= time_point;
     } else {
         return true;
     }
 }
 
-void Scheduler::wakeup_sleep() noexcept
+void Scheduler::wakeup_sleep_() noexcept
 {
     std::unique_lock< LockT > lk{ splk_ };
     auto now = ClockT::now();
@@ -495,7 +495,7 @@ void Scheduler::wakeup_sleep() noexcept
     }
 }
 
-void Scheduler::wakeup_waiting_on( Context * ctx ) noexcept
+void Scheduler::wakeup_waiting_on_( Context * ctx ) noexcept
 {
     BOOST_ASSERT(   ctx != nullptr );
     BOOST_ASSERT( ! ctx->is_linked< hook::Ready >() );
@@ -512,7 +512,7 @@ void Scheduler::wakeup_waiting_on( Context * ctx ) noexcept
     BOOST_ASSERT( ctx->wait_queue_.empty() );
 }
 
-void Scheduler::transition_remote() noexcept
+void Scheduler::transition_remote_() noexcept
 {
     for ( Context * ctx = remote_queue_.pop();
           ctx != nullptr;
@@ -521,7 +521,7 @@ void Scheduler::transition_remote() noexcept
     }
 }
 
-void Scheduler::cleanup_terminated() noexcept
+void Scheduler::cleanup_terminated_() noexcept
 {
     while ( ! terminated_queue_.empty() ) {
         auto ctx = & terminated_queue_.front();
@@ -573,27 +573,21 @@ void Scheduler::resolve_ctx_switch_data( CtxSwitchData * data ) noexcept
     }
 }
 
-
 // called by main ctx in new threads when multi-core
-void Scheduler::join_scheduler() noexcept
-{
-
-}
-
 void Scheduler::signal_exit() noexcept
 {
     exit_.store( true, std::memory_order_release );
     policy_->notify();
 }
 
-void noop() {}
-
 // Scheduler context loop
 void Scheduler::run_( void * vp )
 {
     BOOST_ASSERT( running_ == scheduler_ctx_.get() );
+
     CtxSwitchData * data = static_cast< CtxSwitchData * >( vp );
     resolve_ctx_switch_data( data );
+
     for ( ;; ) {
         if ( exit_.load( std::memory_order_acquire ) ) {
             policy_->notify();
@@ -602,9 +596,9 @@ void Scheduler::run_( void * vp )
             }
         }
 
-        cleanup_terminated();
-        transition_remote();
-        wakeup_sleep();
+        cleanup_terminated_();
+        transition_remote_();
+        wakeup_sleep_();
 
         auto ctx = policy_->pick_next();
         if ( ctx != nullptr ) {
@@ -616,18 +610,16 @@ void Scheduler::run_( void * vp )
             auto sleep_it = sleep_queue_.begin();
             auto suspend_time = ( sleep_it != sleep_queue_.end() )
                 ? sleep_it->time_point_
-                : std::chrono::steady_clock::now() + std::chrono::milliseconds(1);
+                : ClockT::now() + std::chrono::milliseconds( 1 );
             policy_->suspend_until( suspend_time );
         }
     }
-    cleanup_terminated();
+    cleanup_terminated_();
 
     scheduler_ctx_->terminate();
-    wakeup_waiting_on( scheduler_ctx_.get() );
+    wakeup_waiting_on_( scheduler_ctx_.get() );
 
-    if ( main_ctx_->is_linked< hook::Ready >() ) {
-        main_ctx_->unlink< hook::Ready >();
-    }
+    main_ctx_->try_unlink< hook::Ready >();
     resume( main_ctx_.get() );
     BOOST_ASSERT_MSG( false, "unreachable" );
     throw UnreachableError{};

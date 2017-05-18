@@ -51,7 +51,7 @@ void filter( Rx< long > in, Tx< long > out )
 
 int main()
 {
-    const long n = 10000;
+    const long n = 4'000;
     auto ex_ch = channel::create< long >();
     auto chans = channel::create_n< long >( n );
 

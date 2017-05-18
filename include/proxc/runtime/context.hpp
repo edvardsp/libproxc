@@ -125,11 +125,11 @@ private:
     // intrusive_ptr friend methods and counter
     friend void intrusive_ptr_add_ref( Context * ctx ) noexcept;
     friend void intrusive_ptr_release( Context * ctx ) noexcept;
-    std::size_t    use_count_{ 0 };
+    std::atomic< std::size_t >    use_count_{ 0 };
 
 public:
     TimePointT     time_point_{ TimePointT::max() };
-    Alt *             alt_{ nullptr };
+    Alt *          alt_{ nullptr };
 
     detail::Spinlock    splk_;
 
@@ -191,6 +191,9 @@ public:
     void link( boost::intrusive::multiset< Ts ... > & set ) noexcept;
     template<typename Hook>
     void unlink() noexcept;
+    template<typename Hook>
+    bool try_unlink() noexcept;
+
     void wait_for( Context * ) noexcept;
 };
 
@@ -220,6 +223,14 @@ void Context::unlink() noexcept
 {
     BOOST_ASSERT( is_linked< Hook >() );
     get_hook_< Hook >().unlink();
+}
+
+template<typename Hook>
+bool Context::try_unlink() noexcept
+{
+    bool link = is_linked< Hook >();
+    if ( link ) { unlink< Hook >(); }
+    return link;
 }
 
 } // namespace runtime

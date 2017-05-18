@@ -70,25 +70,25 @@ void test_repeat_timer()
     }
 }
 
-void test_xx_timer()
+void test_date_timer()
 {
     auto tp = std::chrono::steady_clock::now() + std::chrono::milliseconds( 100 );
-    timer::Xx xx{ tp };
+    timer::Date date{ tp };
 
-    throw_assert( ! xx.expired(), "timer should not be expired" );
+    throw_assert( ! date.expired(), "timer should not be expired" );
     std::this_thread::sleep_until( tp );
-    throw_assert(   xx.expired(), "timer should be expired" );
-    xx.reset();
-    throw_assert(   xx.expired(), "reset should not do anything" );
+    throw_assert(   date.expired(), "timer should be expired" );
+    date.reset();
+    throw_assert(   date.expired(), "reset should not do anything" );
     std::this_thread::sleep_until( tp );
-    throw_assert(   xx.expired(), "timer should keep being expired" );
+    throw_assert(   date.expired(), "timer should keep being expired" );
 }
 
 int main()
 {
     test_egg_timer();
     /* test_repeat_timer(); */
-    test_xx_timer();
+    test_date_timer();
 
     return 0;
 }

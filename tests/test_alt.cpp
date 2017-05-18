@@ -42,85 +42,37 @@ void test_all_cases()
     auto tx = channel::get_tx( tx_ch );
     auto rx = channel::get_rx( rx_ch );
 
-    timer::Egg egg{ std::chrono::milliseconds( 1 ) };
+    timer::Egg    egg{ std::chrono::milliseconds( 1 ) };
     timer::Repeat rep{ std::chrono::microseconds( 100 ) };
-    timer::Xx xx{ std::chrono::steady_clock::now() + std::chrono::milliseconds( 10 ) };
+    timer::Date   date{ std::chrono::steady_clock::now() + std::chrono::milliseconds( 10 ) };
 
     int item = 42;
 
     Alt()
-        .recv(
-            rx )
-        .recv(
-            rx,
-            []( auto ) {
-                // some work
-            } )
-        .recv_if( true,
-            rx )
-        .recv_if( true,
-            rx,
-            []( auto ) {
-                // some work
-            } )
-        .send(
-            tx, 1 )
-        .send(
-            tx, item )
-        .send(
-            tx, 2,
-            []{
-                // some work
-            } )
-        .send(
-            tx, item,
-            [] {
-                // some work
-            } )
-        .send_if( true,
-            tx, 3 )
-        .send_if( true,
-            tx, item)
-        .send_if( true,
-            tx, 4,
-            []{
-
-            } )
-        .send_if( true,
-            tx, item,
-            [] {
-
-            } )
+        .recv( rx )
+        .recv( rx, []( auto ) { /* some work */ } )
+        .recv_if( true, rx )
+        .recv_if( true, rx, []( auto ) { /* some work */ } )
+        .send( tx, 1 )
+        .send( tx, item )
+        .send( tx, 2, []{ /* some work */ } )
+        .send( tx, item, [] { /* some work */ } )
+        .send_if( true, tx, 3 )
+        .send_if( true, tx, item)
+        .send_if( true, tx, 4, []{ /* some work */ } )
+        .send_if( true, tx, item, [] { /* some work */ } )
         .timeout( egg )
-        .timeout( egg,
-            []{
-                 // some work
-            } )
-        .timeout( rep )
-        .timeout( rep,
-            []{
-                // some work
-            } )
-        .timeout( xx )
-        .timeout( xx,
-            []{
-                // some work
-            } )
+        .timeout( egg, []{ /* some work */ } )
         .timeout_if( true, egg )
-        .timeout_if( true, egg,
-            []{
-                 // some work
-            } )
+        .timeout_if( true, egg, []{ /* some work */ } )
+        .timeout( rep )
+        .timeout( rep, []{ /* some work */ } )
         .timeout_if( true, rep )
-        .timeout_if( true, rep,
-            []{
-                // some work
-            } )
-        .timeout_if( true, xx )
-        .timeout_if( true, xx,
-            []{
-                // some work
-            } )
+        .timeout_if( true, rep, []{ /* some work */ } )
+        .timeout( date )
+        .timeout( date, []{ /* some work */ } )
+        .timeout_if( true, date )
+        .timeout_if( true, date, []{ /* some work */ } )
         .select();
 }
 

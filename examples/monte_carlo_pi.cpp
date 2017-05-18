@@ -32,7 +32,7 @@
 using namespace proxc;
 
 constexpr std::size_t NUM_WORKERS = 8;
-constexpr std::size_t NUM_ITERS = std::size_t{ 1 } << std::size_t(32 - 1);
+constexpr std::size_t NUM_ITERS = ~std::size_t{ 0 } - std::size_t{ 1 };
 
 void monte_carlo_pi( channel::Tx< double > out, std::size_t iters ) noexcept
 {
@@ -55,12 +55,8 @@ void monte_carlo_pi( channel::Tx< double > out, std::size_t iters ) noexcept
 void calculate( std::vector< channel::Rx< double > > in, std::size_t workers ) noexcept
 {
     double sum = 0.;
-    for ( std::size_t i = 0; i < workers; ++i ) {
-        Alt()
-            .recv_for( in.begin(), in.end(),
-                [&sum]( auto new_sum ){ sum += new_sum; } )
-            .select();
-    }
+    std::for_each( in.begin(), in.end(),
+        [&sum]( auto& rx ){ sum += rx(); });
     sum /= static_cast< double >( workers );
     std::cout << "pi: " << sum << std::endl;
 }

@@ -146,6 +146,13 @@ public:
         return is_closed();
     }
 
+    ItemT operator () () noexcept
+    {
+        ItemT item{};
+        recv( item );
+        return std::move( item );
+    }
+
     template<typename ItemU>
     friend bool operator >> ( Rx< ItemU > & rx, ItemU & item )
     {

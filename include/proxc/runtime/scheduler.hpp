@@ -176,21 +176,20 @@ public:
 
     bool sleep_until( TimePointT const &, CtxSwitchData * = nullptr ) noexcept;
 
-    void wakeup_sleep() noexcept;
-    void wakeup_waiting_on( Context * ) noexcept;
-    void transition_remote() noexcept;
-    void cleanup_terminated() noexcept;
-
     void print_debug() noexcept;
 
 private:
     void resolve_ctx_switch_data( CtxSwitchData * ) noexcept;
 
+    void wakeup_sleep_() noexcept;
+    void wakeup_waiting_on_( Context * ) noexcept;
+    void transition_remote_() noexcept;
+    void cleanup_terminated_() noexcept;
+
     void schedule_local_( Context * ) noexcept;
     void schedule_remote_( Context * ) noexcept;
 
     // called by main ctx in new threads when multi-core
-    void join_scheduler() noexcept;
     void signal_exit() noexcept;
     // actual context switch
     void resume_( Context *, CtxSwitchData * ) noexcept;
@@ -208,10 +207,12 @@ boost::intrusive_ptr< Context > Scheduler::make_work( Fn && fn, Args && ... args
 {
     static_assert( detail::traits::is_callable< Fn( Args ... ) >::value,
         "function is not callable with given arguments" );
+
     auto func = [fn = std::move( fn ),
                  tpl = std::make_tuple( std::forward< Args >( args ) ... )]
                 ( void * vp ) mutable
                 { trampoline( std::move( fn ), std::move( tpl ), vp ); };
+
     return boost::intrusive_ptr< Context >{
         new Context{ context::work_type, std::move( func ) } };
 }

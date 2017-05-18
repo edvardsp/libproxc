@@ -64,8 +64,8 @@ public:
     virtual bool expired() noexcept = 0;
 
     // base methods
-    friend bool operator < ( Interface const & lhs, Interface const & rhs ) noexcept
-    { return lhs.time_point_ < rhs.time_point_; }
+    bool operator < ( Interface const & other ) noexcept
+    { return time_point_ < other.time_point_; }
 
     TimePointT const & get() const noexcept
     { return time_point_; }
@@ -126,11 +126,11 @@ public:
 
 // Single event. Will expire when the supplied time_point has been
 // reached. Cannot be reset when expired.
-class Xx final : public Interface
+class Date final : public Interface
 {
 public:
     template<class Clock, class Duration>
-    Xx( std::chrono::time_point< Clock, Duration > const & time_point )
+    Date( std::chrono::time_point< Clock, Duration > const & time_point )
         : Interface{ time_point }
     {}
 
