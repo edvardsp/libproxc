@@ -179,7 +179,7 @@ public:
     void print_debug() noexcept;
 
 private:
-    void resolve_ctx_switch_data( CtxSwitchData * ) noexcept;
+    void resolve_ctx_switch_data_( CtxSwitchData * ) noexcept;
 
     void wakeup_sleep_() noexcept;
     void wakeup_waiting_on_( Context * ) noexcept;
@@ -221,7 +221,7 @@ template<typename Fn, typename Tpl>
 void Scheduler::trampoline( Fn && fn_, Tpl && tpl_, void * vp )
 {
     CtxSwitchData * data = static_cast< CtxSwitchData * >( vp );
-    Scheduler::self()->resolve_ctx_switch_data( data );
+    Scheduler::self()->resolve_ctx_switch_data_( data );
     {
         Fn fn{ std::move( fn_ ) };
         Tpl tpl{ std::move( tpl_ ) };

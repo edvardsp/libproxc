@@ -231,7 +231,7 @@ void Scheduler::resume_( Context * to_ctx, CtxSwitchData * data ) noexcept
     void * vp = static_cast< void * >( data );
     vp = running_->resume( vp );
     data = static_cast< CtxSwitchData * >( vp );
-    resolve_ctx_switch_data( data );
+    resolve_ctx_switch_data_( data );
 }
 
 void Scheduler::wait() noexcept
@@ -561,7 +561,7 @@ void Scheduler::print_debug() noexcept
     }
 }
 
-void Scheduler::resolve_ctx_switch_data( CtxSwitchData * data ) noexcept
+void Scheduler::resolve_ctx_switch_data_( CtxSwitchData * data ) noexcept
 {
     if ( data != nullptr ) {
         if ( data->ctx_ != nullptr ) {
@@ -586,7 +586,7 @@ void Scheduler::run_( void * vp )
     BOOST_ASSERT( running_ == scheduler_ctx_.get() );
 
     CtxSwitchData * data = static_cast< CtxSwitchData * >( vp );
-    resolve_ctx_switch_data( data );
+    resolve_ctx_switch_data_( data );
 
     for ( ;; ) {
         if ( exit_.load( std::memory_order_acquire ) ) {
