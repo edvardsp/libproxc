@@ -160,7 +160,7 @@ public:
     bool wait_until( TimePointT const &, Context * ) noexcept;
     bool wait_until( TimePointT const &, std::unique_lock< LockT > &, bool lock = false ) noexcept;
 
-    void alt_wait( Alt *, std::unique_lock< LockT > & ) noexcept;
+    bool alt_wait( Alt *, std::unique_lock< LockT > & ) noexcept;
 
     void resume( CtxSwitchData * = nullptr ) noexcept;
     void resume( Context *, CtxSwitchData * = nullptr ) noexcept;

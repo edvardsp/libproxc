@@ -272,7 +272,7 @@ bool Scheduler::wait_until( TimePointT const & time_point, std::unique_lock< Loc
     return ret;
 }
 
-void Scheduler::alt_wait( Alt * alt, std::unique_lock< LockT > & splk ) noexcept
+bool Scheduler::alt_wait( Alt * alt, std::unique_lock< LockT > & splk ) noexcept
 {
     BOOST_ASSERT(   alt != nullptr );
     BOOST_ASSERT(   alt->ctx_ == Scheduler::running() );
@@ -300,6 +300,8 @@ void Scheduler::alt_wait( Alt * alt, std::unique_lock< LockT > & splk ) noexcept
     // FIXME: this is not sound, since the context can migrate after
     // the context switch, making the access to the sleep queue erroneous
     alt_ctx->try_unlink< hook::Sleep >();
+
+    return alt->time_point_ <= ClockT::now();
 }
 
 void Scheduler::resume( CtxSwitchData * data ) noexcept

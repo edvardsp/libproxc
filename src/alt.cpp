@@ -62,31 +62,56 @@ void Alt::select()
         }
     }
 
-    bool timeout = false;
-    switch ( choices.size() ) {
-    case 0:  timeout = select_0();                   break;
-    case 1:  timeout = select_1( *choices.begin() ); break;
-    default: timeout = select_n( choices );          break;
-    }
+    Winner winner;
+    bool skip = has_skip_.load( std::memory_order_relaxed );
+    std::size_t size = choices.size();
 
-    if ( timeout ) {
-        BOOST_ASSERT( time_point_ < TimePointT::max() );
-        if ( timer_fn_ ) {
-            timer_fn_();
-        }
+    if      ( size == 0 ) { winner = select_0( skip ); }
+    else if ( size == 1 ) { winner = select_1( skip, *choices.begin() ); }
+    else                  { winner = select_n( skip, choices ); }
 
-    } else {
+    switch ( winner ) {
+    case Winner::Choice: {
         auto selected = selected_.exchange( nullptr, std::memory_order_acq_rel );
         BOOST_ASSERT( selected != nullptr );
         selected->run_func();
-    }
+        break;
+
+    } case Winner::Timeout: {
+        BOOST_ASSERT( time_point_ < TimePointT::max() );
+        if ( timer_fn_ ) { timer_fn_(); }
+        break;
+
+    } case Winner::Skip: {
+        if ( skip_fn_ ) { skip_fn_(); }
+        break;
+    }}
 }
 
-bool Alt::select_0()
+Alt & Alt::skip( SkipFn fn ) noexcept
 {
-    if ( time_point_ < TimePointT::max() ) {
+    if ( ! has_skip_.exchange( true, std::memory_order_relaxed ) ) {
+        skip_fn_ = std::move( fn );
+    }
+    return *this;
+}
+
+Alt & Alt::skip_if( bool guard, SkipFn fn ) noexcept
+{
+    return ( guard )
+        ? skip( std::move( fn ) )
+        : *this ;
+}
+
+auto Alt::select_0( bool skip )
+    -> Winner
+{
+    if ( skip ) {
+        return Winner::Skip;
+
+    } else if ( time_point_ < TimePointT::max() ) {
         runtime::Scheduler::self()->wait_until( time_point_ );
-        return true;
+        return Winner::Timeout;
 
     } else {
         // suspend indefinitely, should never return
@@ -96,7 +121,8 @@ bool Alt::select_0()
     }
 }
 
-bool Alt::select_1( ChoiceT * choice ) noexcept
+auto Alt::select_1( bool skip, ChoiceT * choice ) noexcept
+    -> Winner
 {
     std::unique_lock< LockT > lk{ splk_ };
 
@@ -116,24 +142,31 @@ bool Alt::select_1( ChoiceT * choice ) noexcept
         break;
     }
 
+    bool timeout = false;
     if ( selected_.load( std::memory_order_acquire ) == nullptr ) {
+        // choice is not ready
+        if ( skip ) {
+            return Winner::Skip;
+        }
         state_.store( alt::State::Waiting, std::memory_order_release );
-        runtime::Scheduler::self()->alt_wait( this, lk );
+        timeout = runtime::Scheduler::self()->alt_wait( this, lk );
         state_.store( alt::State::Done, std::memory_order_release );
+
     } else {
+        // choice is ready
         state_.store( alt::State::Done, std::memory_order_release );
         lk.unlock();
     }
 
-    /* state_.store( alt::State::Done, std::memory_order_release ); */
-    /* lk.unlock(); */
-
     choice->leave();
 
-    return selected_.load( std::memory_order_relaxed ) == nullptr;
+    return ( timeout )
+        ? Winner::Timeout
+        : Winner::Choice ;
 }
 
-bool Alt::select_n( std::vector< ChoiceT * > & choices ) noexcept
+auto Alt::select_n( bool skip, std::vector< ChoiceT * > & choices ) noexcept
+    -> Winner
 {
     std::unique_lock< LockT > lk{ splk_ };
 
@@ -168,26 +201,32 @@ bool Alt::select_n( std::vector< ChoiceT * > & choices ) noexcept
         }
     }
 
+    bool timeout = false;
     if ( selected_.load( std::memory_order_relaxed ) == nullptr ) {
+        // no choices were ready
+        if ( skip ) {
+            return Winner::Skip;
+        }
         state_.store( alt::State::Waiting, std::memory_order_release );
-        runtime::Scheduler::self()->alt_wait( this, lk );
+        timeout = runtime::Scheduler::self()->alt_wait( this, lk );
         // one or more choices should be ready,
         // and selected_ should be set. If set,
         // this is the winning choice.
         state_.store( alt::State::Done, std::memory_order_release );
+
     } else {
+        // a choice was ready
         state_.store( alt::State::Done, std::memory_order_release );
         lk.unlock();
     }
 
-    /* state_.store( alt::State::Done, std::memory_order_release ); */
-
-    /* lk.unlock(); */
-
     for ( const auto& choice : choices ) {
         choice->leave();
     }
-    return selected_.load( std::memory_order_relaxed ) == nullptr;
+
+    return ( timeout )
+        ? Winner::Timeout
+        : Winner::Choice ;
 }
 
 // called by external non-alting choices

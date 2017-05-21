@@ -56,6 +56,12 @@ PROXC_NAMESPACE_BEGIN
 class Alt
 {
 private:
+    enum class Winner {
+        Choice,
+        Timeout,
+        Skip,
+    };
+
     using ChoiceT   = alt::ChoiceBase;
     using ChoicePtr = std::unique_ptr< ChoiceT >;
 
@@ -77,6 +83,8 @@ private:
     using TimePointT = runtime::Context::TimePointT;
     using TimerFn = detail::delegate< void( void ) >;
 
+    using SkipFn = detail::delegate< void( void ) >;
+
     std::atomic< alt::State >    state_{ alt::State::Checking };
 
     std::vector< ChoicePtr >    choices_{};
@@ -84,6 +92,9 @@ private:
     TimePointT      tp_start_{ runtime::ClockT::now() };
     TimePointT      time_point_{ TimePointT::max() };
     TimerFn         timer_fn_{};
+
+    std::atomic< bool >    has_skip_{ false };
+    SkipFn                 skip_fn_{};
 
     runtime::Context *    ctx_;
     LockT                 splk_;
@@ -248,6 +259,13 @@ public:
                       Timer const &,
                       TimerFn = TimerFn{} ) noexcept;
 
+    PROXC_WARN_UNUSED
+    Alt & skip( SkipFn = SkipFn{} ) noexcept;
+
+    PROXC_WARN_UNUSED
+    Alt & skip_if( bool guard,
+                   SkipFn = SkipFn{} ) noexcept;
+
     // consumes alt and determines which choice to select.
     // the chosen choice completes the operation, and an
     // optional corresponding closure is executed.
@@ -262,9 +280,9 @@ private:
     void recv_impl( Rx & rx,
                     RxFn< Rx > fn ) noexcept;
 
-    bool select_0();
-    bool select_1( ChoiceT * ) noexcept;
-    bool select_n( std::vector< ChoiceT * > & ) noexcept;
+    Winner select_0( bool skip );
+    Winner select_1( bool skip, ChoiceT * ) noexcept;
+    Winner select_n( bool skip, std::vector< ChoiceT * > & ) noexcept;
 
     bool try_select( ChoiceT * ) noexcept;
     bool try_alt_select( ChoiceT * ) noexcept;

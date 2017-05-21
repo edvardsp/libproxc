@@ -34,6 +34,47 @@
 
 using namespace proxc;
 
+void test_single_case_with_skip()
+{
+    auto tx_ch = channel::create< int >();
+    auto rx_ch = channel::create< int >();
+
+    auto tx = channel::get_tx( tx_ch );
+    auto rx = channel::get_rx( rx_ch );
+
+    timer::Egg    egg{ std::chrono::milliseconds( 1 ) };
+    timer::Repeat rep{ std::chrono::microseconds( 100 ) };
+    timer::Date   date{ std::chrono::steady_clock::now() + std::chrono::milliseconds( 10 ) };
+
+    int item = 42;
+
+    Alt()                                                    .skip().select();
+    Alt().recv( rx )                                         .skip().select();
+    Alt().recv( rx, []( auto ) { /* some work */ } )         .skip().select();
+    Alt().recv_if( true, rx )                                .skip().select();
+    Alt().recv_if( true, rx, []( auto ) { /* some work */ } ).skip().select();
+    Alt().send( tx, 1 )                                      .skip().select();
+    Alt().send( tx, item )                                   .skip().select();
+    Alt().send( tx, 2, [] { /* some work */ } )              .skip().select();
+    Alt().send( tx, item, [] { /* some work */ } )           .skip().select();
+    Alt().send_if( true, tx, 3 )                             .skip().select();
+    Alt().send_if( true, tx, item)                           .skip().select();
+    Alt().send_if( true, tx, 4, [] { /* some work */ } )     .skip().select();
+    Alt().send_if( true, tx, item, [] { /* some work */ } )  .skip().select();
+    Alt().timeout( egg )                                     .skip().select();
+    Alt().timeout( egg, []{ /* some work */ } )              .skip().select();
+    Alt().timeout_if( true, egg )                            .skip().select();
+    Alt().timeout_if( true, egg, [] { /* some work */ } )    .skip().select();
+    Alt().timeout( rep )                                     .skip().select();
+    Alt().timeout( rep, []{ /* some work */ } )              .skip().select();
+    Alt().timeout_if( true, rep )                            .skip().select();
+    Alt().timeout_if( true, rep, [] { /* some work */ } )    .skip().select();
+    Alt().timeout( date )                                    .skip().select();
+    Alt().timeout( date, [] { /* some work */ } )            .skip().select();
+    Alt().timeout_if( true, date )                           .skip().select();
+    Alt().timeout_if( true, date, [] { /* some work */ } )   .skip().select();
+}
+
 void test_all_cases()
 {
     auto tx_ch = channel::create< int >();
@@ -55,24 +96,26 @@ void test_all_cases()
         .recv_if( true, rx, []( auto ) { /* some work */ } )
         .send( tx, 1 )
         .send( tx, item )
-        .send( tx, 2, []{ /* some work */ } )
+        .send( tx, 2, [] { /* some work */ } )
         .send( tx, item, [] { /* some work */ } )
         .send_if( true, tx, 3 )
         .send_if( true, tx, item)
-        .send_if( true, tx, 4, []{ /* some work */ } )
+        .send_if( true, tx, 4, [] { /* some work */ } )
         .send_if( true, tx, item, [] { /* some work */ } )
         .timeout( egg )
         .timeout( egg, []{ /* some work */ } )
         .timeout_if( true, egg )
-        .timeout_if( true, egg, []{ /* some work */ } )
+        .timeout_if( true, egg, [] { /* some work */ } )
         .timeout( rep )
         .timeout( rep, []{ /* some work */ } )
         .timeout_if( true, rep )
-        .timeout_if( true, rep, []{ /* some work */ } )
+        .timeout_if( true, rep, [] { /* some work */ } )
         .timeout( date )
-        .timeout( date, []{ /* some work */ } )
+        .timeout( date, [] { /* some work */ } )
         .timeout_if( true, date )
-        .timeout_if( true, date, []{ /* some work */ } )
+        .timeout_if( true, date, [] { /* some work */ } )
+        .skip()
+        .skip( []{ /* some work */ } )
         .select();
 }
 
@@ -348,6 +391,7 @@ int main()
 {
     /* std::size_t i = 0; */
     /* for (;;) { */
+    test_single_case_with_skip();
     test_all_cases();
     test_single_send_case();
     test_single_recv_case();

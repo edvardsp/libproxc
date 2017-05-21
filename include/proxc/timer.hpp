@@ -64,7 +64,7 @@ public:
     virtual bool expired() noexcept = 0;
 
     // base methods
-    bool operator < ( Interface const & other ) noexcept
+    bool operator < ( Interface const & other ) const noexcept
     { return time_point_ < other.time_point_; }
 
     TimePointT const & get() const noexcept
