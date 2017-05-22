@@ -142,39 +142,27 @@ public:
     Alt & operator = ( Alt && ) = delete;
 
     // send choice without guard
-    template< typename Tx
-            , typename = std::enable_if_t<
-                detail::traits::is_tx< Tx >::value
-            > >
+    template<typename Tx>
     PROXC_WARN_UNUSED
     Alt & send( Tx & tx,
                 ItemT< Tx > && item,
                 TxFn< Tx > fn = TxFn< Tx >{} ) noexcept;
 
-    template< typename Tx
-            , typename = std::enable_if_t<
-                detail::traits::is_tx< Tx >::value
-            > >
+    template<typename Tx>
     PROXC_WARN_UNUSED
     Alt & send( Tx & tx,
                 ItemT< Tx > const & item,
                 TxFn< Tx > fn = TxFn< Tx >{} ) noexcept;
 
     // send choice with guard
-    template< typename Tx
-            , typename = std::enable_if_t<
-                detail::traits::is_tx< Tx >::value
-            > >
+    template<typename Tx>
     PROXC_WARN_UNUSED
     Alt & send_if( bool guard,
                    Tx & tx,
                    ItemT< Tx > && item,
                    TxFn< Tx > fn = TxFn< Tx >{} ) noexcept;
 
-    template< typename Tx
-            , typename = std::enable_if_t<
-                detail::traits::is_tx< Tx >::value
-            > >
+    template<typename Tx>
     PROXC_WARN_UNUSED
     Alt & send_if( bool guard,
                    Tx & tx,
@@ -182,89 +170,66 @@ public:
                    TxFn< Tx > fn = TxFn< Tx >{} ) noexcept;
 
     // replicated send choice over item iterator
-    template< typename TxIt, typename ItemIt
-            , typename = std::enable_if_t<
-                detail::traits::is_tx_iterator< TxIt >::value &&
-                detail::traits::is_inputiterator< ItemIt >::value
-            > >
+    template< typename TxIt, typename ItemIt>
     PROXC_WARN_UNUSED
     Alt & send_for( TxIt tx_first, TxIt tx_last,
                     ItemIt item_first,
                     TxFn< EndT< TxIt > > fn = TxFn< EndT< TxIt > >{} ) noexcept;
 
     // replicated send choice over single item
-    template< typename TxIt
-            , typename = std::enable_if_t<
-                detail::traits::is_tx_iterator< TxIt >::value
-            > >
+    template<typename TxIt>
     PROXC_WARN_UNUSED
     Alt & send_for( TxIt tx_first, TxIt tx_last,
                     ItemT< EndT< TxIt > > item,
                     TxFn< EndT< TxIt > > fn = TxFn< EndT< TxIt > >{} ) noexcept;
 
     // recv choice without guard
-    template< typename Rx
-            , typename = std::enable_if_t<
-                detail::traits::is_rx< Rx >::value
-            > >
+    template<typename Rx>
     PROXC_WARN_UNUSED
     Alt & recv( Rx & rx,
                 RxFn< Rx > fn = RxFn< Rx >{} ) noexcept;
 
     // recv choice with guard
-    template< typename Rx
-            , typename = std::enable_if_t<
-                detail::traits::is_rx< Rx >::value
-            > >
+    template<typename Rx>
     PROXC_WARN_UNUSED
     Alt & recv_if( bool guard,
                    Rx & rx,
                    RxFn< Rx > fn = RxFn< Rx >{} ) noexcept;
 
     // replicated recv choice
-    template< typename RxIt
-            , typename = std::enable_if_t<
-                detail::traits::is_rx_iterator< RxIt >::value
-            > >
+    template<typename RxIt>
     PROXC_WARN_UNUSED
     Alt & recv_for( RxIt rx_first, RxIt rx_last,
                     RxFn< EndT< RxIt > > fn = RxFn< EndT< RxIt > >{} ) noexcept;
 
     // replicated recv choice with guard
-    template< typename RxIt
-            , typename = std::enable_if_t<
-                detail::traits::is_rx_iterator< RxIt >::value
-            > >
+    template<typename RxIt>
     PROXC_WARN_UNUSED
     Alt & recv_for_if( bool guard,
                        RxIt rx_first, RxIt rx_last,
                        RxFn< EndT< RxIt > > fn = RxFn< EndT< RxIt > >{} ) noexcept;
 
     // timeout without guard
-    template< typename Timer
-            , typename = typename std::enable_if<
-                detail::traits::is_timer< Timer >::value
-            >::type >
+    template<typename Timer>
     PROXC_WARN_UNUSED
-    Alt & timeout( Timer const &,
+    Alt & timeout( Timer const & timer,
                    TimerFn fn = TimerFn{} ) noexcept;
 
     // timeout with guard
-    template< typename Timer
-            , typename = typename std::enable_if<
-                detail::traits::is_timer< Timer >::value
-            >::type >
+    template<typename Timer>
     PROXC_WARN_UNUSED
-    Alt & timeout_if( bool,
-                      Timer const &,
-                      TimerFn = TimerFn{} ) noexcept;
+    Alt & timeout_if( bool guard,
+                      Timer const & timer,
+                      TimerFn fn = TimerFn{} ) noexcept;
 
+    // skip without guard
     PROXC_WARN_UNUSED
-    Alt & skip( SkipFn = SkipFn{} ) noexcept;
+    Alt & skip( SkipFn fn = SkipFn{} ) noexcept;
 
+    // skip with guard
     PROXC_WARN_UNUSED
     Alt & skip_if( bool guard,
-                   SkipFn = SkipFn{} ) noexcept;
+                   SkipFn fn = SkipFn{} ) noexcept;
 
     // consumes alt and determines which choice to select.
     // the chosen choice completes the operation, and an
@@ -272,13 +237,55 @@ public:
     void select();
 
 private:
-    template<typename Tx>
-    void send_impl( Tx & tx,
-                    ItemT< Tx > item,
-                    TxFn< Tx > fn ) noexcept;
-    template<typename Rx>
+    template< typename Tx
+            , typename = std::enable_if_t<
+                detail::traits::is_tx< Tx >::value
+            > >
+    void send_impl( Tx &,
+                    ItemT< Tx >,
+                    TxFn< Tx > ) noexcept;
+
+    template< typename TxIt
+            , typename ItemIt
+            , typename = std::enable_if_t<
+                detail::traits::is_tx_iterator< TxIt >::value &&
+                detail::traits::is_inputiterator< ItemIt >::value
+            > >
+    void send_for_impl( TxIt,
+                        TxIt,
+                        ItemIt,
+                        TxFn< EndT< TxIt > > = TxFn< EndT< TxIt > >{} ) noexcept;
+
+    template< typename TxIt
+            , typename = std::enable_if_t<
+                detail::traits::is_tx_iterator< TxIt >::value
+            > >
+    void send_for_impl( TxIt,
+                        TxIt,
+                        ItemT< EndT< TxIt > >,
+                        TxFn< EndT< TxIt > > = TxFn< EndT< TxIt > >{} ) noexcept;
+
+    template< typename Rx
+            , typename = std::enable_if_t<
+                detail::traits::is_rx< Rx >::value
+            > >
     void recv_impl( Rx & rx,
-                    RxFn< Rx > fn ) noexcept;
+                    RxFn< Rx > ) noexcept;
+
+    template< typename RxIt
+            , typename = std::enable_if_t<
+                detail::traits::is_rx_iterator< RxIt >::value
+            > >
+    void recv_for_impl( RxIt,
+                        RxIt,
+                        RxFn< EndT< RxIt > > = RxFn< EndT< RxIt > >{} ) noexcept;
+
+    template< typename Timer
+            , typename = std::enable_if_t<
+                detail::traits::is_timer< Timer >::value
+            > >
+    void timeout_impl( Timer const &,
+                       TimerFn ) noexcept;
 
     Winner select_0( bool skip );
     Winner select_1( bool skip, ChoiceT * ) noexcept;
@@ -290,7 +297,7 @@ private:
     bool sync( Alt *, SyncT * ) noexcept;
 };
 
-template<typename Tx>
+template<typename Tx, typename>
 void Alt::send_impl(
     Tx & tx,
     ItemT< Tx > item,
@@ -324,7 +331,41 @@ void Alt::send_impl(
     }
 }
 
-template<typename Rx>
+template<typename TxIt, typename ItemIt, typename>
+void Alt::send_for_impl(
+    TxIt tx_first,
+    TxIt tx_last,
+    ItemIt item_first,
+    TxFn< EndT< TxIt > > fn
+) noexcept
+{
+    for ( auto tx_it = tx_first;
+          tx_it != tx_last;
+          ++tx_it ) {
+        send_impl( *tx_it,
+                   *item_first++,
+                   fn );
+    }
+}
+
+template<typename TxIt, typename>
+void Alt::send_for_impl(
+    TxIt tx_first,
+    TxIt tx_last,
+    ItemT< EndT< TxIt > > item,
+    TxFn< EndT< TxIt > > fn
+) noexcept
+{
+    for ( auto tx_it = tx_first;
+          tx_it != tx_last;
+          ++tx_it ) {
+        send_impl( *tx_it,
+                   item,
+                   fn );
+    }
+}
+
+template<typename Rx, typename>
 void Alt::recv_impl(
     Rx & rx,
     RxFn< Rx > fn
@@ -355,131 +396,11 @@ void Alt::recv_impl(
         }
     }
 }
-// send choice without guard
-template<typename Tx, typename>
-Alt & Alt::send(
-    Tx & tx,
-    ItemT< Tx > && item,
-    TxFn< Tx > fn
-) noexcept
-{
-    send_impl( tx,
-               std::move( item ),
-               std::move( fn ) );
-    return *this;
-}
 
-template<typename Tx, typename>
-Alt & Alt::send(
-    Tx & tx,
-    ItemT< Tx > const & item,
-    TxFn< Tx > fn
-) noexcept
-{
-    send_impl( tx,
-               item,
-               std::move( fn ) );
-    return *this;
-}
-
-// send choice with guard
-template<typename Tx, typename>
-Alt & Alt::send_if(
-    bool guard,
-    Tx & tx,
-    ItemT< Tx > && item,
-    TxFn< Tx > fn
-) noexcept
-{
-    if ( guard ) {
-        send_impl( tx,
-                   std::move( item ),
-                   std::move( fn ) );
-    }
-    return *this;
-}
-
-template<typename Tx, typename>
-Alt & Alt::send_if(
-    bool guard,
-    Tx & tx,
-    ItemT< Tx > const & item,
-    TxFn< Tx > fn
-) noexcept
-{
-    if ( guard ) {
-        send_impl( tx,
-                   item,
-                   std::move( fn ) );
-    }
-    return *this;
-}
-
-// replicated send choice over item iterator
-template<typename TxIt, typename ItemIt, typename>
-Alt & Alt::send_for(
-    TxIt   tx_first,   TxIt   tx_last,
-    ItemIt item_first,
-    TxFn< EndT< TxIt > > fn
-) noexcept
-{
-    for ( auto tx_it = tx_first;
-          tx_it != tx_last;
-          ++tx_it ) {
-        send_impl( *tx_it,
-                   *item_first++,
-                   fn );
-    }
-    return *this;
-}
-
-// replicated send choice over single item
-template<typename TxIt, typename>
-Alt & Alt::send_for(
-    TxIt tx_first, TxIt tx_last,
-    ItemT< EndT< TxIt > > item,
-    TxFn< EndT< TxIt > > fn
-) noexcept
-{
-    for ( auto tx_it = tx_first;
-          tx_it != tx_last;
-          ++tx_it ) {
-        send_impl( *tx_it,
-                   item,
-                   fn );
-    }
-    return *this;
-}
-
-// recv choice without guard
-template<typename Rx, typename>
-Alt & Alt::recv(
-    Rx & rx,
-    RxFn< Rx > fn
-) noexcept
-{
-    recv_impl( rx, std::move( fn ) );
-    return *this;
-}
-
-// recv choice with guard
-template<typename Rx, typename>
-Alt & Alt::recv_if(
-    bool guard,
-    Rx & rx,
-    RxFn< Rx > fn
-) noexcept
-{
-    if ( guard ) {
-        recv_impl( rx, std::move( fn ) );
-    }
-    return *this;
-}
-
-// replicated recv choice
 template<typename RxIt, typename>
-Alt & Alt::recv_for(
-    RxIt rx_first, RxIt rx_last,
+void Alt::recv_for_impl(
+    RxIt rx_first,
+    RxIt rx_last,
     RxFn< EndT< RxIt > > fn
 ) noexcept
 {
@@ -488,52 +409,211 @@ Alt & Alt::recv_for(
           ++rx_it ) {
         recv_impl( *rx_it, fn );
     }
-    return *this;
 }
 
-// replicated recv choice with guard
-template<typename RxIt, typename>
-Alt & Alt::recv_for_if(
-    bool guard,
-    RxIt rx_first, RxIt rx_last,
-    RxFn< EndT< RxIt > > fn
-) noexcept
-{
-    return ( guard )
-        ? recv_for( rx_first, rx_last,
-                    std::move( fn ) )
-        : *this ;
-}
-
-// timeout without guard
-template< typename Timer
-        , typename >
-Alt & Alt::timeout(
-    Timer const & tmi,
+template<typename Timer, typename>
+void Alt::timeout_impl(
+    Timer const & timer,
     TimerFn fn
 ) noexcept
 {
-    Timer new_timer{ tmi };
+    Timer new_timer{ timer };
     new_timer.reset();
     if ( new_timer.get() < time_point_ ) {
         time_point_ = new_timer.get();
         timer_fn_ = std::move( fn );
     }
+}
+
+// send choice without guard
+template<typename Tx>
+Alt & Alt::send(
+    Tx & tx,
+    ItemT< Tx > && item,
+    TxFn< Tx > fn
+) noexcept
+{
+    static_assert( detail::traits::is_tx< Tx >::value,
+        "Supplied channel end is not a Tx type");
+
+    send_impl( tx, std::move( item ), std::move( fn ) );
+    return *this;
+}
+
+template<typename Tx>
+Alt & Alt::send(
+    Tx & tx,
+    ItemT< Tx > const & item,
+    TxFn< Tx > fn
+) noexcept
+{
+    static_assert( detail::traits::is_tx< Tx >::value,
+        "Supplied channel end is not a Tx type");
+
+    send_impl( tx, item, std::move( fn ) );
+    return *this;
+}
+
+// send choice with guard
+template<typename Tx>
+Alt & Alt::send_if(
+    bool guard,
+    Tx & tx,
+    ItemT< Tx > && item,
+    TxFn< Tx > fn
+) noexcept
+{
+    static_assert( detail::traits::is_tx< Tx >::value,
+        "Supplied channel end is not a Tx type");
+
+    if ( guard ) {
+        send_impl( tx, std::move( item ), std::move( fn ) );
+    }
+    return *this;
+}
+
+template<typename Tx>
+Alt & Alt::send_if(
+    bool guard,
+    Tx & tx,
+    ItemT< Tx > const & item,
+    TxFn< Tx > fn
+) noexcept
+{
+    static_assert( detail::traits::is_tx< Tx >::value,
+        "Supplied channel end is not a Tx type");
+
+    if ( guard ) {
+        send_impl( tx, item, std::move( fn ) );
+    }
+    return *this;
+}
+
+// replicated send choice over item iterator
+template<typename TxIt, typename ItemIt>
+Alt & Alt::send_for(
+    TxIt   tx_first,   TxIt   tx_last,
+    ItemIt item_first,
+    TxFn< EndT< TxIt > > fn
+) noexcept
+{
+    static_assert( detail::traits::is_tx_iterator< TxIt >::value,
+        "Supplied channel end iterator is not a Tx channel end iterator");
+    static_assert( detail::traits::is_inputiterator< ItemIt >::value,
+        "Supplied item iterator is not an input iterator");
+
+    send_for_impl( tx_first, tx_last, item_first, std::move( fn ) );
+    return *this;
+}
+
+// replicated send choice over single item
+template<typename TxIt>
+Alt & Alt::send_for(
+    TxIt tx_first, TxIt tx_last,
+    ItemT< EndT< TxIt > > item,
+    TxFn< EndT< TxIt > > fn
+) noexcept
+{
+    static_assert( detail::traits::is_tx_iterator< TxIt >::value,
+        "Supplied channel end iterator is not a Tx channel end iterator");
+
+    send_for_impl( tx_first, tx_last, std::move( item ), std::move( fn ) );
+    return *this;
+}
+
+// recv choice without guard
+template<typename Rx>
+Alt & Alt::recv(
+    Rx & rx,
+    RxFn< Rx > fn
+) noexcept
+{
+    static_assert( detail::traits::is_rx< Rx >::value,
+        "Supplied channel end is not a Rx type");
+
+    recv_impl( rx, std::move( fn ) );
+    return *this;
+}
+
+// recv choice with guard
+template<typename Rx>
+Alt & Alt::recv_if(
+    bool guard,
+    Rx & rx,
+    RxFn< Rx > fn
+) noexcept
+{
+    static_assert( detail::traits::is_rx< Rx >::value,
+        "Supplied channel end is not a Rx type");
+
+    if ( guard ) {
+        recv_impl( rx, std::move( fn ) );
+    }
+    return *this;
+}
+
+// replicated recv choice
+template<typename RxIt>
+Alt & Alt::recv_for(
+    RxIt rx_first,
+    RxIt rx_last,
+    RxFn< EndT< RxIt > > fn
+) noexcept
+{
+    static_assert( detail::traits::is_rx_iterator< RxIt >::value,
+        "Supplied channel end iterator is not a Rx channel end iterator");
+
+    recv_for_impl( rx_first, rx_last, std::move( fn ) );
+    return *this;
+}
+
+// replicated recv choice with guard
+template<typename RxIt>
+Alt & Alt::recv_for_if(
+    bool guard,
+    RxIt rx_first,
+    RxIt rx_last,
+    RxFn< EndT< RxIt > > fn
+) noexcept
+{
+    static_assert( detail::traits::is_rx_iterator< RxIt >::value,
+        "Supplied channel end iterator is not a Rx channel end iterator");
+
+    if ( guard ) {
+        recv_for_impl( rx_first, rx_last, std::move( fn ) );
+    }
+    return *this;
+}
+
+// timeout without guard
+template<typename Timer>
+Alt & Alt::timeout(
+    Timer const & timer,
+    TimerFn fn
+) noexcept
+{
+    static_assert( detail::traits::is_timer< Timer >::value,
+        "Supplied timer is not of a timer type.");
+
+    timeout_impl( timer, std::move( fn ) );
     return *this;
 }
 
 // timeout with guard
-template< typename Timer
-        , typename >
+template<typename Timer>
 Alt & Alt::timeout_if(
     bool guard,
-    Timer const & tmi,
+    Timer const & timer,
     TimerFn fn
 ) noexcept
 {
-    return ( guard )
-        ? timeout( tmi, std::move( fn ) )
-        : *this ;
+    static_assert( detail::traits::is_timer< Timer >::value,
+        "Supplied timer is not of a timer type.");
+
+    if ( guard ) {
+        timeout_impl( timer, std::move( fn ) );
+    }
+    return *this;
 }
 
 PROXC_NAMESPACE_END
