@@ -24,6 +24,7 @@
 
 #pragma once
 
+#include <array>
 #include <memory>
 #include <tuple>
 #include <vector>
@@ -116,5 +117,109 @@ create_n( const std::size_t n ) noexcept
 }
 
 } // namespace channel
+
+template<typename T>
+struct Chan : public std::tuple< channel::Tx< T >, channel::Rx< T > >
+{
+    using Tx = channel::Tx< T >;
+    using Rx = channel::Rx< T >;
+
+    using TplT = std::tuple< Tx, Rx >;
+    using TplT::TplT;
+
+    Chan() : TplT{ channel::create< T >() }
+    {}
+
+    Tx & ref_tx() noexcept
+    {
+        return std::get< 0 >( *this );
+    }
+
+    Rx & ref_rx() noexcept
+    {
+        return std::get< 1 >( *this );
+    }
+
+    Tx move_tx() noexcept
+    {
+        return std::move( std::get< 0 >( *this ) );
+    }
+
+    Rx move_rx() noexcept
+    {
+        return std::move( std::get< 1 >( *this ) );
+    }
+};
+
+template<typename T, std::size_t N>
+struct ChanArr : public std::array< Chan< T >, N >
+{
+    using Tx = typename Chan< T >::Tx;
+    using Rx = typename Chan< T >::Rx;
+
+    using ArrT = std::array< Chan< T >, N >;
+    using ArrT::ArrT;
+
+    using ArrTxT = std::array< Tx, N >;
+    using ArrRxT = std::array< Rx, N >;
+
+    ChanArr() : ArrT()
+    {}
+
+    ArrTxT collect_tx() noexcept
+    {
+        ArrTxT txs;
+        auto ch_it = this->begin();
+        std::generate( txs.begin(), txs.end(),
+            [&ch_it]{ return (ch_it++)->move_tx(); } );
+        return std::move( txs );
+    }
+
+    ArrRxT collect_rx() noexcept
+    {
+        ArrRxT rxs;
+        auto ch_it = this->begin();
+        std::generate( rxs.begin(), rxs.end(),
+            [&ch_it]{ return (ch_it++)->move_rx(); } );
+        return std::move( rxs );
+    }
+};
+
+template<typename T>
+struct ChanVec : public std::vector< Chan< T > >
+{
+    using Tx = typename Chan< T >::Tx;
+    using Rx = typename Chan< T >::Rx;
+
+    using VecT = std::vector< Chan< T > >;
+    using VecT::VecT;
+
+    using VecTxT = std::vector< Tx >;
+    using VecRxT = std::vector< Rx >;
+
+    ChanVec() = delete;
+    ChanVec( std::size_t n ) : VecT( n )
+    {}
+
+    VecTxT collect_tx() noexcept
+    {
+        VecTxT txs;
+        txs.reserve( this->size() );
+        std::for_each( this->begin(), this->end(),
+            [&txs]( auto& ch ){ txs.push_back( std::move( ch.move_tx() ) ); } );
+        return std::move( txs );
+    }
+
+    VecRxT collect_rx() noexcept
+    {
+        VecRxT rxs;
+        rxs.reserve( this->size() );
+        std::for_each( this->begin(), this->end(),
+            [&rxs]( auto& ch ){ rxs.push_back( std::move( ch.move_rx() ) ); } );
+        return std::move( rxs );
+    }
+};
+
+
 PROXC_NAMESPACE_END
 
