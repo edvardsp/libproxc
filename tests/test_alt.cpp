@@ -375,7 +375,7 @@ void test_replicate()
             std::iota( items.begin(), items.end(), 0 );
             Alt()
                 .send_for( txs.begin(), txs.end(),
-                    items.begin() )
+                    items.begin(), items.end() )
                 .select();
         } ),
         proc( [&rxs](){

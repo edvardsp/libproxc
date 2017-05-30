@@ -82,7 +82,7 @@ public:
     virtual bool is_ready() const noexcept = 0;
 
     virtual Result try_complete() noexcept = 0;
-    virtual void run_func() const noexcept = 0;
+    virtual void run_func() noexcept = 0;
 };
 
 } // namespace alt

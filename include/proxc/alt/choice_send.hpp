@@ -101,7 +101,7 @@ public:
         }
     }
 
-    void run_func() const noexcept
+    void run_func() noexcept
     {
         if ( fn_ ) {
             fn_();

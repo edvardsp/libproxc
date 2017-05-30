@@ -40,7 +40,7 @@ template<typename T>
 class ChoiceRecv : public ChoiceBase
 {
 public:
-    using ItemT = T;
+    using ItemT = typename std::remove_cv< typename std::decay< T >::type >::type;
     using RxT   = channel::Rx< ItemT >;
     using EndT  = channel::detail::ChanEnd< ItemT >;
     using FnT   = proxc::detail::delegate< void( ItemT ) >;
@@ -90,7 +90,7 @@ public:
         }
     }
 
-    void run_func() const noexcept
+    void run_func() noexcept
     {
         if ( fn_ ) {
             fn_( std::move( item_ ) );
