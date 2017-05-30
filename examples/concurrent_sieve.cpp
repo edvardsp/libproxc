@@ -22,26 +22,26 @@
  * SOFTWARE.
  */
 
+#include <sstream>
 #include <iostream>
 
 #include <proxc.hpp>
 
 using namespace proxc;
-template<typename T> using Tx = channel::Tx< T >;
-template<typename T> using Rx = channel::Rx< T >;
 
-void generate( Tx< long > out, Rx< long > ex )
+using ItemT = std::size_t;
+
+void generate( Chan< ItemT >::Tx out, Chan< ItemT >::Rx ex )
 {
-    long i = 2;
+    ItemT i{ 2 };
     while ( ex ) {
         out << i++;
     }
 }
 
-void filter( Rx< long > in, Tx< long > out )
+void filter( Chan< ItemT >::Rx in, Chan< ItemT >::Tx out )
 {
-    long prime{};
-    in >> prime;
+    ItemT prime = in();
     for ( auto i : in ) {
         if ( i % prime != 0 ) {
             out << i;
@@ -49,34 +49,35 @@ void filter( Rx< long > in, Tx< long > out )
     }
 }
 
-int main()
+int main(int argc, char *argv[])
 {
-    const long n = 4'000;
-    auto ex_ch = channel::create< long >();
-    auto chans = channel::create_n< long >( n );
+    if ( argc != 2 ) { return -1; }
+    std::size_t n;
+    std::stringstream{ argv[1] } >> n;
+
+    Chan< ItemT >    ex_ch;
+    ChanVec< ItemT > chs{ n };
 
     std::vector< Process > filters;
     filters.reserve( n - 1 );
     for ( std::size_t i = 0; i < n - 1; ++i ) {
-        filters.emplace_back( filter,
-            channel::get_rx_ind( chans, i ), channel::get_tx_ind( chans, i + 1 )
-        );
+        filters.emplace_back( filter, chs[i].move_rx(), chs[i+1].move_tx() );
     }
+
+    this_proc::yield();
 
     auto start = std::chrono::steady_clock::now();
 
     parallel(
-        proc( generate, channel::get_tx_ind( chans, 0 ), channel::get_rx( ex_ch ) ),
+        proc( generate, chs[0].move_tx(), ex_ch.move_rx() ),
         proc_for( filters.begin(), filters.end() ),
-        proc( [start,n]( Rx< long > in, Tx< long > ){
-                long prime{};
-                in >> prime;
+        proc( [start,n]( Chan< ItemT >::Rx in, Chan< ItemT >::Tx ){
+                in();
                 auto end = std::chrono::steady_clock::now();
-                std::chrono::duration< double, std::micro > diff = end - start;
-                std::cout << n << "th prime is " << prime << std::endl;
-                std::cout << "each prime took approx " << diff.count() / n << "us" << std::endl;
+                std::chrono::duration< std::size_t, std::nano > diff = end - start;
+                std::cout << n << "," << diff.count() / n << std::endl;
             },
-            channel::get_rx_ind( chans, n - 1 ), channel::get_tx( ex_ch ) )
+            chs[n-1].move_rx(), ex_ch.move_tx() )
     );
 
     return 0;

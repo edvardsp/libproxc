@@ -34,7 +34,7 @@ using namespace proxc;
 constexpr int N = 6;
 
 [[noreturn]]
-void printer( std::vector< channel::Rx< std::string > > rxs )
+void printer( std::array< Chan< std::string >::Rx, N > rxs )
 {
     for ( ;; ) {
         Alt()
@@ -45,47 +45,40 @@ void printer( std::vector< channel::Rx< std::string > > rxs )
 }
 
 [[noreturn]]
-void a_fork( channel::Rx< int > left, channel::Rx< int > right )
+void a_fork( Chan< int >::Rx left, Chan< int >::Rx right )
 {
     for ( ;; ) {
         Alt()
-            .recv( left,
-                [&left](auto){
-                    int item{};
-                    left >> item;
-                } )
-            .recv( right,
-                [&right](auto){
-                    int item{};
-                    right >> item;
-                } )
+            .recv( left,  [&left] (auto) { left(); } )
+            .recv( right, [&right](auto) { right(); } )
             .select();
     }
 }
 
 [[noreturn]]
-void philosopher( channel::Tx< std::string > report, int i,
-                  channel::Tx< int > left, channel::Tx< int > right,
-                  channel::Tx< int > down, channel::Tx< int > up )
+void philosopher( Chan< std::string >::Tx report, int i,
+                  Chan< int >::Tx left, Chan< int >::Tx right,
+                  Chan< int >::Tx down, Chan< int >::Tx up )
 {
-    auto dur = std::chrono::seconds( i );
+    const std::chrono::seconds dur( i );
+    const std::string id{ std::to_string( i ) };
     for ( ;; ) {
-        report.send( std::to_string( i ) + " thinking" );
+        report.send( id + " thinking" );
         this_proc::delay_for( dur );
 
-        report.send( std::to_string( i ) + " hungry" );
+        report.send( id + " hungry" );
         down << i;
 
-        report.send( std::to_string( i ) + " sitting" );
+        report.send( id + " sitting" );
         parallel(
             proc( [&left,i] { left << i; } ),
             proc( [&right,i]{ right << i; } )
         );
 
-        report.send( std::to_string( i ) + " eating" );
+        report.send( id + " eating" );
         this_proc::delay_for( dur );
 
-        report.send( std::to_string( i ) + " leaving" );
+        report.send( id + " leaving" );
         parallel(
             proc( [&left,i] { left << i; } ),
             proc( [&right,i]{ right << i; } )
@@ -96,8 +89,8 @@ void philosopher( channel::Tx< std::string > report, int i,
 }
 
 [[noreturn]]
-void security( std::vector< channel::Rx< int > > down,
-               std::vector< channel::Rx< int > > up )
+void security( std::array< Chan< int >::Rx, N > down,
+               std::array< Chan< int >::Rx, N > up )
 {
     int sitting = 0;
     for ( ;; ) {
@@ -114,31 +107,33 @@ void security( std::vector< channel::Rx< int > > down,
 
 int main()
 {
-    auto print = channel::create_n< std::string >( N );
-    auto left  = channel::create_n< int >( N );
-    auto right = channel::create_n< int >( N );
-    auto up    = channel::create_n< int >( N );
-    auto down  = channel::create_n< int >( N );
+    ChanArr< std::string, N > print_chs;
+    ChanArr< int, N > left_chs;
+    ChanArr< int, N > right_chs;
+    ChanArr< int, N > up_chs;
+    ChanArr< int, N > down_chs;
 
     std::vector< Process > philosophers;
+    philosophers.reserve( N );
     for ( std::size_t i = 0; i < N; ++i ) {
         philosophers.emplace_back( philosopher,
-            channel::get_tx_ind( print, i ), i+1,
-            channel::get_tx_ind( left, i ), channel::get_tx_ind( right, i ),
-            channel::get_tx_ind( down, i ), channel::get_tx_ind( up, i ) );
+            print_chs[i].move_tx(), i + 1,
+            left_chs[i].move_tx(), right_chs[i].move_tx(),
+            down_chs[i].move_tx(), up_chs[i].move_tx() );
     }
 
     std::vector< Process > forks;
+    forks.reserve( N );
     for ( std::size_t i = 0; i < N; ++i ) {
         forks.emplace_back( a_fork,
-            channel::get_rx_ind( left, i ), channel::get_rx_ind( right, (i+1)%N ) );
+            left_chs[i].move_rx(), right_chs[(i+1)%N].move_rx() );
     }
 
     parallel(
         proc_for( philosophers.begin(), philosophers.end() ),
         proc_for( forks.begin(), forks.end() ),
-        proc( security, channel::get_rx( down ), channel::get_rx( up ) ),
-        proc( printer, channel::get_rx( print ) )
+        proc( security, down_chs.collect_rx(), up_chs.collect_rx() ),
+        proc( printer, print_chs.collect_rx() )
     );
 
     return  0;

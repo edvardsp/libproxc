@@ -31,78 +31,86 @@
 using namespace proxc;
 
 using ItemT = std::size_t;
-using Tx = channel::Tx< ItemT >;
-using Rx = channel::Rx< ItemT >;
+using ChanT = Chan< ItemT >;
 
-//  0   successor
-//  |   | (++)  A
-//  V   V       |
-//  prefix -> delta -> consumer
+constexpr std::size_t REPEAT = 100;
+constexpr std::size_t RUNS = 50;
 
-void successor( Tx tx, Rx rx  )
+void chainer( ChanT::Rx in, ChanT::Tx out )
 {
-    for ( auto i : rx ) {
-        tx.send( i + 1 );
+    for ( auto i : in ) {
+        out << i + 1;
     }
 }
 
-void prefix( Tx tx, Rx rx )
+void prefix( ChanT::Rx in, ChanT::Tx out )
 {
-    tx.send( 0 );
-    for ( auto i : rx ) {
-        tx.send( i );
+    out << std::size_t{ 0 };
+    for ( auto i : in ) {
+        out << i;
     }
 }
 
-void delta( Tx tx, Rx rx, Tx consume )
+void delta( ChanT::Rx in, ChanT::Tx out, ChanT::Tx out_consume )
 {
-    for ( auto i : rx ) {
-        if ( consume.send( i ) != proxc::channel::OpResult::Ok ) {
+    for ( auto i : in ) {
+        if ( out_consume << i ) {
+            out << i;
+        } else {
             break;
         }
-        tx.send( i );
     }
 }
 
-void consumer( Rx rx )
+void consumer( ChanT::Rx in )
 {
-    const std::size_t num_iters = 10000;
-    const std::size_t rep = 1000;
-    ItemT item;
-    std::size_t ns_per_chan_op = 0;
-    for ( std::size_t r = 0; r < rep; ++r ) {
-        auto start = std::chrono::steady_clock::now();
-        for ( std::size_t i = 0; i < num_iters; ++i ) {
-            rx.recv( item );
-        }
-        auto end = std::chrono::steady_clock::now();
-        std::chrono::duration< std::size_t, std::nano > diff = end - start;
-        ns_per_chan_op += diff.count();
+    for ( std::size_t i = 0; i < REPEAT; ++i ) {
+        in();
     }
-    std::cout << ns_per_chan_op / ( num_iters * rep * 4 ) << "ns per chan op" << std::endl;
+}
+
+void commstime( std::size_t chain )
+{
+    std::size_t sum = 0;
+    for ( std::size_t run = 0; run < RUNS; ++run ) {
+        ChanT pre2del_ch, consume_ch;
+        ChanVec< ItemT > chain_chs{ chain + 1 };
+
+        std::vector< Process > chains;
+        chains.reserve( chain );
+        for ( std::size_t i = 0; i < chain; ++i ) {
+            chains.emplace_back( chainer,
+                chain_chs[i+1].move_rx(),
+                chain_chs[i].move_tx() );
+        }
+
+        auto start = std::chrono::system_clock::now();
+
+        parallel(
+            proc( prefix, chain_chs[0].move_rx(), pre2del_ch.move_tx() ),
+            proc( delta, pre2del_ch.move_rx(), chain_chs[chain].move_tx(), consume_ch.move_tx() ),
+            proc( consumer, consume_ch.move_rx() ),
+            proc_for( chains.begin(), chains.end() )
+        );
+
+        auto end = std::chrono::system_clock::now();
+        std::chrono::duration< std::size_t, std::nano > diff = end - start;
+        sum += diff.count();
+    }
+    std::cout << chain << "," << sum / RUNS << std::endl;
 }
 
 int main()
 {
-    auto ch = channel::create< int >();
-    auto tx = channel::get_tx( ch );
-    auto rx = channel::get_rx( ch );
-    parallel(
-        proc( [&tx]{        tx << 42; } ),
-        proc( [&rx]{ int i; rx >> i; } )
-    );
-
-    auto chs = channel::create_n< ItemT >( 4 );
-    auto txs = channel::get_tx( chs );
-    auto rxs = channel::get_rx( chs );
-
-    parallel(
-        proc( successor, std::move( txs[2] ), std::move( rxs[1] ) ),
-        proc( prefix,    std::move( txs[0] ), std::move( rxs[2] ) ),
-        proc( delta,     std::move( txs[1] ), std::move( rxs[0] ),
-                         std::move( txs[3] ) ),
-        proc( consumer,  std::move( rxs[3] ) )
-    );
+    for ( std::size_t chain = 1; chain < 50; chain += 1 ) {
+        commstime( chain );
+    }
+    for ( std::size_t chain = 50; chain < 500; chain += 5 ) {
+        commstime( chain );
+    }
+    for ( std::size_t chain = 500; chain <= 1000; chain += 10 ) {
+        commstime( chain );
+    }
 
     return 0;
 }

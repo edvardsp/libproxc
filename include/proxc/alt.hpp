@@ -172,8 +172,8 @@ public:
     // replicated send choice over item iterator
     template< typename TxIt, typename ItemIt>
     PROXC_WARN_UNUSED
-    Alt & send_for( TxIt tx_first, TxIt tx_last,
-                    ItemIt item_first,
+    Alt & send_for( TxIt tx_first,     TxIt tx_last,
+                    ItemIt item_first, ItemIt item_last,
                     TxFn< EndT< TxIt > > fn = TxFn< EndT< TxIt > >{} ) noexcept;
 
     // replicated send choice over single item
@@ -251,17 +251,15 @@ private:
                 detail::traits::is_tx_iterator< TxIt >::value &&
                 detail::traits::is_inputiterator< ItemIt >::value
             > >
-    void send_for_impl( TxIt,
-                        TxIt,
-                        ItemIt,
+    void send_for_impl( TxIt,   TxIt,
+                        ItemIt, ItemIt,
                         TxFn< EndT< TxIt > > = TxFn< EndT< TxIt > >{} ) noexcept;
 
     template< typename TxIt
             , typename = std::enable_if_t<
                 detail::traits::is_tx_iterator< TxIt >::value
             > >
-    void send_for_impl( TxIt,
-                        TxIt,
+    void send_for_impl( TxIt, TxIt,
                         ItemT< EndT< TxIt > >,
                         TxFn< EndT< TxIt > > = TxFn< EndT< TxIt > >{} ) noexcept;
 
@@ -336,6 +334,7 @@ void Alt::send_for_impl(
     TxIt tx_first,
     TxIt tx_last,
     ItemIt item_first,
+    ItemIt,
     TxFn< EndT< TxIt > > fn
 ) noexcept
 {
@@ -493,7 +492,7 @@ Alt & Alt::send_if(
 template<typename TxIt, typename ItemIt>
 Alt & Alt::send_for(
     TxIt   tx_first,   TxIt   tx_last,
-    ItemIt item_first,
+    ItemIt item_first, ItemIt item_last,
     TxFn< EndT< TxIt > > fn
 ) noexcept
 {
@@ -502,7 +501,7 @@ Alt & Alt::send_for(
     static_assert( detail::traits::is_inputiterator< ItemIt >::value,
         "Supplied item iterator is not an input iterator");
 
-    send_for_impl( tx_first, tx_last, item_first, std::move( fn ) );
+    send_for_impl( tx_first, tx_last, item_first, item_last, std::move( fn ) );
     return *this;
 }
 
