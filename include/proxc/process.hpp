@@ -58,8 +58,9 @@ public:
 
     Process() = default;
 
-    template<typename Fn,
-             typename ... Args
+    template< typename Fn
+            , typename ... Args
+            , typename
     >
     Process( Fn && fn, Args && ... args );
 
@@ -85,8 +86,11 @@ public:
 // Process implementation
 ////////////////////////////////////////////////////////////////////////////////
 
-template< typename Fn,
-          typename ... Args
+template< typename Fn
+        , typename ... Args
+        , typename = std::enable_if_t<
+            detail::traits::are_callable_with_arg< Fn( Args ... ) >::value
+        >
 >
 Process::Process( Fn && fn, Args && ... args )
     : ctx_{ runtime::Scheduler::make_work(
@@ -154,6 +158,9 @@ template< typename Fn,
 >
 Process proc( Fn && fn, Args && ... args )
 {
+    static_assert( detail::traits::are_callable_with_arg< Fn( Args ... ) >::value,
+        "Supplied function is not callable with the given arguments");
+
     return Process{
         std::forward< Fn >( fn ),
         std::forward< Args >( args ) ...
@@ -185,10 +192,8 @@ Process proc_for( InputIt first, InputIt last )
 {
     return Process{
         [first,last]{
-            std::for_each( first, last,
-                []( auto& proc ){ proc.launch(); } );
-            std::for_each( first, last,
-                []( auto& proc ){ proc.join(); } );
+            std::for_each( first, last, std::mem_fn( & Process::launch ) );
+            std::for_each( first, last, std::mem_fn( & Process::join ) );
         }
     };
 }
