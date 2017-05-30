@@ -21,13 +21,15 @@
 # SOFTWARE.
 
 examples = [
-    ['concurrent_sieve',     ['concurrent_sieve.cpp']],
-    ['concurrent_fibonacci', ['concurrent_fibonacci.cpp']],
-    ['commstime',            ['commstime.cpp']],
-    ['stressed_alt',         ['stressed_alt.cpp']],
-    ['dining_philosophers',  ['dining_philosophers.cpp']],
-    ['monte_carlo_pi',       ['monte_carlo_pi.cpp']],
-    ['piping',               ['piping.cpp']]
+    ['concurrent_sieve',      ['concurrent_sieve.cpp']],
+    ['concurrent_fibonacci',  ['concurrent_fibonacci.cpp']],
+    ['commstime',             ['commstime.cpp']],
+    ['stressed_alt',          ['stressed_alt.cpp']],
+    ['dining_philosophers',   ['dining_philosophers.cpp']],
+    ['monte_carlo_pi',        ['monte_carlo_pi.cpp']],
+    ['piping',                ['piping.cpp']],
+    ['concurrent_mandelbrot', ['concurrent_mandelbrot.cpp']],
+    ['concurrent_mandelbrot_nc', ['concurrent_mandelbrot_nc.cpp']]
 ]
 
 foreach e : examples
