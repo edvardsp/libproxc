@@ -65,4 +65,5 @@ install_headers(
     'proxc/detail/spinlock.hpp',
     'proxc/detail/traits.hpp',
     'proxc/detail/work_steal_deque.hpp',
+    'proxc/detail/xorshift.hpp',
     subdir : 'proxc/detail')

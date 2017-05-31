@@ -33,6 +33,7 @@
 #include <proxc/config.hpp>
 
 #include <proxc/detail/cpu_relax.hpp>
+#include <proxc/detail/xorshift.hpp>
 
 #if defined(PROXC_COMP_CLANG)
 #   pragma clang diagnostic push
@@ -57,7 +58,7 @@ private:
     alignas(cache_alignment) std::atomic< State >          state_{ State::Unlocked };
     alignas(cache_alignment) std::atomic< std::size_t >    prev_tests_{ 0 };
 
-    alignas(cache_alignment) std::mt19937    rng{ std::random_device{}() };
+    alignas(cache_alignment) XorShift< std::size_t >    rng{};
 
 public:
     Spinlock() = default;
@@ -96,8 +97,8 @@ public:
                 // faults spuriously when running on multi-core. No idea why.
                 // Fix: let the random number generator be class member instead. Not ideal,
                 // but at least it doesn't cause segmentation faults.
-                /* static thread_local std::minstd_rand rng{ std::random_device{}() }; */
-                std::uniform_int_distribution< std::size_t > distr
+                /* static thread_local XorShift<std::size_t> rng{}; */
+                static std::uniform_int_distribution< std::size_t > distr
                     { 0, static_cast< std::size_t >( 1 ) << n_collisions };
                 const std::size_t z = distr( rng );
                 ++n_collisions;
