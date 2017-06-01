@@ -60,12 +60,6 @@ class ChoiceBase;
 } // namespace alt
 
 namespace runtime {
-namespace init {
-
-// Schwarz counter
-struct SchedulerInitializer;
-
-} // namespace init
 
 using PolicyT = scheduling_policy::PolicyBase<Context>;
 using ClockT = PolicyT::ClockT;
@@ -75,6 +69,15 @@ class Scheduler
 {
 private:
     using LockT = detail::Spinlock;
+
+    // Schwarz counter
+    struct Initializer
+    {
+        thread_local static Scheduler * self_;
+        thread_local static std::size_t counter_;
+        Initializer();
+        ~Initializer();
+    };
 
 public:
     using ReadyQueue = detail::queue::ListQueue<
@@ -98,8 +101,6 @@ public:
     };
 
 private:
-    friend struct init::SchedulerInitializer;
-
     struct time_point_cmp_
     {
         bool operator()( Context const & left, Context const & right ) const noexcept
@@ -147,7 +148,6 @@ public:
     Scheduler( Scheduler const & )             = delete;
     Scheduler & operator=( Scheduler const & ) = delete;
 
-
     // general methods
     template<typename Fn, typename ... Args>
     static boost::intrusive_ptr< Context > make_work( Fn && fn, Args && ... args ) noexcept;
@@ -160,11 +160,13 @@ public:
     bool wait_until( TimePointT const &, Context * ) noexcept;
     bool wait_until( TimePointT const &, std::unique_lock< LockT > &, bool lock = false ) noexcept;
 
+    bool sleep_until( TimePointT const &, CtxSwitchData * = nullptr ) noexcept;
+
     bool alt_wait( Alt *, std::unique_lock< LockT > & ) noexcept;
 
     void resume( CtxSwitchData * = nullptr ) noexcept;
     void resume( Context *, CtxSwitchData * = nullptr ) noexcept;
-    void terminate( Context * ) noexcept;
+
     void schedule( Context * ) noexcept;
 
     void attach( Context * ) noexcept;
@@ -173,8 +175,6 @@ public:
 
     void yield() noexcept;
     void join( Context * ) noexcept;
-
-    bool sleep_until( TimePointT const &, CtxSwitchData * = nullptr ) noexcept;
 
     void print_debug() noexcept;
 
@@ -185,6 +185,7 @@ private:
     void wakeup_waiting_on_( Context * ) noexcept;
     void transition_remote_() noexcept;
     void cleanup_terminated_() noexcept;
+    void terminate_( Context * ) noexcept;
 
     void schedule_local_( Context * ) noexcept;
     void schedule_remote_( Context * ) noexcept;
@@ -227,7 +228,7 @@ void Scheduler::trampoline( Fn && fn_, Tpl && tpl_, void * vp )
         Tpl tpl{ std::move( tpl_ ) };
         detail::apply( std::move( fn ), std::move( tpl ) );
     }
-    Scheduler::self()->terminate( Scheduler::running() );
+    Scheduler::self()->terminate_( Scheduler::running() );
     BOOST_ASSERT_MSG( false, "unreachable");
     throw UnreachableError{};
 }

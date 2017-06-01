@@ -22,9 +22,11 @@
  * SOFTWARE.
  */
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -54,8 +56,6 @@ namespace runtime {
 
 namespace hook = detail::hook;
 
-namespace init {
-
 struct WaitGroup
 {
     std::mutex                 mtx_;
@@ -77,94 +77,72 @@ struct WaitGroup
     }
 };
 
-void multicore_scheduler_fn( WaitGroup & wg )
+void kernel_thread_fn( WaitGroup & wg )
 {
     // this will allocated the scheduler for this thread
-    auto self = ::proxc::runtime::Scheduler::self();
+    auto self = Scheduler::self();
     // need to wait for all of the threads to finish initialize the scheduler
     wg.wait();
     self->resume();
     // when returned, the scheduler has exited and ready to cleanup
 }
 
-struct SchedulerInitializer
+static std::atomic< std::size_t >    sched_counter_{ 0 };
+static std::vector< std::thread >    thread_vec_;
+static std::vector< Scheduler * >    sched_vec_;
+
+thread_local Scheduler * Scheduler::Initializer::self_{ nullptr };
+thread_local std::size_t Scheduler::Initializer::counter_{ 0 };
+
+Scheduler::Initializer::Initializer()
 {
-    thread_local static ::proxc::runtime::Scheduler *      self_;
-    thread_local static std::size_t                        self_counter_;
+    if ( counter_++ == 0 ) {
+        auto scheduler = new Scheduler{};
+        self_ = scheduler;
+        BOOST_ASSERT( Scheduler::running()->is_type( Context::Type::Main ) );
 
-    static std::atomic< std::size_t >    sched_counter_;
-    static WaitGroup                     wg_;
-    static std::vector< std::thread >    thread_vec_;
-    static std::vector< ::proxc::runtime::Scheduler * >    sched_vec_;
+        if ( sched_counter_++ == 0 ) {
+            static WaitGroup wg;
+            auto num_sched = detail::num_cpus();
+            sched_vec_.reserve( num_sched - 1 );
+            thread_vec_.reserve( num_sched - 1 );
 
-    using LockT = detail::Spinlock;
-    static LockT    splk_;
-
-    SchedulerInitializer()
-    {
-        if ( self_counter_++ == 0 ) {
-            // FIXME: new alignment issues?
-            auto scheduler = new ::proxc::runtime::Scheduler{};
-            self_ = scheduler;
-            BOOST_ASSERT( ::proxc::runtime::Scheduler::running()
-                ->is_type( ::proxc::runtime::Context::Type::Main ) );
-
-            if ( sched_counter_++ == 0 ) {
-                auto num_sched = detail::num_cpus();
-                sched_vec_.reserve( num_sched - 1 );
-                thread_vec_.reserve( num_sched - 1 );
-
-                wg_.add( num_sched );
-                for ( std::size_t i = 0; i < num_sched - 1; ++i ) {
-                    thread_vec_.emplace_back( multicore_scheduler_fn, std::ref( wg_ ) );
-                }
-                wg_.wait();
-                sched_counter_ = 0;
-
-            } else {
-                std::unique_lock< LockT > lk{ splk_ };
-                sched_vec_.push_back( self_ );
+            wg.add( num_sched );
+            for ( std::size_t i = 0; i < num_sched - 1; ++i ) {
+                thread_vec_.emplace_back( kernel_thread_fn, std::ref( wg ) );
             }
+            wg.wait();
+            sched_counter_ = 0;
+
+        } else {
+            static Scheduler::LockT splk;
+            std::unique_lock< LockT > lk{ splk };
+            sched_vec_.push_back( self_ );
         }
     }
+}
 
-    ~SchedulerInitializer()
-    {
-        if ( --self_counter_ == 0 ) {
-            if ( sched_counter_++ == 0 ) {
-                for ( const auto& sched : sched_vec_ ) {
-                    sched->signal_exit();
-                }
-                for ( auto& th : thread_vec_ ) {
-                    th.join();
-                }
-            }
-
-            BOOST_ASSERT( ::proxc::runtime::Scheduler::running()
-                ->is_type( ::proxc::runtime::Context::Type::Main ) );
-            auto scheduler = self_;
-            delete scheduler;
+Scheduler::Initializer::~Initializer()
+{
+    if ( --counter_ == 0 ) {
+        if ( sched_counter_++ == 0 ) {
+            std::for_each( sched_vec_.begin(), sched_vec_.end(),
+                std::mem_fn( & Scheduler::signal_exit ) );
+            std::for_each( thread_vec_.begin(), thread_vec_.end(),
+                std::mem_fn( & std::thread::join ) );
         }
+
+        BOOST_ASSERT( Scheduler::running()->is_type( Context::Type::Main ) );
+        
+        auto scheduler = self_;
+        delete scheduler;
     }
-};
-
-thread_local ::proxc::runtime::Scheduler *   SchedulerInitializer::self_{ nullptr };
-thread_local std::size_t   SchedulerInitializer::self_counter_{ 0 };
-
-std::atomic< std::size_t > SchedulerInitializer::sched_counter_{ 0 };
-WaitGroup                  SchedulerInitializer::wg_{};
-std::vector< std::thread > SchedulerInitializer::thread_vec_{};
-std::vector< ::proxc::runtime::Scheduler * > SchedulerInitializer::sched_vec_{};
-
-typename SchedulerInitializer::LockT SchedulerInitializer::splk_{};
-
-} // namespace init
+}
 
 Scheduler * Scheduler::self() noexcept
 {
-    //thread_local static boost::context::detail::activation_record_initializer ac_rec_init;
-    thread_local static init::SchedulerInitializer sched_init;
-    return init::SchedulerInitializer::self_;
+    thread_local static Initializer init;
+    return Initializer::self_;
 }
 
 Context * Scheduler::running() noexcept
@@ -314,7 +292,7 @@ void Scheduler::resume( Context * to_ctx, CtxSwitchData * data ) noexcept
     resume_( to_ctx, data );
 }
 
-void Scheduler::terminate( Context * ctx ) noexcept
+void Scheduler::terminate_( Context * ctx ) noexcept
 {
     BOOST_ASSERT( ctx != nullptr );
     BOOST_ASSERT( ctx == Scheduler::running() );
