@@ -29,25 +29,25 @@
 
 using namespace proxc;
 
-void elem( channel::Rx< int > in, channel::Tx< int > out )
+constexpr std::size_t N = 100;
+
+void elem( Chan< int >::Rx in, Chan< int >::Tx out )
 {
     while ( in >> out );
 }
 
 int main()
 {
-    const std::size_t n = 100;
-    auto chs = channel::create_n< int >( n + 1 );
+    ChanArr< int, N > chs;
 
     std::vector< Process > elems;
-    for ( std::size_t i = 0; i < n; ++i ) {
-        elems.emplace_back( elem,
-            channel::get_rx_ind( chs, i ), channel::get_tx_ind( chs, i + 1 ) );
+    for ( std::size_t i = 0; i < N; ++i ) {
+        elems.emplace_back( elem, chs[i].move_rx(), chs[i+1].move_tx() );
     }
 
     parallel(
         proc_for( elems.begin(), elems.end() ),
-        proc( []( channel::Tx< int > start, channel::Rx< int > end ){
+        proc( []( Chan< int >::Tx start, Chan< int >::Rx end ){
                 int start_item = 1337;
                 start << start_item;
                 for ( std::size_t i = 0; i < 1000; ++i ) {
@@ -59,7 +59,7 @@ int main()
                 std::cout << "Start item: " << start_item << std::endl;
                 std::cout << "End item: " << end_item << std::endl;
             },
-            channel::get_tx_ind( chs, 0 ), channel::get_rx_ind( chs, n ) )
+            chs[0].move_tx(), chs[N].move_rx() )
     );
 
     return 0;

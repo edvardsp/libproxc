@@ -36,11 +36,7 @@ using namespace proxc;
 
 void test_single_case_with_skip()
 {
-    auto tx_ch = channel::create< int >();
-    auto rx_ch = channel::create< int >();
-
-    auto tx = channel::get_tx( tx_ch );
-    auto rx = channel::get_rx( rx_ch );
+    Chan< int > send_ch, recv_ch;
 
     timer::Egg    egg{ std::chrono::milliseconds( 1 ) };
     timer::Repeat rep{ std::chrono::microseconds( 100 ) };
@@ -48,40 +44,36 @@ void test_single_case_with_skip()
 
     int item = 42;
 
-    Alt()                                                    .skip().select();
-    Alt().recv( rx )                                         .skip().select();
-    Alt().recv( rx, []( auto ) { /* some work */ } )         .skip().select();
-    Alt().recv_if( true, rx )                                .skip().select();
-    Alt().recv_if( true, rx, []( auto ) { /* some work */ } ).skip().select();
-    Alt().send( tx, 1 )                                      .skip().select();
-    Alt().send( tx, item )                                   .skip().select();
-    Alt().send( tx, 2, [] { /* some work */ } )              .skip().select();
-    Alt().send( tx, item, [] { /* some work */ } )           .skip().select();
-    Alt().send_if( true, tx, 3 )                             .skip().select();
-    Alt().send_if( true, tx, item)                           .skip().select();
-    Alt().send_if( true, tx, 4, [] { /* some work */ } )     .skip().select();
-    Alt().send_if( true, tx, item, [] { /* some work */ } )  .skip().select();
-    Alt().timeout( egg )                                     .skip().select();
-    Alt().timeout( egg, []{ /* some work */ } )              .skip().select();
-    Alt().timeout_if( true, egg )                            .skip().select();
-    Alt().timeout_if( true, egg, [] { /* some work */ } )    .skip().select();
-    Alt().timeout( rep )                                     .skip().select();
-    Alt().timeout( rep, []{ /* some work */ } )              .skip().select();
-    Alt().timeout_if( true, rep )                            .skip().select();
-    Alt().timeout_if( true, rep, [] { /* some work */ } )    .skip().select();
-    Alt().timeout( date )                                    .skip().select();
-    Alt().timeout( date, [] { /* some work */ } )            .skip().select();
-    Alt().timeout_if( true, date )                           .skip().select();
-    Alt().timeout_if( true, date, [] { /* some work */ } )   .skip().select();
+    Alt()                                                             .skip().select();
+    Alt().recv( recv_ch.ref_rx() )                                    .skip().select();
+    Alt().recv( recv_ch.ref_rx(), []( auto ) { /* work */ } )         .skip().select();
+    Alt().recv_if( true, recv_ch.ref_rx() )                           .skip().select();
+    Alt().recv_if( true, recv_ch.ref_rx(), []( auto ) { /* work */ } ).skip().select();
+    Alt().send( send_ch.ref_tx(), 1 )                                 .skip().select();
+    Alt().send( send_ch.ref_tx(), item )                              .skip().select();
+    Alt().send( send_ch.ref_tx(), 2, [] { /*  work */ } )             .skip().select();
+    Alt().send( send_ch.ref_tx(), item, [] { /*  work */ } )          .skip().select();
+    Alt().send_if( true, send_ch.ref_tx(), 3 )                        .skip().select();
+    Alt().send_if( true, send_ch.ref_tx(), item)                      .skip().select();
+    Alt().send_if( true, send_ch.ref_tx(), 4, [] { /*  work */ } )    .skip().select();
+    Alt().send_if( true, send_ch.ref_tx(), item, [] { /*  work */ } ) .skip().select();
+    Alt().timeout( egg )                                              .skip().select();
+    Alt().timeout( egg, []{ /*  work */ } )                           .skip().select();
+    Alt().timeout_if( true, egg )                                     .skip().select();
+    Alt().timeout_if( true, egg, [] { /*  work */ } )                 .skip().select();
+    Alt().timeout( rep )                                              .skip().select();
+    Alt().timeout( rep, []{ /*  work */ } )                           .skip().select();
+    Alt().timeout_if( true, rep )                                     .skip().select();
+    Alt().timeout_if( true, rep, [] { /*  work */ } )                 .skip().select();
+    Alt().timeout( date )                                             .skip().select();
+    Alt().timeout( date, [] { /*  work */ } )                         .skip().select();
+    Alt().timeout_if( true, date )                                    .skip().select();
+    Alt().timeout_if( true, date, [] { /*  work */ } )                .skip().select();
 }
 
 void test_all_cases()
 {
-    auto tx_ch = channel::create< int >();
-    auto rx_ch = channel::create< int >();
-
-    auto tx = channel::get_tx( tx_ch );
-    auto rx = channel::get_rx( rx_ch );
+    Chan< int > send_ch, recv_ch;
 
     timer::Egg    egg{ std::chrono::milliseconds( 1 ) };
     timer::Repeat rep{ std::chrono::microseconds( 100 ) };
@@ -90,18 +82,18 @@ void test_all_cases()
     int item = 42;
 
     Alt()
-        .recv( rx )
-        .recv( rx, []( auto ) { /* some work */ } )
-        .recv_if( true, rx )
-        .recv_if( true, rx, []( auto ) { /* some work */ } )
-        .send( tx, 1 )
-        .send( tx, item )
-        .send( tx, 2, [] { /* some work */ } )
-        .send( tx, item, [] { /* some work */ } )
-        .send_if( true, tx, 3 )
-        .send_if( true, tx, item)
-        .send_if( true, tx, 4, [] { /* some work */ } )
-        .send_if( true, tx, item, [] { /* some work */ } )
+        .recv( recv_ch.ref_rx() )
+        .recv( recv_ch.ref_rx(), []( auto ) { /* some work */ } )
+        .recv_if( true, recv_ch.ref_rx() )
+        .recv_if( true, recv_ch.ref_rx(), []( auto ) { /* some work */ } )
+        .send( send_ch.ref_tx(), 1 )
+        .send( send_ch.ref_tx(), item )
+        .send( send_ch.ref_tx(), 2, [] { /* some work */ } )
+        .send( send_ch.ref_tx(), item, [] { /* some work */ } )
+        .send_if( true, send_ch.ref_tx(), 3 )
+        .send_if( true, send_ch.ref_tx(), item)
+        .send_if( true, send_ch.ref_tx(), 4, [] { /* some work */ } )
+        .send_if( true, send_ch.ref_tx(), item, [] { /* some work */ } )
         .timeout( egg )
         .timeout( egg, []{ /* some work */ } )
         .timeout_if( true, egg )
@@ -122,10 +114,10 @@ void test_all_cases()
 void test_single_send_case()
 {
     std::vector< int > ints = { 0, -1, 2, -3, 4, -5, 6, -7, 8, -9, 10 };
-    auto ch = channel::create< int >();
+    Chan< int > ch;
     parallel(
         proc(
-            [&ints]( channel::Tx< int > tx ) {
+            [&ints]( Chan< int >::Tx tx ) {
                 for ( auto& i : ints ) {
                     bool tx_send = false;
                     Alt()
@@ -134,33 +126,33 @@ void test_single_send_case()
                         .select();
                     throw_assert( tx_send, "tx should have been chosen" );
                 }
-            }, channel::get_tx( ch ) ),
+            }, ch.move_tx() ),
         proc(
-            [&ints]( channel::Rx< int > rx ) {
+            [&ints]( Chan< int >::Rx rx ) {
                 for ( auto& i : ints ) {
                     int item{};
                     auto res = rx.recv( item );
                     throw_assert( res == channel::OpResult::Ok, "OpResult should be Ok" );
                     throw_assert_equ( item, i, "items should match" );
                 }
-            }, channel::get_rx( ch ) )
+            }, ch.move_rx() )
     );
 }
 
 void test_single_recv_case()
 {
     std::vector< int > ints = { 0, -1, 2, -3, 4, -5, 6, -7, 8, -9, 10 };
-    auto ch = channel::create< int >();
+    Chan< int > ch;
     parallel(
         proc(
-            [&ints]( channel::Tx< int > tx ) {
+            [&ints]( Chan< int >::Tx tx ) {
                 for ( auto& i : ints ) {
                     auto res = tx.send( i );
                     throw_assert( res == channel::OpResult::Ok, "OpResult should be Ok" );
                 }
-            }, channel::get_tx( ch ) ),
+            }, ch.move_tx() ),
         proc(
-            [&ints]( channel::Rx< int > rx ) {
+            [&ints]( Chan< int >::Rx rx ) {
                 for ( auto& i : ints ) {
                     Alt()
                         .recv( rx,
@@ -169,7 +161,7 @@ void test_single_recv_case()
                             } )
                         .select();
                 }
-            }, channel::get_rx( ch ) )
+            }, ch.move_rx() )
     );
 }
 
@@ -189,18 +181,18 @@ void test_single_timeout()
 void test_two_alt_single_case()
 {
     std::vector< int > ints = { 23, 1, -2, 0, 3232, 42 };
-    auto ch = channel::create< int >();
+    Chan< int > ch;
     parallel(
         proc(
-            [&ints]( channel::Tx< int > tx ) {
+            [&ints]( Chan< int >::Tx tx ) {
                 for ( auto& i : ints ) {
                     Alt()
                         .send( tx, i )
                         .select();
                 }
-            }, channel::get_tx( ch ) ),
+            }, ch.move_tx() ),
         proc(
-            [&ints]( channel::Rx< int > rx ) {
+            [&ints]( Chan< int >::Rx rx ) {
                 for ( auto& i : ints ) {
                     Alt()
                         .recv( rx,
@@ -209,18 +201,18 @@ void test_two_alt_single_case()
                             } )
                         .select();
                 }
-            }, channel::get_rx( ch ) )
+            }, ch.move_rx() )
     );
 }
 
 void test_tx_rx_with_timeout()
 {
     using ItemT = Obj;
-    auto ch = channel::create< ItemT >();
+    Chan< ItemT > ch;
     timer::Egg egg{ std::chrono::milliseconds( 1 ) };
     parallel(
         proc(
-        [&egg]( channel::Tx< ItemT > tx ) {
+        [&egg]( Chan< ItemT >::Tx tx ) {
             for ( int i = 0; i < 2; ++i ) {
                 bool ch_done = false;
                 Alt()
@@ -231,9 +223,9 @@ void test_tx_rx_with_timeout()
                 throw_assert( ch_done, "tx should have been chosen" );
                 this_proc::yield();
             }
-        }, channel::get_tx( ch ) ),
+        }, ch.move_tx() ),
         proc(
-        [&egg]( channel::Rx< ItemT > rx ) {
+        [&egg]( Chan< ItemT >::Rx rx ) {
             for ( int i = 0; i < 2; ++i ) {
                 bool ch_done = false;
                 Alt()
@@ -243,16 +235,16 @@ void test_tx_rx_with_timeout()
                     .select();
                 throw_assert( ch_done, "rx should have been chosen" );
             }
-        }, channel::get_rx( ch ) )
+        }, ch.move_rx() )
     );
 }
 
 void test_multiple_tx_rx_same_chan()
 {
     using T = Obj;
-    channel::Tx< T > tx;
-    channel::Rx< T > rx;
-    std::tie( tx, rx ) = channel::create< T >();
+    Chan< T >::Tx tx;
+    Chan< T >::Rx rx;
+    std::tie( tx, rx ) = Chan< T >{};
 
     bool timeout = false;
     Alt()
@@ -267,12 +259,24 @@ void test_multiple_tx_rx_same_chan()
 void test_alting_triangle()
 {
     using T = Obj;
-    auto ch1 = channel::create< T >();
-    auto ch2 = channel::create< T >();
-    auto ch3 = channel::create< T >();
+    Chan< T > ch1, ch2, ch3;
     std::size_t num = 1000;
 
     parallel(
+        proc( [num]( Chan< T >::Tx tx, Chan< T >::Rx rx )
+        {
+            std::size_t n_tx = 0, n_rx = 0;
+            while ( n_tx < num || n_rx < num ) {
+                Alt()
+                    .recv_if( n_rx < num, rx,
+                        [&n_rx]( Obj o ){
+                            throw_assert_equ( o, n_rx++, "items should match" );
+                        } )
+                    .send_if( n_tx < num, tx, Obj{ n_tx },
+                        [&n_tx]{ ++n_tx; } )
+                    .select();
+            }
+        }, ch1.move_tx(), ch2.move_rx() ),
         proc( [num]( channel::Tx< T > tx, channel::Rx< T > rx )
         {
             std::size_t n_tx = 0, n_rx = 0;
@@ -286,7 +290,7 @@ void test_alting_triangle()
                         [&n_tx]{ ++n_tx; } )
                     .select();
             }
-        }, channel::get_tx( ch1 ), channel::get_rx( ch2 ) ),
+        }, ch2.move_tx(), ch3.move_rx() ),
         proc( [num]( channel::Tx< T > tx, channel::Rx< T > rx )
         {
             std::size_t n_tx = 0, n_rx = 0;
@@ -300,21 +304,7 @@ void test_alting_triangle()
                         [&n_tx]{ ++n_tx; } )
                     .select();
             }
-        }, channel::get_tx( ch2 ), channel::get_rx( ch3 ) ),
-        proc( [num]( channel::Tx< T > tx, channel::Rx< T > rx )
-        {
-            std::size_t n_tx = 0, n_rx = 0;
-            while ( n_tx < num || n_rx < num ) {
-                Alt()
-                    .recv_if( n_rx < num, rx,
-                        [&n_rx]( Obj o ){
-                            throw_assert_equ( o, n_rx++, "items should match" );
-                        } )
-                    .send_if( n_tx < num, tx, Obj{ n_tx },
-                        [&n_tx]{ ++n_tx; } )
-                    .select();
-            }
-        }, channel::get_tx( ch3 ), channel::get_rx( ch1 ) )
+        }, ch3.move_tx(), ch1.move_rx() )
     );
 }
 
@@ -322,25 +312,24 @@ void test_simple_ex()
 {
     std::vector< int > ints1 = { 5, 12, -9, 45, 93, 1 };
     std::vector< int > ints2 = { -1, 2, -3, 4 };
-    auto ch1 = channel::create< int >();
-    auto ch2 = channel::create< int >();
+    Chan< int > ch1, ch2;
     parallel(
         proc(
-            [&ints1]( channel::Tx< int > tx ) {
+            [&ints1]( Chan< int >::Tx tx ) {
                 for ( auto& i : ints1 ) {
                     auto res = tx.send( i );
                     throw_assert( res == channel::OpResult::Ok, "OpResult should be Ok" );
                 }
-            }, channel::get_tx( ch1 ) ),
+            }, ch1.move_tx() ),
         proc(
-            [&ints2]( channel::Tx< int > tx ) {
+            [&ints2]( Chan< int >::Tx tx ) {
                 for ( auto& i : ints2 ) {
                     auto res = tx.send( i );
                     throw_assert( res == channel::OpResult::Ok, "OpResult should be Ok" );
                 }
-            }, channel::get_tx( ch2 ) ),
+            }, ch2.move_tx() ),
         proc(
-            [&ints1,&ints2]( channel::Rx< int > rx1, channel::Rx< int > rx2 ) {
+            [&ints1,&ints2]( Chan< int >::Rx rx1, Chan< int >::Rx rx2 ) {
                 auto it1 = ints1.begin(), it2 = ints2.begin();
                 while ( it1 != ints1.end() || it2 != ints2.end() ) {
                     Alt()
@@ -358,16 +347,16 @@ void test_simple_ex()
                             } )
                         .select();
                 }
-            }, channel::get_rx( ch1 ), channel::get_rx( ch2 ) )
+            }, ch1.move_rx(), ch2.move_rx() )
     );
 }
 
 void test_replicate()
 {
     using ItemT = Obj;
-    auto chs = channel::create_n< ItemT >( 30 );
-    auto txs = channel::get_tx( chs );
-    auto rxs = channel::get_rx( chs );
+    ChanArr< ItemT, 30 > chs;
+    auto txs = chs.collect_tx();
+    auto rxs = chs.collect_rx();
 
     parallel(
         proc( [&txs](){
@@ -389,8 +378,6 @@ void test_replicate()
 
 int main()
 {
-    /* std::size_t i = 0; */
-    /* for (;;) { */
     test_single_case_with_skip();
     test_all_cases();
     test_single_send_case();
@@ -402,9 +389,6 @@ int main()
     test_alting_triangle();
     test_simple_ex();
     test_replicate();
-    /* printf("stuck? %zu\r", i++); */
-    /* fflush(stdout); */
-    /* } */
 
     return 0;
 }

@@ -22,6 +22,7 @@
  * SOFTWARE.
  */
 
+#include <array>
 #include <chrono>
 #include <iostream>
 #include <vector>
@@ -30,15 +31,17 @@
 
 using namespace proxc;
 
-void writer( channel::Tx< int > tx )
+constexpr std::size_t NUM = 200;
+
+void writer( Chan< int >::Tx tx )
 {
     int n = 0;
     while ( ! tx.is_closed() ) {
-        tx.send( n++ );
+        tx << n++;
     }
 }
 
-void reader( std::vector< channel::Rx< int > > rxs )
+void reader( std::array< Chan< int >::Rx, NUM > rxs )
 {
     constexpr std::size_t num_runs = 100;
     constexpr std::size_t num_iter = 1000;
@@ -62,14 +65,17 @@ void reader( std::vector< channel::Rx< int > > rxs )
 
 int main()
 {
-    constexpr std::size_t num = 200;
-    auto chs = channel::create_n< int >( num );
-    auto txs = channel::get_tx( chs );
+    ChanArr< int, NUM > chs;
+
+    std::vector< Process > writers;
+    writers.reserve( NUM );
+    for ( std::size_t i = 0; i < NUM; ++i ) {
+        writers.emplace_back( writer, chs[i].move_tx() );
+    }
 
     parallel(
-        proc_for( std::size_t{ 0 }, num,
-            [&txs]( auto i ){ writer( std::move( txs[i] ) ); } ),
-        proc( reader, channel::get_rx( chs ) )
+        proc_for( writers.begin(), writers.end() ),
+        proc( reader, chs.collect_rx() )
     );
 
     return 0;

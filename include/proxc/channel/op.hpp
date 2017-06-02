@@ -39,81 +39,10 @@ PROXC_NAMESPACE_BEGIN
 namespace channel {
 
 template<typename T>
-using TxVec = std::vector< Tx< T > >;
-template<typename T>
-using RxVec = std::vector< Rx< T > >;
-
-template<typename T>
-Tx< T > get_tx( std::tuple< Tx< T >, Rx< T > > & tpl )
-{
-    return std::move( std::get< 0 >( tpl ) );
-}
-
-template<typename T>
-TxVec< T > get_tx( std::tuple< TxVec< T >, RxVec< T > > & tpl )
-{
-    return std::move( std::get< 0 >( tpl ) );
-}
-
-template<typename T>
-Tx< T > get_tx_ind( TxVec< T > & tx_vec, std::size_t ind )
-{
-    return std::move( tx_vec[ ind ] );
-}
-
-template<typename T>
-Tx< T > get_tx_ind( std::tuple< TxVec< T >, RxVec< T > > & tpl, std::size_t ind )
-{
-    return std::move( std::get< 0 >( tpl )[ ind ] );
-}
-
-template<typename T>
-Rx< T > get_rx( std::tuple< Tx< T >, Rx< T > > & tpl )
-{
-    return std::move( std::get< 1 >( tpl ) );
-}
-
-template<typename T>
-RxVec< T > get_rx( std::tuple< TxVec< T >, RxVec< T > > & tpl )
-{
-    return std::move( std::get< 1 >( tpl ) );
-}
-
-template<typename T>
-Rx< T > get_rx_ind( RxVec< T > & rx_vec, std::size_t ind )
-{
-    return std::move( rx_vec[ ind ] );
-}
-
-template<typename T>
-Rx< T > get_rx_ind( std::tuple< TxVec< T >, RxVec< T > > & tpl, std::size_t ind )
-{
-    return std::move( std::get< 1 >( tpl )[ ind ] );
-}
-
-template<typename T>
 std::tuple< Tx< T >, Rx< T > > create() noexcept
 {
     auto channel = std::make_shared< detail::ChannelImpl< T > >();
     return std::make_tuple( Tx< T >{ channel }, Rx< T >{ channel } );
-}
-
-template<typename T>
-std::tuple< TxVec< T >, RxVec< T > >
-create_n( const std::size_t n ) noexcept
-{
-    std::vector< Tx< T > > txs;
-    std::vector< Rx< T > > rxs;
-    txs.reserve( n );
-    rxs.reserve( n );
-    Tx< T > tx;
-    Rx< T > rx;
-    for( std::size_t i = 0; i < n; ++i ) {
-        std::tie( tx, rx ) = create< T >();
-        txs.push_back( std::move( tx ) );
-        rxs.push_back( std::move( rx ) );
-    }
-    return std::make_tuple( std::move( txs ), std::move( rxs ) );
 }
 
 } // namespace channel
@@ -129,6 +58,15 @@ struct Chan : public std::tuple< channel::Tx< T >, channel::Rx< T > >
 
     Chan() : TplT{ channel::create< T >() }
     {}
+
+    // make non-copyable
+    Chan( Chan const & )               = delete;
+    Chan & operator = ( Chan const & ) = delete;
+
+    // make moveable
+    Chan( Chan && )               = default;
+    Chan & operator = ( Chan && ) = default;
+
 
     Tx & ref_tx() noexcept
     {
@@ -203,19 +141,19 @@ struct ChanVec : public std::vector< Chan< T > >
 
     VecTxT collect_tx() noexcept
     {
-        VecTxT txs;
-        txs.reserve( this->size() );
-        std::for_each( this->begin(), this->end(),
-            [&txs]( auto& ch ){ txs.push_back( std::move( ch.move_tx() ) ); } );
+        VecTxT txs( this->size() );
+        auto ch_it = this->begin();
+        std::generate( txs.begin(), txs.end(),
+            [&ch_it]{ return (ch_it++)->move_tx(); } );
         return std::move( txs );
     }
 
     VecRxT collect_rx() noexcept
     {
         VecRxT rxs;
-        rxs.reserve( this->size() );
-        std::for_each( this->begin(), this->end(),
-            [&rxs]( auto& ch ){ rxs.push_back( std::move( ch.move_rx() ) ); } );
+        auto ch_it = this->begin();
+        std::generate( rxs.begin(), rxs.end(),
+            [&ch_it]{ return (ch_it++)->move_rx(); } );
         return std::move( rxs );
     }
 };

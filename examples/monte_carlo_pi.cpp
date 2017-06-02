@@ -22,6 +22,7 @@
  * SOFTWARE.
  */
 
+#include <array>
 #include <chrono>
 #include <iostream>
 #include <random>
@@ -34,7 +35,7 @@ using namespace proxc;
 constexpr std::size_t NUM_WORKERS = 8;
 constexpr std::size_t NUM_ITERS = ~std::size_t{ 0 } - std::size_t{ 1 };
 
-void monte_carlo_pi( channel::Tx< double > out, std::size_t iters ) noexcept
+void monte_carlo_pi( Chan< double >::Tx out, std::size_t iters ) noexcept
 {
     std::mt19937 rng{ std::random_device{}() };
     std::uniform_real_distribution< double > distr{ 0., 1. };
@@ -52,7 +53,7 @@ void monte_carlo_pi( channel::Tx< double > out, std::size_t iters ) noexcept
     out << ( 4. * in_circle ) / static_cast< double >( iters );
 }
 
-void calculate( std::vector< channel::Rx< double > > in, std::size_t workers ) noexcept
+void calculate( std::array< Chan< double >::Rx, NUM_WORKERS > in, std::size_t workers ) noexcept
 {
     double sum = 0.;
     std::for_each( in.begin(), in.end(),
@@ -63,19 +64,18 @@ void calculate( std::vector< channel::Rx< double > > in, std::size_t workers ) n
 
 int main()
 {
-    auto iter_work = NUM_ITERS / NUM_WORKERS;
-    auto chs = channel::create_n< double >( NUM_WORKERS );
+    constexpr std::size_t iter_work = NUM_ITERS / NUM_WORKERS;
+    ChanArr< double, NUM_WORKERS > chs;
 
     std::vector< Process > workers;
     workers.reserve( NUM_WORKERS );
     for ( std::size_t i = 0; i < NUM_WORKERS; ++i ) {
-        workers.emplace_back( monte_carlo_pi,
-            channel::get_tx_ind( chs, i ), iter_work );
+        workers.emplace_back( monte_carlo_pi, chs[i].move_tx(), iter_work );
     }
 
     parallel(
         proc_for( workers.begin(), workers.end() ),
-        proc( calculate, channel::get_rx( chs ), NUM_WORKERS )
+        proc( calculate, chs.collect_rx(), NUM_WORKERS )
     );
 
     return 0;
