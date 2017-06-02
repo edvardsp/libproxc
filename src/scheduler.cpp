@@ -115,8 +115,8 @@ Scheduler::Initializer::Initializer()
             sched_counter_ = 0;
 
         } else {
-            static Scheduler::LockT splk;
-            std::unique_lock< LockT > lk{ splk };
+            static MtxT splk;
+            LockT lk{ splk };
             sched_vec_.push_back( self_ );
         }
     }
@@ -133,7 +133,7 @@ Scheduler::Initializer::~Initializer()
         }
 
         BOOST_ASSERT( Scheduler::running()->is_type( Context::Type::Main ) );
-        
+
         auto scheduler = self_;
         delete scheduler;
     }
@@ -223,7 +223,7 @@ void Scheduler::wait( Context * ctx ) noexcept
     resume( std::addressof( data ) );
 }
 
-void Scheduler::wait( std::unique_lock< LockT > & splk ) noexcept
+void Scheduler::wait( LockT & splk ) noexcept
 {
     CtxSwitchData data{ std::addressof( splk ) };
     resume( std::addressof( data ) );
@@ -240,7 +240,7 @@ bool Scheduler::wait_until( TimePointT const & time_point, Context * ctx ) noexc
     return sleep_until( time_point, std::addressof( data ) );
 }
 
-bool Scheduler::wait_until( TimePointT const & time_point, std::unique_lock< LockT > & splk, bool lock ) noexcept
+bool Scheduler::wait_until( TimePointT const & time_point, LockT & splk, bool lock ) noexcept
 {
     CtxSwitchData data{ std::addressof( splk ) };
     auto ret = sleep_until( time_point, std::addressof( data ) );
@@ -250,7 +250,7 @@ bool Scheduler::wait_until( TimePointT const & time_point, std::unique_lock< Loc
     return ret;
 }
 
-bool Scheduler::alt_wait( Alt * alt, std::unique_lock< LockT > & splk ) noexcept
+bool Scheduler::alt_wait( Alt * alt, LockT & splk ) noexcept
 {
     BOOST_ASSERT(   alt != nullptr );
     BOOST_ASSERT(   alt->ctx_ == Scheduler::running() );
@@ -303,7 +303,7 @@ void Scheduler::terminate_( Context * ctx ) noexcept
     BOOST_ASSERT( ! ctx->is_linked< hook::Wait >() );
     BOOST_ASSERT( ! ctx->is_linked< hook::Terminated >() );
 
-    std::unique_lock< LockT > lk{ ctx->splk_ };
+    LockT lk{ ctx->splk_ };
 
     ctx->terminate();
     ctx->link( terminated_queue_ );
@@ -421,7 +421,7 @@ void Scheduler::join( Context * ctx ) noexcept
 
     Context * running_ctx = Scheduler::running();
 
-    std::unique_lock< LockT > lk{ ctx->splk_ };
+    LockT lk{ ctx->splk_ };
     if ( ! ctx->has_terminated() ) {
         running_ctx->link( ctx->wait_queue_ );
         wait( lk );
@@ -452,7 +452,7 @@ bool Scheduler::sleep_until( TimePointT const & time_point, CtxSwitchData * data
 
 void Scheduler::wakeup_sleep_() noexcept
 {
-    std::unique_lock< LockT > lk{ splk_ };
+    LockT lk{ splk_ };
     auto now = ClockT::now();
     auto sleep_it = sleep_queue_.begin();
     while ( sleep_it != sleep_queue_.end() ) {
@@ -597,7 +597,7 @@ void Scheduler::run_( void * vp )
     cleanup_terminated_();
 
     scheduler_ctx_->terminate();
-    wakeup_waiting_on_( scheduler_ctx_.get() );
+    /* wakeup_waiting_on_( scheduler_ctx_.get() ); */
 
     main_ctx_->try_unlink< hook::Ready >();
     resume( main_ctx_.get() );

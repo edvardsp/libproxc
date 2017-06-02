@@ -68,7 +68,8 @@ using TimePointT = PolicyT::TimePointT;
 class Scheduler
 {
 private:
-    using LockT = detail::Spinlock;
+    using MtxT = detail::Spinlock;
+    using LockT = std::unique_lock< MtxT >;
 
     // Schwarz counter
     struct Initializer
@@ -86,8 +87,8 @@ public:
 
     struct CtxSwitchData
     {
-        Context *                         ctx_{ nullptr };
-        std::unique_lock< LockT > *    splk_{ nullptr };
+        Context *    ctx_{ nullptr };
+        LockT *      splk_{ nullptr };
 
         CtxSwitchData() = default;
 
@@ -95,7 +96,7 @@ public:
             : ctx_{ ctx }
         {}
 
-        explicit CtxSwitchData( std::unique_lock< LockT > * splk ) noexcept
+        explicit CtxSwitchData( LockT * splk ) noexcept
             : splk_{ splk }
         {}
     };
@@ -125,7 +126,7 @@ private:
 
     Context *    running_{ nullptr };
 
-    LockT    splk_{};
+    MtxT    splk_{};
 
     WorkQueue          work_queue_{};
     SleepQueue         sleep_queue_{};
@@ -154,15 +155,15 @@ public:
 
     void wait() noexcept;
     void wait( Context * ) noexcept;
-    void wait( std::unique_lock< LockT > & ) noexcept;
+    void wait( LockT & ) noexcept;
 
     bool wait_until( TimePointT const & ) noexcept;
     bool wait_until( TimePointT const &, Context * ) noexcept;
-    bool wait_until( TimePointT const &, std::unique_lock< LockT > &, bool lock = false ) noexcept;
+    bool wait_until( TimePointT const &, LockT &, bool lock = false ) noexcept;
 
     bool sleep_until( TimePointT const &, CtxSwitchData * = nullptr ) noexcept;
 
-    bool alt_wait( Alt *, std::unique_lock< LockT > & ) noexcept;
+    bool alt_wait( Alt *, LockT & ) noexcept;
 
     void resume( CtxSwitchData * = nullptr ) noexcept;
     void resume( Context *, CtxSwitchData * = nullptr ) noexcept;
