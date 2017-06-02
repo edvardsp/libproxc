@@ -47,14 +47,18 @@ void yield() noexcept
 template<typename Rep, typename Period>
 void delay_for( std::chrono::duration< Rep, Period > const & duration ) noexcept
 {
-    (void)runtime::Scheduler::self()->sleep_until(
-        std::chrono::steady_clock::now() + duration );
+    static_cast< void >(
+        runtime::Scheduler::self()->sleep_until(
+            std::chrono::steady_clock::now() + duration )
+    );
 }
 
 template<typename Clock, typename Dur>
 void delay_until( std::chrono::time_point< Clock, Dur > const & time_point ) noexcept
 {
-    (void)runtime::Scheduler::self()->sleep_until( time_point );
+    static_cast< void >(
+        runtime::Scheduler::self()->sleep_until( time_point )
+    );
 }
 
 } // namespace this_proc
