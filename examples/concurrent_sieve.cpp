@@ -22,8 +22,8 @@
  * SOFTWARE.
  */
 
-#include <sstream>
 #include <iostream>
+#include <vector>
 
 #include <proxc.hpp>
 
@@ -49,11 +49,9 @@ void filter( Chan< ItemT >::Rx in, Chan< ItemT >::Tx out )
     }
 }
 
-int main(int argc, char *argv[])
+int main()
 {
-    if ( argc != 2 ) { return -1; }
-    std::size_t n;
-    std::stringstream{ argv[1] } >> n;
+    constexpr std::size_t n = 100;
 
     Chan< ItemT >    ex_ch;
     ChanVec< ItemT > chs{ n };
@@ -79,6 +77,5 @@ int main(int argc, char *argv[])
             },
             chs[n-1].move_rx(), ex_ch.move_tx() )
     );
-
     return 0;
 }

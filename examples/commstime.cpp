@@ -102,16 +102,8 @@ void commstime( std::size_t chain )
 
 int main()
 {
-    for ( std::size_t chain = 1; chain < 50; chain += 1 ) {
-        commstime( chain );
-    }
-    for ( std::size_t chain = 50; chain < 500; chain += 5 ) {
-        commstime( chain );
-    }
-    for ( std::size_t chain = 500; chain <= 1000; chain += 10 ) {
-        commstime( chain );
-    }
-
+    constexpr std::size_t chain = 100;
+    commstime( chain );
     return 0;
 }
 

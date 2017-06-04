@@ -151,16 +151,8 @@ void mandelbrot_program( std::size_t dim )
 
 int main()
 {
-    for ( std::size_t dim = 1; dim < 100; dim += 1 ) {
-        mandelbrot_program( dim );
-    }
-    for ( std::size_t dim = 100; dim < 500; dim += 5 ) {
-        mandelbrot_program( dim );
-    }
-    for ( std::size_t dim = 500; dim <= 1000; dim += 10 ) {
-        mandelbrot_program( dim );
-    }
-
+    constexpr std::size_t dim = 100;
+    mandelbrot_program( dim );
     return 0;
 }
 
