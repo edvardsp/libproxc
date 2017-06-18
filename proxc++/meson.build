@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 project('proxc', 'cpp',
-    version : '2.0.0',
+    version : '0.1.0',
     license : 'MIT',
     default_options : ['cpp_std=c++14'])
 add_global_arguments(
@@ -77,10 +77,10 @@ subdir('examples')
 pkg_mod = import('pkgconfig')
 pkg_mod.generate(
     libraries : proxc,
-    version : '2.0.0',
+    version : '0.1.0',
     name : 'libproxc',
     filebase : 'proxc',
-    description : 'A concurrency library for C/C++.')
+    description : 'A concurrency library for C++.')
 
 #dev_exe = executable('dev_exe', 'src/main.cpp',
 #    include_directories : inc,

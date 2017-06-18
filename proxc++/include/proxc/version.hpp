@@ -32,10 +32,10 @@
     (((version) << 24) + ((revision) << 16) + (patch))
 
 // Macro expanding to the major version of the library, i.e. the `x` in `x.y.z`.
-#define PROXC_MAJOR_VERSION 2
+#define PROXC_MAJOR_VERSION 0
 
 // Macro expanding to the major version of the library, i.e. the `x` in `x.y.z`.
-#define PROXC_MINOR_VERSION 0
+#define PROXC_MINOR_VERSION 1
 
 // Macro expanding to the major version of the library, i.e. the `x` in `x.y.z`.
 #define PROXC_PATCH_VERSION 0
