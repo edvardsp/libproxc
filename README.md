@@ -1,18 +1,94 @@
-# Introduction
+# ProXC - A CSP-inspired concurrency library for C 
 
-`libproxc` (pronounced '*lib-prok-see*') is a concurrency library for modern C and C++, based on abstractions from Communicating Sequential Processes (CSP).
+This is a library for C which enables Communicating Sequential Processes (CSP) like structuring of your code. 
+Programming languages such as Occam and XC utilizes and builds around this very paradigm, but sadly is hardware locked.
+Many good CSP libraries for general purpose programming languages has been made, including both for Java (JCSP) and C++ (C++CSP2), but not for C.
+There does exists plenty of libraries for C which implements many features from CSP, such as coroutines, channels, etc., but not all in a single library. 
 
-The C (ProXC) and C++ (ProXC++) libraries both provides the same core of abstractions; lightweight threads called processes (not to be confused with OS processes), which exclusively communicate via message-passing. Message passing is realized through channels, and supports guarded, simultaneous channel operations.
+ProXC aims to do this, and with no macro magic!
 
-Both ProXC and ProXC++ projects are developed separately, which can respectively be located in the folders `proxc/` and `proxc++/`.
+## Features
 
-# Motivation
+* Lightweight stackful coroutines, called PROC
+    * supports arbitrary number of args, acquired through ARGN
+* Lightweight runtime environment
+* Nestable PROC execution sequence with
+    * PAR - parallel execution of given PROC, PAR and SEQ
+    * SEQ - sequential execution of given PROC, PAR and SEQ
+* Two methods of dispatching execution sequences
+    * RUN - fork & join, given a tree of PROC, PAR and SEQ
+    * GO - fire & forget, given a tree of PROC, PAR and SEQ
+* Any to any, pseudo-type safe, channels
+* ALT - wait on multiple guarded commands, which are guarded by a boolean condition
+* Guarded commands consist of
+    * Skip Guard - always available
+    * Time Guard - timeout on a given relative time, with a granularity of microseconds
+    * Chan Guard - wait on a channel READ (Note! only channel reads are supported)
+* YIELD - give up running time for another PROC, if available
+* SLEEP - suspend PROC for a given time, with a granularity of microseconds
 
-The development of `libproxc` is motivated by providing a concurrency framework for C and C++ programs which expresses correct and expressive abstractions for concurrent systems. The C and C++ languages are inherently not concurrent; C++11 addressed this by introducing some concurrency primitives to the standard library, e.g. `std::thread` and `std::future`. Correct and expressive concurrency abstractions are not a part of the standard languages, and `libproxc` aims to fill this void.
+## Supports
 
-Note that `libproxc` is merely a proof-of-concept. Multiple libraries for C and C++ which provide CSP-based concurrency abstractions. However, none offer a complete feature set which provide the correct and necessary abstractions. These abstractions are necessary for creating CSP-based concurrency models in C and C++. `libproxc` is to show such libraries are possible (and has the added effect of being a fun project to work on).
+Currently only supports 32- and 64-bit x86 Linux.
 
-# Development
+## Compile and Install
 
-ProXC and ProXC++ was developed as a part of my project and master thesis at NTNU, respectively. Both theses are available in the `theses/` folder.
+Requires CMake 2.8+ for compiling.
 
+Run the following in your terminal. This installs both the static and shared library in /usr/local/lib. ldconfig must be called to register the shared library, as cmake does not do this automatically (for some reason).
+
+    $ git clone https://github.com/edvardsp/libproxc.git
+    $ mkdir libproxc/build && cd libproxc/build
+    $ cmake ..
+    $ make
+    $ sudo make install
+    $ sudo ldconfig
+
+## Example
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+
+#include <proxc.h>
+
+void printer() {
+    for (;;) {
+        printf("printer: Hello!\n");
+        SLEEP(MSEC(500));
+    }
+}
+
+void fxn() {
+    int id = *(int *)ARGN(0);
+    int val = *(int *)ARGN(1);
+    printf("fxn %d: start %d\n", id, val);
+    SLEEP(SEC(3));
+    printf("fxn %d: stop %d\n", id, val);
+}
+
+void foobar() {
+    GO(PROC(printer));
+
+    int ids[] = { 1, 2, 3 };
+    int one = 1, two = 2;
+    printf("foobar: start\n");
+    RUN(PAR(
+            PAR(
+                SEQ( PROC(fxn, &ids[0], &one), PROC(fxn, &ids[1], &one) ),
+                PROC(fxn, &ids[2], &one)
+            ),
+            SEQ(
+                PROC(fxn, &ids[0], &two),
+                PAR( PROC(fxn, &ids[1], &two), PROC(fxn, &ids[2], &two) )
+            )
+        )
+    );
+    printf("foobar: stop\n");
+}
+
+int main() {
+    proxc_start(foobar);
+    return 0;
+}
+```
